@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f5d53" />
+  <meta name="description" content="DPROフォトスタジオ お客様マイページ。撮影予約、事前案内、写真セレクト、納品状況、再注文相談を確認できます。" />
+  <title>DPROフォトスタジオ｜お客様マイページ</title>
+  <!-- Version: STUDIO-7-MEMBER-20260715 -->
+  <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
+  <style>
+    :root {
+      --green-950: #073f39;
+      --green-900: #0b5048;
+      --green-800: #0f665a;
+      --green-700: #147669;
+      --green-600: #218b7b;
+      --green-100: #dff2ed;
+      --green-050: #edf8f5;
+      --ink: #12312e;
+      --muted: #5f7773;
+      --line: #d8e5e2;
+      --surface: #ffffff;
+      --canvas: #f3f7f6;
+      --amber: #a86500;
+      --amber-bg: #fff5dc;
+      --red: #a53434;
+      --red-bg: #fff0f0;
+      --blue: #245b87;
+      --blue-bg: #edf5ff;
+      --shadow: 0 18px 50px rgba(13, 74, 66, 0.09);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 85% 0%, rgba(37, 139, 123, 0.12), transparent 26rem),
+        var(--canvas);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, textarea, select { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button { cursor: pointer; }
+    a { color: inherit; }
+
+    .page {
+      width: min(900px, calc(100% - 28px));
+      margin: 20px auto 60px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 28px 30px 30px;
+      color: #fff;
+      border-radius: var(--radius-xl);
+      background: linear-gradient(130deg, var(--green-950), var(--green-700));
+      box-shadow: var(--shadow);
+    }
+    .hero::before,
+    .hero::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      border: 20px solid rgba(255,255,255,.07);
+      pointer-events: none;
+    }
+    .hero::before { width: 180px; height: 180px; right: -74px; top: -88px; }
+    .hero::after { width: 120px; height: 120px; right: -45px; top: -52px; }
+    .eyebrow { margin: 0 0 4px; font-size: 12px; font-weight: 900; letter-spacing: .14em; }
+    .hero h1 { margin: 0; font-size: clamp(27px, 5vw, 38px); line-height: 1.25; letter-spacing: .02em; }
+    .hero p { margin: 8px 0 0; max-width: 650px; font-size: 14px; opacity: .94; }
+    .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.28);
+      background: rgba(255,255,255,.10);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      margin: 16px 0;
+      padding: 14px 16px;
+      border: 1px solid #cfe2de;
+      border-radius: 16px;
+      background: rgba(255,255,255,.72);
+      color: #496762;
+      font-size: 14px;
+    }
+    .notice .icon {
+      display: grid;
+      flex: 0 0 26px;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border-radius: 50%;
+      color: var(--green-800);
+      background: var(--green-100);
+      font-weight: 900;
+    }
+
+    .card {
+      margin-top: 16px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: 0 10px 35px rgba(23, 77, 70, 0.06);
+    }
+    .card-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .card h2 { margin: 0; font-size: 22px; line-height: 1.35; }
+    .card h3 { margin: 0; font-size: 18px; }
+    .subtext { margin: 5px 0 0; color: var(--muted); font-size: 14px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 46px;
+      padding: 10px 17px;
+      border: 1px solid transparent;
+      border-radius: 13px;
+      text-decoration: none;
+      font-weight: 850;
+      transition: transform .12s ease, opacity .12s ease, box-shadow .12s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { cursor: not-allowed; transform: none; opacity: .55; }
+    .btn-primary { color: #fff; background: linear-gradient(135deg, var(--green-900), var(--green-700)); box-shadow: 0 8px 18px rgba(15, 102, 90, .18); }
+    .btn-secondary { color: var(--green-900); border-color: #bcd8d2; background: var(--green-050); }
+    .btn-neutral { color: var(--ink); border-color: var(--line); background: #fff; }
+    .btn-danger { color: var(--red); border-color: #efc5c5; background: var(--red-bg); }
+    .btn-small { min-height: 38px; padding: 7px 12px; border-radius: 11px; font-size: 13px; }
+    .btn-wide { width: 100%; }
+
+    .profile-card {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: center;
+    }
+    .profile-name { margin: 0; font-size: 23px; font-weight: 900; }
+    .profile-meta { margin-top: 5px; color: var(--muted); font-size: 14px; }
+    .profile-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 29px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: #eef5f3;
+      color: #41655f;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .tabs-wrap {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      margin: 16px 0 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,.92);
+      box-shadow: 0 9px 26px rgba(12, 72, 64, .08);
+      backdrop-filter: blur(12px);
+    }
+    .tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+    .tab {
+      min-height: 44px;
+      padding: 8px 6px;
+      border: 0;
+      border-radius: 11px;
+      background: transparent;
+      color: #58736f;
+      font-size: 13px;
+      font-weight: 850;
+    }
+    .tab.active { color: #fff; background: var(--green-800); }
+
+    .section { display: none; }
+    .section.active { display: block; animation: fade .16s ease; }
+    @keyframes fade { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 17px;
+    }
+    .summary-box {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #f8fbfa;
+    }
+    .summary-box span { display: block; color: var(--muted); font-size: 12px; font-weight: 750; }
+    .summary-box strong { display: block; margin-top: 3px; font-size: 18px; }
+
+    .reservation-list { display: grid; gap: 14px; margin-top: 18px; }
+    .reservation-card {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+    }
+    .reservation-card.is-selected { border-color: var(--green-600); box-shadow: 0 0 0 3px rgba(33, 139, 123, .09); }
+    .reservation-head {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 13px;
+      align-items: center;
+      padding: 17px;
+      cursor: pointer;
+    }
+    .date-box {
+      display: grid;
+      width: 62px;
+      min-height: 62px;
+      place-items: center;
+      border-radius: 15px;
+      background: var(--green-050);
+      color: var(--green-900);
+      line-height: 1.12;
+      text-align: center;
+    }
+    .date-box small { font-size: 11px; font-weight: 800; }
+    .date-box strong { font-size: 22px; }
+    .reservation-main strong { display: block; font-size: 17px; }
+    .reservation-main p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: var(--green-100);
+      color: var(--green-900);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .status-badge.warn { color: var(--amber); background: var(--amber-bg); }
+    .status-badge.danger { color: var(--red); background: var(--red-bg); }
+    .status-badge.info { color: var(--blue); background: var(--blue-bg); }
+    .reservation-detail { display: none; padding: 0 17px 18px; }
+    .reservation-card.open .reservation-detail { display: block; }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 9px;
+      margin-top: 10px;
+    }
+    .detail-item {
+      padding: 11px 12px;
+      border-radius: 12px;
+      background: #f6faf9;
+    }
+    .detail-item span { display: block; color: var(--muted); font-size: 12px; font-weight: 750; }
+    .detail-item strong, .detail-item p { margin: 3px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+    .detail-item.full { grid-column: 1 / -1; }
+
+    .action-row { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 15px; }
+    .info-panel {
+      margin-top: 14px;
+      padding: 15px;
+      border-radius: 15px;
+      background: var(--green-050);
+      border: 1px solid #cce4df;
+    }
+    .info-panel.amber { background: var(--amber-bg); border-color: #efdbad; }
+    .info-panel.blue { background: var(--blue-bg); border-color: #cbdff1; }
+    .info-panel h4 { margin: 0; font-size: 15px; }
+    .info-panel p { margin: 5px 0 0; color: #536e69; font-size: 13px; white-space: pre-line; }
+
+    .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 16px; }
+    .timeline-step { position: relative; padding-top: 27px; text-align: center; color: #82918f; font-size: 11px; font-weight: 800; }
+    .timeline-step::before {
+      content: "";
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      z-index: 2;
+      width: 15px;
+      height: 15px;
+      transform: translateX(-50%);
+      border: 3px solid #dce6e4;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .timeline-step::after {
+      content: "";
+      position: absolute;
+      top: 13px;
+      right: 50%;
+      width: 100%;
+      height: 3px;
+      background: #dce6e4;
+    }
+    .timeline-step:first-child::after { display: none; }
+    .timeline-step.done { color: var(--green-900); }
+    .timeline-step.done::before { border-color: var(--green-700); background: var(--green-700); }
+    .timeline-step.done::after { background: var(--green-700); }
+    .timeline-step.current::before { box-shadow: 0 0 0 5px rgba(33,139,123,.14); }
+
+    .empty {
+      padding: 34px 18px;
+      border: 1px dashed #c8dad6;
+      border-radius: 16px;
+      color: var(--muted);
+      text-align: center;
+      background: #fbfdfd;
+    }
+    .empty strong { display: block; color: var(--ink); font-size: 17px; }
+    .empty p { margin: 6px 0 0; font-size: 14px; }
+
+    .access-panel { max-width: 620px; margin: 16px auto 0; }
+    .form-grid { display: grid; gap: 14px; margin-top: 17px; }
+    label { display: grid; gap: 6px; color: #36534e; font-size: 13px; font-weight: 800; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid #cbdad7;
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ink);
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input, select { min-height: 48px; padding: 10px 12px; }
+    textarea { min-height: 122px; padding: 12px; resize: vertical; }
+    input:focus, textarea:focus, select:focus { border-color: var(--green-600); box-shadow: 0 0 0 4px rgba(33,139,123,.10); }
+    .help { margin: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
+
+    .demo-switcher {
+      display: none;
+      margin-top: 12px;
+      padding: 13px;
+      border: 1px solid #e3cf9f;
+      border-radius: 15px;
+      background: #fff8e8;
+    }
+    .demo-switcher.show { display: block; }
+    .demo-switcher strong { font-size: 13px; color: #755016; }
+    .demo-buttons { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(4, 34, 30, .54);
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      width: min(620px, 100%);
+      max-height: min(86vh, 760px);
+      overflow: auto;
+      padding: 22px;
+      border-radius: 22px;
+      background: #fff;
+      box-shadow: 0 25px 70px rgba(0,0,0,.24);
+    }
+    .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .modal-header h3 { margin: 0; font-size: 21px; }
+    .close-btn { width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 11px; background: #fff; font-size: 19px; }
+    .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 17px; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      z-index: 200;
+      width: min(520px, calc(100% - 30px));
+      padding: 14px 16px;
+      transform: translate(-50%, 30px);
+      border-radius: 14px;
+      color: #fff;
+      background: #163e39;
+      box-shadow: 0 14px 36px rgba(0,0,0,.2);
+      opacity: 0;
+      pointer-events: none;
+      transition: .22s ease;
+      font-size: 14px;
+      font-weight: 750;
+      text-align: center;
+    }
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
+    .toast.error { background: #8d3131; }
+
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 160;
+      display: none;
+      place-items: center;
+      background: rgba(243,247,246,.78);
+      backdrop-filter: blur(3px);
+    }
+    .loading-overlay.show { display: grid; }
+    .loading-box { padding: 19px 24px; border: 1px solid var(--line); border-radius: 17px; background: #fff; box-shadow: var(--shadow); font-weight: 850; }
+    .spinner { display: inline-block; width: 18px; height: 18px; margin-right: 8px; vertical-align: -4px; border: 3px solid #cde2dd; border-top-color: var(--green-800); border-radius: 50%; animation: spin .75s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    footer { padding: 25px 8px 0; color: #728681; font-size: 12px; text-align: center; }
+
+    @media (max-width: 720px) {
+      .page { width: min(100% - 18px, 900px); margin-top: 10px; }
+      .hero { padding: 23px 20px 24px; border-radius: 22px; }
+      .card { padding: 18px; border-radius: 18px; }
+      .tabs-wrap { top: 4px; }
+      .tabs { grid-template-columns: repeat(2, 1fr); }
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .profile-card { grid-template-columns: 1fr; }
+      .reservation-head { grid-template-columns: auto 1fr; }
+      .reservation-head .status-badge { grid-column: 2; justify-self: start; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .detail-item.full { grid-column: auto; }
+      .timeline { gap: 1px; }
+      .timeline-step { font-size: 10px; }
+      .modal-actions { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 420px) {
+      .hero h1 { font-size: 27px; }
+      .summary-grid { grid-template-columns: 1fr; }
+      .reservation-head { padding: 14px; gap: 10px; }
+      .date-box { width: 55px; min-height: 58px; }
+      .action-row .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">DPRO PHOTO STUDIO LINE</p>
+      <h1>お客様マイページ</h1>
+      <p>撮影予約の確認から、事前案内・写真セレクト・納品・再注文相談まで、こちらでご確認いただけます。</p>
+      <div class="hero-actions">
+        <span class="pill">予約内容をいつでも確認</span>
+        <span class="pill">変更・キャンセル依頼</span>
+        <span class="pill">撮影後の案内もまとめて確認</span>
+      </div>
+    </header>
+
+    <div class="notice">
+      <span class="icon">i</span>
+      <div>変更・キャンセルは自動確定ではありません。写真館からの返信・確定連絡をお待ちください。</div>
+    </div>
+
+    <section id="accessSection" class="card access-panel">
+      <div class="card-title-row">
+        <div>
+          <h2>マイページを開く</h2>
+          <p class="subtext">LINEのメニューまたは予約完了画面から開くと、自動で予約情報を表示します。</p>
+        </div>
+      </div>
+      <div id="accessMissing" class="form-grid">
+        <label>
+          予約確認用トークン
+          <input id="publicTokenInput" type="text" autocomplete="off" placeholder="予約完了時に発行された確認用トークン" />
+          <span class="help">通常はURLに自動設定されるため、入力は不要です。</span>
+        </label>
+        <button id="openMemberButton" class="btn btn-primary btn-wide" type="button">予約情報を表示する</button>
+      </div>
+      <div id="demoSwitcher" class="demo-switcher">
+        <strong>営業デモ表示を切り替える</strong>
+        <div class="demo-buttons">
+          <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_001" type="button">佐藤 美咲｜撮影前</button>
+          <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_002" type="button">田中 太郎｜セレクト</button>
+          <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_003" type="button">山本 花｜納品・再注文</button>
+          <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_999" type="button">テスト顧客｜変更確認</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="memberArea" hidden>
+      <section class="card profile-card">
+        <div>
+          <p id="profileName" class="profile-name">—</p>
+          <div id="profileMeta" class="profile-meta"></div>
+          <div id="profileTags" class="profile-tags"></div>
+        </div>
+        <a class="btn btn-primary" href="./index.html">新しく撮影を予約する</a>
+      </section>
+
+      <nav class="tabs-wrap" aria-label="マイページメニュー">
+        <div class="tabs">
+          <button class="tab active" data-section="reservations" type="button">予約一覧</button>
+          <button class="tab" data-section="preparation" type="button">撮影前の確認</button>
+          <button class="tab" data-section="selection" type="button">写真セレクト</button>
+          <button class="tab" data-section="delivery" type="button">納品・再注文</button>
+        </div>
+      </nav>
+
+      <section id="section-reservations" class="section active">
+        <div class="card">
+          <div class="card-title-row">
+            <div>
+              <h2>撮影予約</h2>
+              <p class="subtext">予約カードを押すと、詳細と手続きボタンを表示します。</p>
+            </div>
+            <button id="refreshButton" class="btn btn-neutral btn-small" type="button">更新</button>
+          </div>
+          <div id="reservationSummary" class="summary-grid"></div>
+          <div id="reservationList" class="reservation-list"></div>
+        </div>
+      </section>
+
+      <section id="section-preparation" class="section">
+        <div class="card">
+          <h2>撮影前の確認</h2>
+          <p class="subtext">これから撮影する予約の持ち物やご希望内容を確認できます。</p>
+          <div id="preparationList" class="reservation-list"></div>
+        </div>
+      </section>
+
+      <section id="section-selection" class="section">
+        <div class="card">
+          <h2>写真セレクト</h2>
+          <p class="subtext">写真館からセレクト案内が届くと、こちらから確認できます。</p>
+          <div id="selectionList" class="reservation-list"></div>
+        </div>
+      </section>
+
+      <section id="section-delivery" class="section">
+        <div class="card">
+          <h2>納品・再注文</h2>
+          <p class="subtext">納品状況の確認、追加プリントやアルバムの相談ができます。</p>
+          <div id="deliveryList" class="reservation-list"></div>
+          <div class="info-panel blue">
+            <h4>過去の撮影からも追加相談できます</h4>
+            <p>追加プリント、ご家族分、アルバム、台紙、データ追加などは「再注文・アルバム相談」からお問い合わせください。</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer id="footerText">DPROフォトスタジオ</footer>
+  </main>
+
+  <div id="requestModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="requestModalTitle">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h3 id="requestModalTitle">ご希望を送信</h3>
+          <p id="requestModalLead" class="subtext"></p>
+        </div>
+        <button class="close-btn" data-close-modal type="button" aria-label="閉じる">×</button>
+      </div>
+      <div class="form-grid">
+        <label id="requestTypeField" hidden>
+          相談内容
+          <select id="requestTypeSelect">
+            <option value="print_addition">プリント追加</option>
+            <option value="family_delivery">ご家族分追加</option>
+            <option value="album">アルバム相談</option>
+            <option value="mount">台紙相談</option>
+            <option value="data_addition">データ追加</option>
+            <option value="size_change">サイズ変更</option>
+            <option value="other">その他</option>
+          </select>
+        </label>
+        <label>
+          <span id="requestNoteLabel">内容</span>
+          <textarea id="requestNote" maxlength="3000" placeholder="ご希望の内容を具体的にご入力ください。"></textarea>
+          <span class="help">写真館で確認後、LINEまたはお電話でご連絡します。</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-neutral" data-close-modal type="button">戻る</button>
+        <button id="submitRequestButton" class="btn btn-primary" type="button">送信する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay"><div class="loading-box"><span class="spinner"></span><span id="loadingText">読み込み中です</span></div></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const VERSION = "STUDIO-7-MEMBER-20260715";
+      const C = window.DPRO_STUDIO;
+      if (!C) {
+        document.body.innerHTML = '<main style="padding:24px;font-family:sans-serif"><h1>共通設定を読み込めませんでした</h1><p>config.jsの配置を確認してください。</p></main>';
+        return;
+      }
+
+      const state = {
+        lookup: { line_user_id: "", public_token: "" },
+        customer: null,
+        profile: null,
+        reservations: [],
+        selectedReservationId: "",
+        activeSection: "reservations",
+        modalMode: "",
+        modalReservation: null,
+        busy: false,
+      };
+
+      const $ = (selector, root = document) => root.querySelector(selector);
+      const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+      const escape = C.escapeHtml;
+
+      const els = {
+        accessSection: $("#accessSection"),
+        accessMissing: $("#accessMissing"),
+        publicTokenInput: $("#publicTokenInput"),
+        openMemberButton: $("#openMemberButton"),
+        demoSwitcher: $("#demoSwitcher"),
+        memberArea: $("#memberArea"),
+        profileName: $("#profileName"),
+        profileMeta: $("#profileMeta"),
+        profileTags: $("#profileTags"),
+        footerText: $("#footerText"),
+        reservationSummary: $("#reservationSummary"),
+        reservationList: $("#reservationList"),
+        preparationList: $("#preparationList"),
+        selectionList: $("#selectionList"),
+        deliveryList: $("#deliveryList"),
+        refreshButton: $("#refreshButton"),
+        requestModal: $("#requestModal"),
+        requestModalTitle: $("#requestModalTitle"),
+        requestModalLead: $("#requestModalLead"),
+        requestTypeField: $("#requestTypeField"),
+        requestTypeSelect: $("#requestTypeSelect"),
+        requestNoteLabel: $("#requestNoteLabel"),
+        requestNote: $("#requestNote"),
+        submitRequestButton: $("#submitRequestButton"),
+        loadingOverlay: $("#loadingOverlay"),
+        loadingText: $("#loadingText"),
+        toast: $("#toast"),
+      };
+
+      function setLoading(show, text = "読み込み中です") {
+        state.busy = show;
+        els.loadingText.textContent = text;
+        els.loadingOverlay.classList.toggle("show", show);
+      }
+
+      let toastTimer = null;
+      function showToast(message, type = "success") {
+        clearTimeout(toastTimer);
+        els.toast.textContent = message;
+        els.toast.classList.toggle("error", type === "error");
+        els.toast.classList.add("show");
+        toastTimer = setTimeout(() => els.toast.classList.remove("show"), 3600);
+      }
+
+      function errorMessage(error) {
+        return error?.message || "処理に失敗しました。もう一度お試しください。";
+      }
+
+      function isUpcoming(reservation) {
+        const time = new Date(reservation.start_at).getTime();
+        return Number.isFinite(time) && time >= Date.now() - 60 * 60 * 1000 && !["cancelled", "no_show"].includes(reservation.reservation_status);
+      }
+
+      function isPast(reservation) {
+        const time = new Date(reservation.end_at || reservation.start_at).getTime();
+        return Number.isFinite(time) && time < Date.now();
+      }
+
+      function canRequestChange(reservation) {
+        return isUpcoming(reservation) && ["reserved", "confirmed", "change_requested"].includes(reservation.reservation_status);
+      }
+
+      function canRequestCancel(reservation) {
+        return isUpcoming(reservation) && ["reserved", "confirmed", "change_requested"].includes(reservation.reservation_status);
+      }
+
+      function reservationStatusClass(status) {
+        if (["cancelled", "no_show"].includes(status)) return "danger";
+        if (["change_requested", "cancel_requested"].includes(status)) return "warn";
+        return "";
+      }
+
+      function displayReservationStatus(reservation) {
+        if (reservation.reservation_status === "confirmed" && reservation.visit_status === "completed") {
+          return C.getLabel("postStatus", reservation.post_status, "撮影後対応中");
+        }
+        if (reservation.visit_status && reservation.visit_status !== "scheduled") {
+          return C.getLabel("visitStatus", reservation.visit_status, C.getLabel("reservationStatus", reservation.reservation_status));
+        }
+        return C.getLabel("reservationStatus", reservation.reservation_status, reservation.reservation_status);
+      }
+
+      function dateParts(reservation) {
+        const date = new Date(reservation.start_at);
+        const monthDay = new Intl.DateTimeFormat("ja-JP", { timeZone: C.TIMEZONE, month: "numeric", day: "numeric" }).format(date);
+        const weekday = new Intl.DateTimeFormat("ja-JP", { timeZone: C.TIMEZONE, weekday: "short" }).format(date);
+        const [month, day] = monthDay.split("/");
+        return { month, day, weekday };
+      }
+
+      function dateBoxHtml(reservation) {
+        const p = dateParts(reservation);
+        return `<div class="date-box"><small>${escape(p.month)}月</small><strong>${escape(p.day)}</strong><small>${escape(p.weekday)}</small></div>`;
+      }
+
+      function subjectsText(reservation) {
+        const subjects = Array.isArray(reservation.subjects) ? reservation.subjects : [];
+        return subjects.length ? subjects.map((s) => s.subject_name).filter(Boolean).join("、") : "未登録";
+      }
+
+      function optionTags(reservation) {
+        const labels = [];
+        if (reservation.bring_costume) labels.push("衣装持ち込み");
+        if (reservation.rental_costume_requested) labels.push("衣装レンタル希望");
+        if (reservation.hair_makeup_requested) labels.push("ヘアメイク希望");
+        if (reservation.family_additional_requested) labels.push("家族撮影希望");
+        if (reservation.social_media_consult_requested) labels.push("SNS用途相談");
+        return labels;
+      }
+
+      function reservationBaseDetail(reservation) {
+        const options = optionTags(reservation);
+        return `
+          <div class="detail-grid">
+            <div class="detail-item"><span>予約日時</span><strong>${escape(C.formatDateTime(reservation.start_at))}〜${escape(C.formatTime(reservation.end_at))}</strong></div>
+            <div class="detail-item"><span>予約番号</span><strong>${escape(reservation.reservation_no || "—")}</strong></div>
+            <div class="detail-item"><span>撮影プラン</span><strong>${escape(reservation.plan_name || "—")}</strong></div>
+            <div class="detail-item"><span>担当</span><strong>${escape(reservation.staff_name || "おまかせ")}</strong></div>
+            <div class="detail-item"><span>撮影場所</span><strong>${escape(reservation.resource_name || "当日ご案内")}</strong></div>
+            <div class="detail-item"><span>参加人数</span><strong>${escape(String(reservation.participant_count || 1))}名</strong></div>
+            <div class="detail-item full"><span>撮影対象</span><strong>${escape(subjectsText(reservation))}</strong></div>
+            ${reservation.shooting_purpose ? `<div class="detail-item full"><span>撮影目的</span><p>${escape(reservation.shooting_purpose)}</p></div>` : ""}
+            ${reservation.desired_mood ? `<div class="detail-item full"><span>ご希望の雰囲気</span><p>${escape(reservation.desired_mood)}</p></div>` : ""}
+            ${reservation.desired_shots ? `<div class="detail-item full"><span>ご希望のカット</span><p>${escape(reservation.desired_shots)}</p></div>` : ""}
+            ${options.length ? `<div class="detail-item full"><span>ご希望・オプション</span><p>${escape(options.join("、"))}</p></div>` : ""}
+            ${reservation.accommodation_note ? `<div class="detail-item full"><span>撮影時の配慮</span><p>${escape(reservation.accommodation_note)}</p></div>` : ""}
+            ${reservation.customer_note ? `<div class="detail-item full"><span>お客様メモ</span><p>${escape(reservation.customer_note)}</p></div>` : ""}
+          </div>
+        `;
+      }
+
+      function requestStatePanels(reservation) {
+        const rows = [];
+        if (reservation.change_requested_at || reservation.reservation_status === "change_requested") {
+          rows.push(`<div class="info-panel amber"><h4>予約変更を確認中です</h4><p>${escape(reservation.change_request_note || "写真館からのご連絡をお待ちください。")}</p></div>`);
+        }
+        if (reservation.cancel_requested_at || reservation.reservation_status === "cancel_requested") {
+          rows.push(`<div class="info-panel amber"><h4>キャンセル希望を確認中です</h4><p>${escape(reservation.cancel_request_note || "写真館からのご連絡をお待ちください。")}</p></div>`);
+        }
+        if (reservation.reservation_status === "cancelled") {
+          rows.push(`<div class="info-panel amber"><h4>キャンセル済みの予約です</h4><p>ご不明点がある場合は写真館へお問い合わせください。</p></div>`);
+        }
+        return rows.join("");
+      }
+
+      function actionButtons(reservation) {
+        const actions = [];
+        if (canRequestChange(reservation)) {
+          actions.push(`<button class="btn btn-secondary btn-small request-action" data-mode="change" data-id="${escape(reservation.id)}" type="button">予約変更を希望する</button>`);
+        }
+        if (canRequestCancel(reservation)) {
+          actions.push(`<button class="btn btn-danger btn-small request-action" data-mode="cancel" data-id="${escape(reservation.id)}" type="button">キャンセルを希望する</button>`);
+        }
+        actions.push(`<button class="btn btn-neutral btn-small request-action" data-mode="contact" data-id="${escape(reservation.id)}" type="button">この予約について問い合わせる</button>`);
+        if (isPast(reservation) || ["selection_guided", "selected", "retouching", "delivery_preparing", "delivered", "reorder_follow", "closed"].includes(reservation.post_status)) {
+          actions.push(`<button class="btn btn-primary btn-small request-action" data-mode="reorder" data-id="${escape(reservation.id)}" type="button">再注文・アルバム相談</button>`);
+        }
+        return `<div class="action-row">${actions.join("")}</div>`;
+      }
+
+      function timelineHtml(reservation) {
+        const visitDone = ["completed"].includes(reservation.visit_status) || isPast(reservation);
+        const selectionDone = ["selected", "retouching", "delivery_preparing", "delivered", "reorder_follow", "closed"].includes(reservation.post_status);
+        const deliveryDone = ["delivered", "reorder_follow", "closed"].includes(reservation.post_status) || reservation.delivery?.delivery_status === "delivered";
+        const steps = [
+          { label: "予約", done: !["cancelled", "no_show"].includes(reservation.reservation_status) },
+          { label: "撮影", done: visitDone },
+          { label: "セレクト", done: selectionDone },
+          { label: "納品", done: deliveryDone },
+        ];
+        let lastDone = -1;
+        steps.forEach((step, index) => { if (step.done) lastDone = index; });
+        return `<div class="timeline">${steps.map((s, i) => `<div class="timeline-step ${s.done ? "done" : ""} ${i === Math.min(lastDone + 1, 3) && !s.done ? "current" : ""}">${escape(s.label)}</div>`).join("")}</div>`;
+      }
+
+      function reservationCardHtml(reservation, open = false) {
+        return `
+          <article class="reservation-card ${open ? "open is-selected" : ""}" data-reservation-card="${escape(reservation.id)}">
+            <div class="reservation-head" data-toggle-reservation="${escape(reservation.id)}" role="button" tabindex="0">
+              ${dateBoxHtml(reservation)}
+              <div class="reservation-main">
+                <strong>${escape(reservation.plan_name || "撮影予約")}</strong>
+                <p>${escape(C.formatTime(reservation.start_at))}〜${escape(C.formatTime(reservation.end_at))}｜${escape(reservation.staff_name || "担当おまかせ")}</p>
+              </div>
+              <span class="status-badge ${reservationStatusClass(reservation.reservation_status)}">${escape(displayReservationStatus(reservation))}</span>
+            </div>
+            <div class="reservation-detail">
+              ${timelineHtml(reservation)}
+              ${reservationBaseDetail(reservation)}
+              ${requestStatePanels(reservation)}
+              ${actionButtons(reservation)}
+            </div>
+          </article>
+        `;
+      }
+
+      function renderProfile() {
+        const customer = state.customer || state.profile?.customer || {};
+        els.profileName.textContent = customer.customer_name ? `${customer.customer_name} 様` : "お客様";
+        const meta = [];
+        if (customer.customer_no) meta.push(`お客様番号：${customer.customer_no}`);
+        if (customer.phone) meta.push(C.formatPhone(customer.phone));
+        els.profileMeta.textContent = meta.join("｜");
+        const subjects = state.profile?.subjects || [];
+        const tags = [];
+        if (subjects.length) tags.push(...subjects.map((s) => `撮影対象：${s.subject_name}`));
+        if (customer.total_shoot_count) tags.push(`撮影回数：${customer.total_shoot_count}回`);
+        els.profileTags.innerHTML = tags.map((tag) => `<span class="tag">${escape(tag)}</span>`).join("");
+      }
+
+      function renderSummary() {
+        const upcoming = state.reservations.filter(isUpcoming).length;
+        const selection = state.reservations.filter((r) => r.selection_guide && ["ready", "guided", "selected"].includes(r.selection_guide.guide_status)).length;
+        const delivered = state.reservations.filter((r) => r.delivery?.delivery_status === "delivered").length;
+        els.reservationSummary.innerHTML = `
+          <div class="summary-box"><span>今後の予約</span><strong>${upcoming}件</strong></div>
+          <div class="summary-box"><span>セレクト案内</span><strong>${selection}件</strong></div>
+          <div class="summary-box"><span>納品済み</span><strong>${delivered}件</strong></div>
+        `;
+      }
+
+      function renderReservations() {
+        if (!state.reservations.length) {
+          els.reservationList.innerHTML = `<div class="empty"><strong>予約情報はありません</strong><p>新しい撮影予約は「新しく撮影を予約する」からお申し込みいただけます。</p></div>`;
+          return;
+        }
+        const sorted = [...state.reservations].sort((a, b) => {
+          const aUp = isUpcoming(a) ? 1 : 0;
+          const bUp = isUpcoming(b) ? 1 : 0;
+          if (aUp !== bUp) return bUp - aUp;
+          return bUp ? new Date(a.start_at) - new Date(b.start_at) : new Date(b.start_at) - new Date(a.start_at);
+        });
+        const selected = state.selectedReservationId || sorted[0]?.id;
+        state.selectedReservationId = selected || "";
+        els.reservationList.innerHTML = sorted.map((r) => reservationCardHtml(r, r.id === selected)).join("");
+      }
+
+      function preparationCardHtml(reservation) {
+        const belongings = reservation.intake?.summary || "撮影プランの持ち物案内をご確認ください。詳細は写真館からLINEでご案内します。";
+        return `
+          <article class="reservation-card open">
+            <div class="reservation-head">
+              ${dateBoxHtml(reservation)}
+              <div class="reservation-main"><strong>${escape(reservation.plan_name || "撮影予約")}</strong><p>${escape(C.formatDateTime(reservation.start_at))}</p></div>
+              <span class="status-badge">${escape(displayReservationStatus(reservation))}</span>
+            </div>
+            <div class="reservation-detail">
+              <div class="info-panel"><h4>事前ヒアリング・持ち物</h4><p>${escape(belongings)}</p></div>
+              ${reservation.accommodation_note ? `<div class="info-panel blue"><h4>撮影時の配慮</h4><p>${escape(reservation.accommodation_note)}</p></div>` : ""}
+              ${reservationBaseDetail(reservation)}
+              ${actionButtons(reservation)}
+            </div>
+          </article>
+        `;
+      }
+
+      function renderPreparation() {
+        const upcoming = state.reservations.filter(isUpcoming).sort((a,b) => new Date(a.start_at) - new Date(b.start_at));
+        els.preparationList.innerHTML = upcoming.length
+          ? upcoming.map(preparationCardHtml).join("")
+          : `<div class="empty"><strong>撮影前の予約はありません</strong><p>新しい予約が入ると、持ち物や撮影希望をこちらで確認できます。</p></div>`;
+      }
+
+      function selectionCardHtml(reservation) {
+        const guide = reservation.selection_guide || {};
+        const ready = Boolean(guide.selection_url) && ["ready", "guided", "selected"].includes(guide.guide_status);
+        const deadline = guide.selection_deadline ? C.formatDate(guide.selection_deadline, { weekday: "short" }) : "期限は写真館からご案内します";
+        return `
+          <article class="reservation-card open">
+            <div class="reservation-head">
+              ${dateBoxHtml(reservation)}
+              <div class="reservation-main"><strong>${escape(reservation.plan_name || "撮影")}</strong><p>撮影日：${escape(C.formatDate(reservation.start_at, { weekday: "short" }))}</p></div>
+              <span class="status-badge ${ready ? "" : "warn"}">${escape(C.getLabel("guideStatus", guide.guide_status || "draft", "準備中"))}</span>
+            </div>
+            <div class="reservation-detail">
+              <div class="info-panel ${ready ? "" : "amber"}">
+                <h4>${ready ? "写真を選ぶ準備ができました" : "写真館でセレクト案内を準備しています"}</h4>
+                <p>${escape(guide.customer_message || guide.access_note || (ready ? `セレクト期限：${deadline}` : "案内が準備できると、この画面にボタンが表示されます。"))}</p>
+              </div>
+              ${ready ? `<div class="action-row"><a class="btn btn-primary" href="${escape(guide.selection_url)}" target="_blank" rel="noopener">写真セレクトを開く</a></div>` : ""}
+              <div class="detail-grid">
+                <div class="detail-item"><span>セレクト期限</span><strong>${escape(deadline)}</strong></div>
+                <div class="detail-item"><span>案内サービス</span><strong>${escape(guide.provider_name || "写真館指定サービス")}</strong></div>
+              </div>
+              ${actionButtons(reservation)}
+            </div>
+          </article>
+        `;
+      }
+
+      function renderSelection() {
+        const rows = state.reservations.filter((r) => r.selection_guide || ["selection_pending", "selection_guided", "selected"].includes(r.post_status));
+        els.selectionList.innerHTML = rows.length
+          ? rows.map(selectionCardHtml).join("")
+          : `<div class="empty"><strong>現在、写真セレクトの案内はありません</strong><p>撮影後に準備ができると、こちらから写真を選べるようになります。</p></div>`;
+      }
+
+      function deliveryCardHtml(reservation) {
+        const delivery = reservation.delivery || {};
+        const status = delivery.delivery_status || "not_started";
+        const scheduled = delivery.scheduled_date ? C.formatDate(delivery.scheduled_date, { weekday: "short" }) : "準備でき次第ご案内";
+        const referenceUrl = delivery.reference_url && /^https?:\/\//i.test(delivery.reference_url) ? delivery.reference_url : "";
+        return `
+          <article class="reservation-card open">
+            <div class="reservation-head">
+              ${dateBoxHtml(reservation)}
+              <div class="reservation-main"><strong>${escape(reservation.plan_name || "撮影")}</strong><p>撮影日：${escape(C.formatDate(reservation.start_at, { weekday: "short" }))}</p></div>
+              <span class="status-badge info">${escape(C.getLabel("deliveryStatus", status, "未着手"))}</span>
+            </div>
+            <div class="reservation-detail">
+              <div class="info-panel blue"><h4>納品状況</h4><p>${escape(delivery.customer_message || delivery.recipient_note || "写真館で納品準備を進めています。")}</p></div>
+              <div class="detail-grid">
+                <div class="detail-item"><span>納品内容</span><strong>${escape(C.getLabel("deliveryType", delivery.delivery_type, "写真・商品"))}</strong></div>
+                <div class="detail-item"><span>受取方法</span><strong>${escape(C.getLabel("deliveryMethod", delivery.delivery_method, "写真館からご案内"))}</strong></div>
+                <div class="detail-item"><span>納品予定</span><strong>${escape(scheduled)}</strong></div>
+                <div class="detail-item"><span>状態</span><strong>${escape(C.getLabel("deliveryStatus", status, status))}</strong></div>
+              </div>
+              <div class="action-row">
+                ${referenceUrl ? `<a class="btn btn-secondary btn-small" href="${escape(referenceUrl)}" target="_blank" rel="noopener">納品案内を開く</a>` : ""}
+                <button class="btn btn-primary btn-small request-action" data-mode="reorder" data-id="${escape(reservation.id)}" type="button">再注文・アルバム相談</button>
+                <button class="btn btn-neutral btn-small request-action" data-mode="contact" data-id="${escape(reservation.id)}" type="button">納品について問い合わせる</button>
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
+      function renderDelivery() {
+        const rows = state.reservations.filter((r) => r.delivery || ["selected", "retouching", "delivery_preparing", "delivered", "reorder_follow", "closed"].includes(r.post_status));
+        els.deliveryList.innerHTML = rows.length
+          ? rows.map(deliveryCardHtml).join("")
+          : `<div class="empty"><strong>現在、納品中の撮影はありません</strong><p>写真選択後の制作・納品状況がこちらに表示されます。</p></div>`;
+      }
+
+      function renderAll() {
+        renderProfile();
+        renderSummary();
+        renderReservations();
+        renderPreparation();
+        renderSelection();
+        renderDelivery();
+        bindDynamicEvents();
+      }
+
+      function bindDynamicEvents() {
+        $$('[data-toggle-reservation]').forEach((node) => {
+          const toggle = () => {
+            const id = node.dataset.toggleReservation;
+            state.selectedReservationId = id;
+            $$('[data-reservation-card]').forEach((card) => {
+              const open = card.dataset.reservationCard === id;
+              card.classList.toggle("open", open);
+              card.classList.toggle("is-selected", open);
+            });
+          };
+          node.addEventListener("click", toggle);
+          node.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); }
+          });
+        });
+        $$('.request-action').forEach((button) => {
+          button.addEventListener("click", () => {
+            const reservation = state.reservations.find((r) => r.id === button.dataset.id);
+            if (reservation) openRequestModal(button.dataset.mode, reservation);
+          });
+        });
+      }
+
+      function setSection(section, scroll = false) {
+        const valid = ["reservations", "preparation", "selection", "delivery"].includes(section) ? section : "reservations";
+        state.activeSection = valid;
+        $$('.tab').forEach((tab) => tab.classList.toggle("active", tab.dataset.section === valid));
+        $$('.section').forEach((panel) => panel.classList.toggle("active", panel.id === `section-${valid}`));
+        const url = new URL(location.href);
+        url.searchParams.set("section", valid);
+        history.replaceState(null, "", url);
+        if (scroll) $('.tabs-wrap')?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      function modalConfig(mode) {
+        const configs = {
+          change: { title: "予約変更の希望を送る", lead: "希望日時や変更したい内容をご入力ください。写真館で確認後にご連絡します。", label: "変更希望内容", placeholder: "例：7月20日の午後へ変更希望です。カメラマンはおまかせで構いません。", button: "変更希望を送信する" },
+          cancel: { title: "キャンセルの希望を送る", lead: "この送信だけではキャンセル確定になりません。写真館からの連絡をお待ちください。", label: "キャンセル理由", placeholder: "キャンセルをご希望の理由をご入力ください。", button: "キャンセル希望を送信する" },
+          contact: { title: "写真館へ問い合わせる", lead: "選択した予約について、確認したい内容をご入力ください。", label: "お問い合わせ内容", placeholder: "例：当日の持ち物について確認したいです。", button: "問い合わせを送信する" },
+          reorder: { title: "再注文・アルバム相談", lead: "追加プリント、アルバム、ご家族分、データ追加などをご相談いただけます。", label: "ご希望の内容", placeholder: "例：祖父母用に同じ家族写真を2Lサイズで2枚追加したいです。", button: "相談を送信する" },
+        };
+        return configs[mode] || configs.contact;
+      }
+
+      function openRequestModal(mode, reservation) {
+        const config = modalConfig(mode);
+        state.modalMode = mode;
+        state.modalReservation = reservation;
+        els.requestModalTitle.textContent = config.title;
+        els.requestModalLead.textContent = `${reservation.reservation_no}｜${reservation.plan_name || "撮影予約"}`;
+        els.requestNoteLabel.textContent = config.label;
+        els.requestNote.placeholder = config.placeholder;
+        els.requestNote.value = "";
+        els.requestTypeField.hidden = mode !== "reorder";
+        els.submitRequestButton.textContent = config.button;
+        els.requestModal.classList.add("open");
+        setTimeout(() => els.requestNote.focus(), 80);
+      }
+
+      function closeRequestModal() {
+        els.requestModal.classList.remove("open");
+        state.modalMode = "";
+        state.modalReservation = null;
+      }
+
+      function reservationAuthPayload(reservation) {
+        if (state.lookup.public_token && state.reservations.length === 1) {
+          return { public_token: reservation.public_token || state.lookup.public_token };
+        }
+        if (state.lookup.line_user_id) {
+          return { reservation_no: reservation.reservation_no, line_user_id: state.lookup.line_user_id };
+        }
+        if (reservation.public_token) return { public_token: reservation.public_token };
+        throw new Error("予約確認情報が不足しています。マイページを開き直してください。");
+      }
+
+      async function submitRequest() {
+        if (state.busy || !state.modalReservation) return;
+        const note = C.normalizeWhitespace(els.requestNote.value);
+        if (!note) { showToast("内容を入力してください。", "error"); return; }
+        const reservation = state.modalReservation;
+        const auth = reservationAuthPayload(reservation);
+        let endpoint;
+        let body;
+        if (state.modalMode === "change") {
+          endpoint = C.ENDPOINTS.PUBLIC_CHANGE_REQUEST;
+          body = { ...auth, note };
+        } else if (state.modalMode === "cancel") {
+          endpoint = C.ENDPOINTS.PUBLIC_CANCEL_REQUEST;
+          body = { ...auth, note };
+        } else if (state.modalMode === "reorder") {
+          endpoint = C.ENDPOINTS.PUBLIC_REORDER_REQUEST;
+          body = { ...auth, request_type: els.requestTypeSelect.value, request_detail: note, preferred_contact: "line" };
+        } else {
+          endpoint = C.ENDPOINTS.PUBLIC_CONTACT;
+          body = { ...auth, message: note };
+        }
+        try {
+          setLoading(true, "送信しています");
+          const result = await C.apiPost(endpoint, body);
+          closeRequestModal();
+          showToast(result.message || "送信しました。");
+          await loadMember({ silent: true });
+        } catch (error) {
+          showToast(errorMessage(error), "error");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function getInitialLookup() {
+        const fromConfig = C.getMemberLookupFromUrl();
+        const url = new URL(location.href);
+        const lookup = {
+          line_user_id: String(fromConfig.line_user_id || "").trim(),
+          public_token: String(fromConfig.public_token || "").trim(),
+        };
+        if (C.isDemoMode() && !lookup.line_user_id && !lookup.public_token) lookup.line_user_id = "demo_photo_line_001";
+        if (url.searchParams.get("line_user_id")) lookup.line_user_id = url.searchParams.get("line_user_id").trim();
+        if (url.searchParams.get("public_token")) lookup.public_token = url.searchParams.get("public_token").trim();
+        return lookup;
+      }
+
+      function persistLookup() {
+        if (state.lookup.line_user_id) C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, state.lookup.line_user_id);
+        if (state.lookup.public_token) C.setStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN, state.lookup.public_token);
+      }
+
+      async function loadMember(options = {}) {
+        if (!state.lookup.line_user_id && !state.lookup.public_token) {
+          els.memberArea.hidden = true;
+          els.accessMissing.hidden = false;
+          return;
+        }
+        try {
+          if (!options.silent) setLoading(true, "予約情報を読み込んでいます");
+          const query = state.lookup.line_user_id
+            ? { line_user_id: state.lookup.line_user_id }
+            : { public_token: state.lookup.public_token };
+          const reservationsPromise = C.apiGet(C.ENDPOINTS.MEMBER_RESERVATIONS, query);
+          const profilePromise = state.lookup.line_user_id
+            ? C.apiGet(C.ENDPOINTS.MEMBER_PROFILE, { line_user_id: state.lookup.line_user_id })
+            : Promise.resolve({ found: false, customer: null, subjects: [] });
+          const [reservationResult, profileResult] = await Promise.all([reservationsPromise, profilePromise]);
+          state.customer = reservationResult.customer || profileResult.customer || null;
+          state.profile = profileResult;
+          state.reservations = Array.isArray(reservationResult.reservations) ? reservationResult.reservations : [];
+          persistLookup();
+          const url = new URL(location.href);
+          const requestedReservation = url.searchParams.get("reservation_no");
+          if (requestedReservation) {
+            const row = state.reservations.find((r) => r.reservation_no === requestedReservation);
+            if (row) state.selectedReservationId = row.id;
+          }
+          els.memberArea.hidden = false;
+          els.accessMissing.hidden = true;
+          renderAll();
+          const section = url.searchParams.get("section") || "reservations";
+          setSection(section);
+        } catch (error) {
+          els.memberArea.hidden = true;
+          els.accessMissing.hidden = false;
+          showToast(errorMessage(error), "error");
+        } finally {
+          if (!options.silent) setLoading(false);
+        }
+      }
+
+      async function useDemoPerson(lineUserId) {
+        state.lookup = { line_user_id: lineUserId, public_token: "" };
+        C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, lineUserId);
+        C.removeStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN);
+        const url = new URL(location.href);
+        url.searchParams.set("demo", "1");
+        url.searchParams.set("line_user_id", lineUserId);
+        url.searchParams.delete("public_token");
+        history.replaceState(null, "", url);
+        await loadMember();
+      }
+
+      function bindStaticEvents() {
+        els.openMemberButton.addEventListener("click", async () => {
+          const token = els.publicTokenInput.value.trim();
+          if (!token) { showToast("予約確認用トークンを入力してください。", "error"); return; }
+          state.lookup = { line_user_id: "", public_token: token };
+          await loadMember();
+        });
+        els.refreshButton.addEventListener("click", async () => {
+          const original = els.refreshButton.textContent;
+          els.refreshButton.disabled = true;
+          els.refreshButton.textContent = "更新中…";
+          await loadMember({ silent: true });
+          els.refreshButton.disabled = false;
+          els.refreshButton.textContent = "更新しました";
+          setTimeout(() => { els.refreshButton.textContent = original; }, 1400);
+        });
+        $$('.tab').forEach((tab) => tab.addEventListener("click", () => setSection(tab.dataset.section, true)));
+        $$('.demo-person').forEach((button) => button.addEventListener("click", () => useDemoPerson(button.dataset.lineId)));
+        $$('[data-close-modal]').forEach((button) => button.addEventListener("click", closeRequestModal));
+        els.requestModal.addEventListener("click", (event) => { if (event.target === els.requestModal) closeRequestModal(); });
+        els.submitRequestButton.addEventListener("click", submitRequest);
+        document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeRequestModal(); });
+      }
+
+      async function initialize() {
+        bindStaticEvents();
+        els.demoSwitcher.classList.toggle("show", C.isDemoMode());
+        els.footerText.textContent = `${C.STUDIO_NAME}｜${C.APP.subtitle ? "撮影予約・写真セレクト・納品案内" : "お客様マイページ"}`;
+        state.lookup = getInitialLookup();
+        await loadMember();
+      }
+
+      initialize();
+    })();
+  </script>
+</body>
+</html>
