@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- DPRO Photo Studio LINE / STEP STUDIO-6-R1 / STUDIO-6-R1-INDEX-20260715 -->
 <html lang="ja">
 <head>
   <meta charset="utf-8">
@@ -281,6 +282,22 @@
     .button:active { transform: translateY(1px); }
     .button:disabled { cursor: not-allowed; opacity: .55; }
     .button-primary { color: #fff; background: linear-gradient(135deg, var(--brand), #267d70); box-shadow: 0 8px 18px rgba(21,88,79,.18); }
+    .button-primary:disabled {
+      color: #73817e;
+      border-color: #d4dfdc;
+      background: #e1e8e6;
+      box-shadow: none;
+      opacity: 1;
+    }
+    .action-hint {
+      max-width: 828px;
+      margin: 0 auto 7px;
+      color: #687a76;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 850;
+      line-height: 1.4;
+    }
     .button-secondary { color: var(--brand); border-color: #bfd4cf; background: #fff; }
     .button-accent { color: #fff; background: linear-gradient(135deg, #a66b22, #c9903c); }
     .button-full { width: 100%; }
@@ -525,16 +542,17 @@
 
     <footer>
       <div id="studioContact">DPROフォトスタジオ</div>
-      <div>STEP STUDIO-6 / お客様向け撮影予約</div>
+      <!-- Internal version: STUDIO-6-R1-INDEX-20260715 -->
     </footer>
   </main>
 
   <div class="demo-tools" id="demoTools"><button class="demo-button" id="demoFillButton" type="button">デモ入力</button></div>
 
   <div class="sticky-actions" id="stickyActions">
+    <div class="action-hint" id="actionHint" role="status">撮影プランを選択してください</div>
     <div class="action-row">
       <button class="button button-secondary" id="backButton" type="button">戻る</button>
-      <button class="button button-primary" id="nextButton" type="button">次へ</button>
+      <button class="button button-primary" id="nextButton" type="button" disabled aria-disabled="true">次へ</button>
     </div>
   </div>
 
@@ -544,7 +562,7 @@
     "use strict";
 
     const C = window.DPRO_STUDIO;
-    const VERSION = "STUDIO-6-INDEX-20260715";
+    const VERSION = "STUDIO-6-R1-INDEX-20260715";
     const TOTAL_FORM_STEPS = 7;
     const STEP_TITLES = ["撮影プラン", "オプション・担当", "撮影日時", "お客様情報", "撮影対象者", "事前ヒアリング", "内容確認"];
 
@@ -584,7 +602,7 @@
       summaryList: $("summaryList"), agreementCheck: $("agreementCheck"),
       completionMessage: $("completionMessage"), reservationTicket: $("reservationTicket"), memberPageLink: $("memberPageLink"), newReservationButton: $("newReservationButton"),
       fatalCard: $("fatalCard"), fatalMessage: $("fatalMessage"), retryButton: $("retryButton"),
-      stickyActions: $("stickyActions"), backButton: $("backButton"), nextButton: $("nextButton"),
+      stickyActions: $("stickyActions"), actionHint: $("actionHint"), backButton: $("backButton"), nextButton: $("nextButton"),
       demoTools: $("demoTools"), demoFillButton: $("demoFillButton"),
     };
 
@@ -618,6 +636,14 @@
       });
     }
 
+    function updatePrimaryActionState() {
+      const planRequired = state.currentStep === 1 && !state.selectedPlan;
+      if (!state.submitting) els.nextButton.disabled = planRequired;
+      els.nextButton.setAttribute("aria-disabled", String(planRequired || state.submitting));
+      els.actionHint.hidden = !planRequired;
+      els.actionHint.textContent = planRequired ? "撮影プランを選択してください" : "";
+    }
+
     function showStep(step, options = {}) {
       state.currentStep = step;
       document.querySelectorAll(".panel[data-step]").forEach((panel) => panel.classList.toggle("is-active", Number(panel.dataset.step) === step));
@@ -626,6 +652,7 @@
       els.backButton.style.visibility = step <= 1 ? "hidden" : "visible";
       els.nextButton.textContent = step === 7 ? "この内容で予約する" : "次へ";
       els.nextButton.classList.toggle("button-accent", step === 7);
+      updatePrimaryActionState();
       updateProgress();
       if (!options.keepScroll) window.scrollTo({ top: 0, behavior: options.instant ? "auto" : "smooth" });
       hideStatus();
@@ -645,6 +672,7 @@
           : (button.dataset.originalText || button.textContent);
         button.classList.remove("button-loading");
         button.disabled = false;
+        if (button === els.nextButton) updatePrimaryActionState();
       }
     }
 
@@ -738,6 +766,7 @@
         els.reservationDate.value = "";
       }
       renderPlans(); renderOptions(); renderStaff(); renderPlanIntake(); updateDateRange();
+      updatePrimaryActionState();
       els.belongingsText.textContent = plan.belongings_guide || "詳しい持ち物は店舗からご案内します。";
     }
 
@@ -1114,7 +1143,7 @@
           },
           plan_answers: answers,
           summary: [text(els.shootingPurpose.value), text(els.desiredMood.value), text(els.desiredShots.value)].filter(Boolean).join(" / "),
-          answer_version: "STUDIO-6",
+          answer_version: "STUDIO-6-R1",
           confirmed: true,
         },
       };
