@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#075f55" />
+  <meta name="description" content="DPROフォトスタジオ 受付iPad画面" />
+  <title>DPROフォトスタジオ｜受付iPad</title>
+  <!-- Version: STUDIO-10-OWNER-IPAD-20260715 -->
+  <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
+  <style>
+    :root {
+      --ink: #102d2a;
+      --muted: #647c78;
+      --line: #d4e3df;
+      --line-strong: #b7d3cd;
+      --bg: #eef6f3;
+      --panel: #fff;
+      --green: #087669;
+      --green-dark: #05584f;
+      --green-deep: #064b44;
+      --mint: #e8f6f2;
+      --blue: #337b98;
+      --blue-soft: #eaf4fa;
+      --amber: #aa6d0d;
+      --amber-soft: #fff3d7;
+      --red: #ac443d;
+      --red-soft: #fff0ed;
+      --shadow: 0 14px 34px rgba(17, 70, 62, .10);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 98% 0%, rgba(19, 133, 117, .11), transparent 24rem),
+        linear-gradient(180deg, #eaf4f1 0, var(--bg) 28rem);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP",
+        "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      font-size: 17px;
+      line-height: 1.55;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      color: #fff;
+      background:
+        radial-gradient(circle at 95% 10%, rgba(255,255,255,.10) 0 5rem, transparent 5.1rem),
+        linear-gradient(110deg, #064d46, #0a786b);
+      box-shadow: 0 6px 18px rgba(5, 67, 59, .19);
+    }
+
+    .topbar-inner {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 15px 22px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .eyebrow {
+      margin: 0 0 2px;
+      font-size: .74rem;
+      font-weight: 900;
+      letter-spacing: .13em;
+      opacity: .9;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.45rem, 2.5vw, 2.15rem);
+      line-height: 1.2;
+    }
+
+    .top-meta {
+      margin: 4px 0 0;
+      font-size: .84rem;
+      opacity: .9;
+    }
+
+    .top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 9px;
+    }
+
+    .btn {
+      min-height: 48px;
+      padding: 10px 16px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      color: var(--ink);
+      background: #fff;
+      font-weight: 900;
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn-primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--green-dark), var(--green));
+      box-shadow: 0 8px 17px rgba(5, 91, 80, .18);
+    }
+    .btn-secondary {
+      color: var(--green-deep);
+      border-color: #a9d1ca;
+      background: #eef9f6;
+    }
+    .btn-neutral {
+      color: var(--ink);
+      border-color: var(--line);
+      background: #fff;
+    }
+    .btn-danger {
+      color: #9d3b35;
+      border-color: #edbbb5;
+      background: #fff4f2;
+    }
+    .btn-small {
+      min-height: 40px;
+      padding: 7px 12px;
+      border-radius: 10px;
+      font-size: .86rem;
+    }
+    .btn-wide { width: 100%; }
+
+    input, select, textarea {
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 12px;
+      border: 1px solid #bfd5d0;
+      border-radius: 11px;
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: #4fa598;
+      box-shadow: 0 0 0 3px rgba(25, 132, 118, .12);
+    }
+    textarea { min-height: 110px; resize: vertical; }
+
+    .auth-wrap {
+      width: min(580px, calc(100% - 30px));
+      margin: 64px auto;
+    }
+
+    .auth-card, .panel, .reservation-card, .lane, .modal {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.97);
+      box-shadow: var(--shadow);
+    }
+
+    .auth-card { padding: 27px; }
+    .auth-card h2 { margin: 0 0 7px; font-size: 1.55rem; }
+    .auth-card p { margin: 0 0 18px; color: var(--muted); }
+    .auth-row { display: grid; grid-template-columns: 1fr auto auto; gap: 9px; }
+
+    .app-shell {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 20px 22px 46px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(190px,.75fr) minmax(260px,1.3fr) auto;
+      gap: 12px;
+      align-items: end;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      margin: 0 0 5px;
+      font-size: .85rem;
+      font-weight: 900;
+    }
+    .field-note { margin-top: 4px; color: var(--muted); font-size: .78rem; }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .page-head {
+      display: flex;
+      gap: 15px;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin: 5px 0 14px;
+    }
+    .page-head h2 { margin: 0; font-size: clamp(1.65rem, 3vw, 2.3rem); }
+    .page-head p { margin: 3px 0 0; color: var(--muted); }
+
+    .update-status {
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: #49645f;
+      background: rgba(255,255,255,.8);
+      font-size: .8rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0,1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .summary-card {
+      min-height: 102px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.94);
+    }
+    .summary-card span { color: var(--muted); font-size: .82rem; font-weight: 850; }
+    .summary-card strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 1.75rem;
+      line-height: 1.1;
+    }
+    .summary-card small { color: var(--muted); }
+
+    .lanes {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 13px;
+      align-items: start;
+    }
+
+    .lane {
+      min-width: 0;
+      overflow: hidden;
+      box-shadow: none;
+    }
+
+    .lane-head {
+      padding: 13px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      background: #f6faf9;
+    }
+
+    .lane-head h3 { margin: 0; font-size: 1.06rem; }
+    .lane-count {
+      min-width: 29px;
+      height: 29px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      display: inline-grid;
+      place-items: center;
+      color: var(--green-deep);
+      background: var(--mint);
+      font-weight: 900;
+      font-size: .82rem;
+    }
+
+    .lane-body {
+      padding: 10px;
+      display: grid;
+      gap: 10px;
+      min-height: 160px;
+    }
+
+    .reservation-card {
+      overflow: hidden;
+      border-radius: 14px;
+      box-shadow: none;
+      background: #fff;
+    }
+
+    .card-top {
+      display: grid;
+      grid-template-columns: 76px minmax(0,1fr);
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+    }
+
+    .time-box {
+      min-height: 72px;
+      padding: 9px 5px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border: 1px solid #cce2dd;
+      border-radius: 11px;
+      color: var(--green-deep);
+      background: var(--mint);
+    }
+    .time-box strong { display: block; font-size: 1.28rem; line-height: 1.05; }
+    .time-box small { display: block; font-size: .71rem; font-weight: 800; }
+
+    .card-info h4 {
+      margin: 0 0 3px;
+      font-size: 1rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .card-meta { color: var(--muted); font-size: .79rem; }
+    .badges { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: #3d5853;
+      background: #edf3f1;
+      font-size: .7rem;
+      font-weight: 900;
+    }
+    .badge.green { color: #086456; background: #ddf2eb; }
+    .badge.blue { color: #23677f; background: #e1f1f7; }
+    .badge.amber { color: #916006; background: #fff0c7; }
+    .badge.red { color: #9f4039; background: #ffe1dc; }
+
+    .card-note {
+      margin: 0 12px 10px;
+      padding: 8px 9px;
+      border-radius: 9px;
+      color: #45635e;
+      background: #f3f8f7;
+      font-size: .79rem;
+      white-space: pre-wrap;
+    }
+
+    .card-actions {
+      padding: 10px 12px 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      border-top: 1px solid var(--line);
+      background: #fbfdfc;
+    }
+
+    .card-actions .btn:first-child:last-child { grid-column: 1 / -1; }
+
+    .empty-lane {
+      padding: 24px 10px;
+      text-align: center;
+      color: #849895;
+      font-size: .84rem;
+    }
+
+    .search-results {
+      position: fixed;
+      z-index: 60;
+      left: 50%;
+      top: 102px;
+      transform: translateX(-50%);
+      width: min(760px, calc(100% - 28px));
+      max-height: 60vh;
+      overflow: auto;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: #fff;
+      box-shadow: 0 18px 44px rgba(12, 57, 50, .21);
+    }
+
+    .search-result {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+    }
+    .search-result + .search-result { margin-top: 8px; }
+    .search-result h4 { margin: 0 0 3px; }
+    .search-result p { margin: 0; color: var(--muted); font-size: .82rem; }
+
+    .modal-backdrop {
+      position: fixed;
+      z-index: 90;
+      inset: 0;
+      padding: 18px;
+      display: grid;
+      place-items: center;
+      background: rgba(3, 35, 31, .55);
+      backdrop-filter: blur(4px);
+    }
+
+    .modal {
+      width: min(960px, 100%);
+      max-height: calc(100vh - 36px);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0,1fr) auto;
+    }
+
+    .modal-head {
+      padding: 17px 19px;
+      color: #fff;
+      background: linear-gradient(110deg, #06564d, #0a7a6c);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+    .modal-head h3 { margin: 0; font-size: 1.4rem; }
+    .modal-head p { margin: 3px 0 0; opacity: .88; font-size: .83rem; }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border: 1px solid rgba(255,255,255,.42);
+      border-radius: 10px;
+      color: #fff;
+      background: rgba(255,255,255,.13);
+      font-size: 1.45rem;
+      line-height: 1;
+    }
+
+    .modal-body { overflow: auto; padding: 18px; }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 9px;
+    }
+
+    .detail-box {
+      min-height: 72px;
+      padding: 10px;
+      border-radius: 11px;
+      background: #f2f8f6;
+    }
+    .detail-box span { display: block; color: var(--muted); font-size: .75rem; font-weight: 800; }
+    .detail-box strong {
+      display: block;
+      margin-top: 4px;
+      font-size: .91rem;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    .detail-section {
+      margin-top: 13px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+    }
+    .detail-section h4 { margin: 0 0 10px; }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 8px;
+    }
+
+    .status-btn {
+      min-height: 58px;
+      padding: 8px;
+      border: 1px solid #b9d4cf;
+      border-radius: 11px;
+      color: var(--green-deep);
+      background: #f2faf8;
+      font-weight: 900;
+    }
+    .status-btn.active {
+      color: #fff;
+      border-color: var(--green);
+      background: var(--green);
+    }
+
+    .message-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 9px;
+    }
+
+    .message-card {
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: #fafdfc;
+    }
+    .message-card h5 { margin: 0 0 5px; font-size: .92rem; }
+    .message-card p { margin: 0 0 9px; color: var(--muted); font-size: .81rem; white-space: pre-wrap; }
+
+    .modal-foot {
+      padding: 12px 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      border-top: 1px solid var(--line);
+      background: #f7faf9;
+    }
+
+    .loading-cover {
+      position: fixed;
+      z-index: 130;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(244,250,248,.79);
+      backdrop-filter: blur(3px);
+    }
+    .loading-box {
+      min-width: 230px;
+      padding: 19px 23px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      text-align: center;
+      background: #fff;
+      box-shadow: var(--shadow);
+      font-weight: 900;
+    }
+
+    .toast-region {
+      position: fixed;
+      z-index: 150;
+      right: 18px;
+      bottom: 18px;
+      width: min(400px, calc(100% - 36px));
+      display: grid;
+      gap: 8px;
+    }
+    .toast {
+      padding: 13px 14px;
+      border-radius: 11px;
+      color: #fff;
+      background: #145e54;
+      box-shadow: 0 12px 27px rgba(0,0,0,.19);
+      font-weight: 800;
+    }
+    .toast.error { background: #a53f39; }
+    .toast.info { background: #376f86; }
+
+    .footer {
+      padding: 25px 10px 5px;
+      text-align: center;
+      color: #748a86;
+      font-size: .78rem;
+    }
+
+    @media (max-width: 1180px) {
+      .summary-grid { grid-template-columns: repeat(3,1fr); }
+      .lanes { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    }
+
+    @media (max-width: 780px) {
+      body { font-size: 16px; }
+      .topbar { position: static; }
+      .topbar-inner { padding: 13px 14px; flex-direction: column; align-items: flex-start; }
+      .top-actions { justify-content: flex-start; }
+      .app-shell { padding: 14px 11px 38px; }
+      .toolbar { grid-template-columns: 1fr; }
+      .toolbar-actions { justify-content: stretch; }
+      .toolbar-actions .btn { flex: 1; }
+      .page-head { align-items: flex-start; flex-direction: column; }
+      .summary-grid { grid-template-columns: repeat(2,1fr); }
+      .lanes { grid-template-columns: 1fr; }
+      .auth-row { grid-template-columns: 1fr; }
+      .detail-grid, .status-grid, .message-grid { grid-template-columns: 1fr; }
+      .modal-backdrop { padding: 0; align-items: end; }
+      .modal { width: 100%; max-height: 96vh; border-radius: 20px 20px 0 0; }
+      .modal-foot .btn { flex: 1; }
+      .search-results { top: 15px; max-height: calc(100vh - 30px); }
+    }
+
+    @media (max-width: 420px) {
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .card-actions { grid-template-columns: 1fr; }
+      .card-actions .btn { grid-column: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <p class="eyebrow">DPRO PHOTO STUDIO LINE</p>
+        <h1 id="topTitle">DPROフォトスタジオ｜受付iPad</h1>
+        <p id="topMeta" class="top-meta">本日の来店受付・撮影進行・会計案内</p>
+      </div>
+      <div class="top-actions">
+        <button id="refreshTopBtn" class="btn btn-neutral" type="button">最新情報へ更新</button>
+        <button id="staffOpenBtn" class="btn btn-neutral" type="button">スタッフ画面</button>
+        <button id="ownerOpenBtn" class="btn btn-neutral" type="button">PC管理</button>
+        <button id="clearCodeBtn" class="btn btn-danger" type="button">管理コード削除</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="authGate" class="auth-wrap">
+      <div class="auth-card">
+        <h2>受付iPad画面を開く</h2>
+        <p>写真館から案内された管理コードを入力してください。</p>
+        <div class="auth-row">
+          <input id="adminCodeInput" type="password" inputmode="numeric"
+            autocomplete="current-password" placeholder="管理コード" />
+          <button id="toggleCodeBtn" class="btn btn-neutral" type="button">表示</button>
+          <button id="verifyBtn" class="btn btn-primary" type="button">認証する</button>
+        </div>
+        <p id="authMessage" class="field-note" style="margin-top:10px;"></p>
+      </div>
+    </section>
+
+    <section id="ipadApp" class="app-shell" hidden>
+      <section class="panel toolbar">
+        <div class="field">
+          <label for="workDate">表示日</label>
+          <input id="workDate" type="date" />
+        </div>
+        <div class="field">
+          <label for="searchInput">予約をすぐ探す</label>
+          <input id="searchInput" type="search"
+            placeholder="お客様名・電話番号・予約番号・撮影対象者名" />
+          <div class="field-note">表示中の日付の予約から検索します。</div>
+        </div>
+        <div class="toolbar-actions">
+          <button id="todayBtn" class="btn btn-secondary" type="button">今日へ戻る</button>
+          <button id="loadBtn" class="btn btn-primary" type="button">予約を表示</button>
+        </div>
+      </section>
+
+      <div class="page-head">
+        <div>
+          <h2 id="pageTitle">本日の受付状況</h2>
+          <p>大きなボタンで、来店から当日完了まで更新できます。</p>
+        </div>
+        <div id="lastUpdated" class="update-status">未更新</div>
+      </div>
+
+      <section class="summary-grid">
+        <div class="summary-card"><span>本日の予約</span><strong id="countAll">0</strong><small>予約件数</small></div>
+        <div class="summary-card"><span>来店待ち</span><strong id="countWaiting">0</strong><small>まだ来店前</small></div>
+        <div class="summary-card"><span>受付・準備</span><strong id="countPreparing">0</strong><small>受付〜準備中</small></div>
+        <div class="summary-card"><span>撮影中</span><strong id="countShooting">0</strong><small>現在撮影中</small></div>
+        <div class="summary-card"><span>会計・案内</span><strong id="countCheckout">0</strong><small>店頭確認〜会計</small></div>
+        <div class="summary-card"><span>当日完了</span><strong id="countDone">0</strong><small>本日の対応完了</small></div>
+      </section>
+
+      <section class="lanes">
+        <article class="lane">
+          <header class="lane-head"><h3>来店待ち</h3><span id="laneWaitingCount" class="lane-count">0</span></header>
+          <div id="laneWaiting" class="lane-body"></div>
+        </article>
+
+        <article class="lane">
+          <header class="lane-head"><h3>受付・撮影準備</h3><span id="lanePreparingCount" class="lane-count">0</span></header>
+          <div id="lanePreparing" class="lane-body"></div>
+        </article>
+
+        <article class="lane">
+          <header class="lane-head"><h3>撮影・店頭確認</h3><span id="laneShootingCount" class="lane-count">0</span></header>
+          <div id="laneShooting" class="lane-body"></div>
+        </article>
+
+        <article class="lane">
+          <header class="lane-head"><h3>会計案内・完了</h3><span id="laneDoneCount" class="lane-count">0</span></header>
+          <div id="laneDone" class="lane-body"></div>
+        </article>
+      </section>
+
+      <footer class="footer">DPROフォトスタジオ｜受付・当日進行画面</footer>
+    </section>
+  </main>
+
+  <div id="searchResults" class="search-results" hidden></div>
+
+  <div id="detailModal" class="modal-backdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header class="modal-head">
+        <div>
+          <h3 id="modalTitle">予約確認</h3>
+          <p id="modalMeta"></p>
+        </div>
+        <button id="modalCloseX" class="icon-btn" type="button" aria-label="閉じる">×</button>
+      </header>
+
+      <div class="modal-body">
+        <div id="detailSummary" class="detail-grid"></div>
+
+        <section class="detail-section">
+          <h4>受付で確認する内容</h4>
+          <div id="receptionDetails" class="detail-grid"></div>
+        </section>
+
+        <section class="detail-section">
+          <h4>来店・撮影進行</h4>
+          <div id="statusButtons" class="status-grid"></div>
+          <div class="field" style="margin-top:11px;">
+            <label for="internalNote">受付・スタッフ間の内部メモ</label>
+            <textarea id="internalNote" placeholder="お持ち物、到着状況、撮影担当への引き継ぎなど"></textarea>
+          </div>
+        </section>
+
+        <section class="detail-section">
+          <h4>お客様への案内文面</h4>
+          <div id="messageCards" class="message-grid"></div>
+        </section>
+      </div>
+
+      <footer class="modal-foot">
+        <button id="saveStatusBtn" class="btn btn-primary" type="button">進行状態とメモを保存</button>
+        <button id="modalCloseBtn" class="btn btn-neutral" type="button">閉じる</button>
+      </footer>
+    </section>
+  </div>
+
+  <div id="loadingCover" class="loading-cover" hidden>
+    <div id="loadingText" class="loading-box">読み込み中...</div>
+  </div>
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+  <script>
+  (() => {
+    "use strict";
+
+    const C = window.DPRO_STUDIO;
+    if (!C) {
+      document.body.innerHTML =
+        '<div style="padding:32px;font-family:sans-serif"><h1>config.jsを読み込めませんでした。</h1><p>同じ階層にconfig.jsを配置してください。</p></div>';
+      return;
+    }
+
+    const VERSION = "STUDIO-10-OWNER-IPAD-20260715";
+    const $ = (id) => document.getElementById(id);
+    const esc = (value) => C.escapeHtml(value ?? "");
+
+    const state = {
+      verified: false,
+      settings: null,
+      reservations: [],
+      selected: null,
+      selectedVisitStatus: null,
+      refreshTimer: null,
+    };
+
+    const visitGroups = {
+      waiting: ["scheduled"],
+      preparing: ["arrived", "preparing"],
+      shooting: ["shooting", "selecting_on_site"],
+      done: ["checkout_guidance", "completed"],
+    };
+
+    const messages = {
+      waiting: {
+        title: "来店前の確認",
+        type: "visit_reminder",
+        body: "{customer_name}様\n本日は{reservation_time}より{plan_name}のご予約です。\nお気をつけてお越しください。"
+      },
+      arrived: {
+        title: "受付のお礼",
+        type: "arrival",
+        body: "{customer_name}様\n本日はご来店ありがとうございます。\n撮影準備が整い次第、スタッフよりご案内いたします。"
+      },
+      finish: {
+        title: "撮影終了のお礼",
+        type: "shooting_complete",
+        body: "{customer_name}様\n本日は撮影にお越しいただき、ありがとうございました。\n写真セレクトや納品については、準備が整い次第LINEでご案内いたします。"
+      },
+      delay: {
+        title: "待ち時間のご案内",
+        type: "delay_notice",
+        body: "{customer_name}様\nただいま撮影準備を進めております。\nお待たせして申し訳ありません。準備が整い次第ご案内いたします。"
+      }
+    };
+
+    function toast(message, type = "success", duration = 3400) {
+      const element = document.createElement("div");
+      element.className = `toast ${type}`;
+      element.textContent = message;
+      $("toastRegion").appendChild(element);
+      setTimeout(() => element.remove(), duration);
+    }
+
+    function showLoading(message = "読み込み中...") {
+      $("loadingText").textContent = message;
+      $("loadingCover").hidden = false;
+    }
+
+    function hideLoading() { $("loadingCover").hidden = true; }
+
+    function errorMessage(error) {
+      return error?.message || "処理中にエラーが発生しました。";
+    }
+
+    async function runBusy(message, callback) {
+      showLoading(message);
+      try {
+        return await callback();
+      } catch (error) {
+        toast(errorMessage(error), "error", 5200);
+        throw error;
+      } finally {
+        hideLoading();
+      }
+    }
+
+    function badge(text, tone = "") {
+      return `<span class="badge ${tone}">${esc(text)}</span>`;
+    }
+
+    function toneForReservation(status) {
+      if (status === "confirmed") return "green";
+      if (["change_requested", "cancel_requested"].includes(status)) return "amber";
+      if (["cancelled", "no_show"].includes(status)) return "red";
+      return "";
+    }
+
+    function toneForVisit(status) {
+      if (status === "completed") return "green";
+      if (["arrived", "preparing", "shooting", "selecting_on_site"].includes(status)) return "blue";
+      if (status === "checkout_guidance") return "amber";
+      return "";
+    }
+
+    function customerName(row) {
+      return row?.customer_name || row?.customer_name_snapshot || "お名前未登録";
+    }
+
+    function planName(row) {
+      return row?.plan_name || row?.plan_name_snapshot || "撮影プラン";
+    }
+
+    function staffName(row) {
+      return row?.staff_name || row?.staff_name_snapshot || "担当未定";
+    }
+
+    function resourceName(row) {
+      return row?.resource_name || row?.resource_name_snapshot || "撮影場所未定";
+    }
+
+    function fmtTime(value) {
+      return value ? C.formatTime(value) : "-";
+    }
+
+    function fmtDateTime(value) {
+      return value ? C.formatDateTime(value) : "-";
+    }
+
+    async function verifyAndStart() {
+      const code = $("adminCodeInput").value.trim();
+      if (!code) {
+        $("authMessage").textContent = "管理コードを入力してください。";
+        return;
+      }
+
+      await runBusy("管理コードを確認しています...", async () => {
+        await C.verifyAdminCode(code);
+        C.saveAdminCode(code, { sessionOnly: C.isDemoMode() });
+        state.verified = true;
+        $("authGate").hidden = true;
+        $("ipadApp").hidden = false;
+        await loadBaseData();
+      });
+      toast("受付iPad画面を開きました。");
+    }
+
+    async function tryAutoStart() {
+      const code = C.getAdminCode();
+      if (!code) return;
+      $("adminCodeInput").value = code;
+      try {
+        await C.verifyAdminCode(code);
+        state.verified = true;
+        $("authGate").hidden = true;
+        $("ipadApp").hidden = false;
+        await loadBaseData();
+      } catch {
+        C.clearAdminCode();
+      }
+    }
+
+    async function loadBaseData() {
+      state.settings = await C.adminGet(C.ENDPOINTS.ADMIN_SETTINGS);
+      renderStudioHeader();
+      $("workDate").value = C.todayYmd();
+      await loadReservations();
+      startAutoRefresh();
+    }
+
+    function renderStudioHeader() {
+      const studio = state.settings?.studio || {};
+      $("topTitle").textContent = `${studio.studio_name || C.STUDIO_NAME}｜受付iPad`;
+      $("topMeta").textContent =
+        `${studio.phone || "電話未登録"}｜${studio.address || "住所未登録"}｜本日の来店受付・撮影進行`;
+    }
+
+    async function loadReservations(options = {}) {
+      const date = $("workDate").value || C.todayYmd();
+      const silent = options.silent === true;
+
+      if (!silent) showLoading("本日の予約を読み込んでいます...");
+      try {
+        const result = await C.adminGet(C.ENDPOINTS.IPAD_TODAY, { date });
+        state.reservations = result.reservations || [];
+        renderAll();
+        $("lastUpdated").textContent =
+          `最終更新 ${new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date())}`;
+      } catch (error) {
+        if (!silent) toast(errorMessage(error), "error", 5200);
+      } finally {
+        if (!silent) hideLoading();
+      }
+    }
+
+    function renderAll() {
+      const date = $("workDate").value || C.todayYmd();
+      $("pageTitle").textContent = `${C.formatDate(date, { weekday: "short" })}の受付状況`;
+      renderSummary();
+      renderLanes();
+      renderSearch();
+    }
+
+    function groupRows(key) {
+      const statuses = visitGroups[key] || [];
+      return state.reservations.filter((row) => statuses.includes(row.visit_status));
+    }
+
+    function renderSummary() {
+      $("countAll").textContent = state.reservations.length;
+      $("countWaiting").textContent = groupRows("waiting").length;
+      $("countPreparing").textContent = groupRows("preparing").length;
+      $("countShooting").textContent =
+        state.reservations.filter((row) => row.visit_status === "shooting").length;
+      $("countCheckout").textContent =
+        state.reservations.filter((row) =>
+          ["selecting_on_site", "checkout_guidance"].includes(row.visit_status)
+        ).length;
+      $("countDone").textContent =
+        state.reservations.filter((row) => row.visit_status === "completed").length;
+    }
+
+    function renderLanes() {
+      const laneMap = {
+        waiting: ["laneWaiting", "laneWaitingCount"],
+        preparing: ["lanePreparing", "lanePreparingCount"],
+        shooting: ["laneShooting", "laneShootingCount"],
+        done: ["laneDone", "laneDoneCount"],
+      };
+
+      Object.entries(laneMap).forEach(([key, [bodyId, countId]]) => {
+        const rows = groupRows(key);
+        $(countId).textContent = rows.length;
+        $(bodyId).innerHTML = rows.length
+          ? rows.map(renderCard).join("")
+          : '<div class="empty-lane">現在、この状態の予約はありません。</div>';
+      });
+    }
+
+    function renderCard(row) {
+      const subjects = (row.subjects || [])
+        .map((subject) => subject.subject_name_snapshot || subject.subject_name)
+        .filter(Boolean)
+        .join("、");
+      const nextStatus = C.getNextVisitStatus(row.visit_status);
+      const note = row.accommodation_note || row.internal_note || "";
+
+      return `
+        <article class="reservation-card">
+          <div class="card-top">
+            <div class="time-box">
+              <strong>${esc(fmtTime(row.start_at))}</strong>
+              <small>${esc(fmtTime(row.end_at))}まで</small>
+            </div>
+            <div class="card-info">
+              <h4>${esc(customerName(row))} 様｜${esc(planName(row))}</h4>
+              <div class="card-meta">${esc(staffName(row))}｜${esc(resourceName(row))}｜${esc(row.participant_count || 1)}名</div>
+              <div class="badges">
+                ${badge(C.getLabel("reservationStatus", row.reservation_status), toneForReservation(row.reservation_status))}
+                ${badge(C.getLabel("visitStatus", row.visit_status), toneForVisit(row.visit_status))}
+                ${subjects ? badge(`対象：${subjects}`, "green") : ""}
+              </div>
+            </div>
+          </div>
+          ${note ? `<div class="card-note">${esc(note)}</div>` : ""}
+          <div class="card-actions">
+            <button class="btn btn-neutral btn-small" type="button"
+              data-open-id="${esc(row.id)}">予約確認</button>
+            ${nextStatus ? `
+              <button class="btn btn-primary btn-small" type="button"
+                data-next-id="${esc(row.id)}" data-next-status="${esc(nextStatus)}">
+                ${esc(nextActionLabel(nextStatus))}
+              </button>
+            ` : ""}
+          </div>
+        </article>
+      `;
+    }
+
+    function nextActionLabel(status) {
+      const map = {
+        arrived: "来店受付",
+        preparing: "撮影準備へ",
+        shooting: "撮影開始",
+        selecting_on_site: "店頭確認へ",
+        checkout_guidance: "会計案内へ",
+        completed: "当日完了",
+      };
+      return map[status] || C.getLabel("visitStatus", status);
+    }
+
+    async function quickNext(reservationId, visitStatus) {
+      const row = state.reservations.find((item) => item.id === reservationId);
+      if (!row) return;
+
+      await runBusy(`${nextActionLabel(visitStatus)}へ更新しています...`, () =>
+        C.adminPost(C.ENDPOINTS.IPAD_RESERVATION_STATUS, {
+          reservation_id: reservationId,
+          visit_status: visitStatus,
+          updated_by: "reception_ipad",
+        })
+      );
+
+      toast(`${customerName(row)}様を「${C.getLabel("visitStatus", visitStatus)}」へ更新しました。`);
+      await loadReservations({ silent: true });
+    }
+
+    function searchMatches(row, query) {
+      const normalized = C.normalizePhone(query);
+      const values = [
+        customerName(row),
+        row.customer_phone,
+        row.reservation_no,
+        planName(row),
+        staffName(row),
+        ...(row.subjects || []).map((subject) =>
+          subject.subject_name_snapshot || subject.subject_name || ""
+        ),
+      ];
+      const textMatch = values.some((value) =>
+        String(value || "").toLowerCase().includes(query.toLowerCase())
+      );
+      const phoneMatch = normalized && C.normalizePhone(row.customer_phone).includes(normalized);
+      return textMatch || phoneMatch;
+    }
+
+    function renderSearch() {
+      const query = $("searchInput").value.trim();
+      if (!query) {
+        $("searchResults").hidden = true;
+        $("searchResults").innerHTML = "";
+        return;
+      }
+
+      const rows = state.reservations.filter((row) => searchMatches(row, query));
+      $("searchResults").hidden = false;
+      $("searchResults").innerHTML = rows.length
+        ? rows.map((row) => `
+          <div class="search-result">
+            <div>
+              <h4>${esc(customerName(row))} 様｜${esc(fmtTime(row.start_at))} ${esc(planName(row))}</h4>
+              <p>${esc(row.reservation_no || "")}｜${esc(C.formatPhone(row.customer_phone || ""))}｜${esc(C.getLabel("visitStatus", row.visit_status))}</p>
+            </div>
+            <button class="btn btn-primary btn-small" type="button"
+              data-search-open="${esc(row.id)}">開く</button>
+          </div>
+        `).join("")
+        : '<div class="empty-lane">該当する予約はありません。</div>';
+    }
+
+    async function openDetail(reservationId) {
+      $("searchResults").hidden = true;
+      await runBusy("予約詳細を読み込んでいます...", async () => {
+        state.selected = await C.adminGet(C.ENDPOINTS.ADMIN_RESERVATION_DETAIL, {
+          reservation_id: reservationId,
+        });
+      });
+      renderDetail();
+      $("detailModal").hidden = false;
+      document.body.style.overflow = "hidden";
+    }
+
+    function renderDetail() {
+      const detail = state.selected || {};
+      const reservation = detail.reservation || {};
+      const customer = detail.customer || {};
+      const subjects = detail.subjects || [];
+      const options = detail.options || [];
+      const intake = detail.intake || {};
+
+      state.selectedVisitStatus = reservation.visit_status || "scheduled";
+
+      $("modalTitle").textContent = `${customerName(reservation)} 様｜${planName(reservation)}`;
+      $("modalMeta").textContent =
+        `${reservation.reservation_no || ""}｜${fmtDateTime(reservation.start_at)}〜${fmtTime(reservation.end_at)}`;
+
+      const summary = [
+        ["お客様", `${customer.customer_name || customerName(reservation)} 様`],
+        ["電話番号", C.formatPhone(customer.phone || reservation.customer_phone_snapshot || "")],
+        ["撮影プラン", planName(reservation)],
+        ["担当", staffName(reservation)],
+        ["撮影場所", resourceName(reservation)],
+        ["参加人数", `${reservation.participant_count || 1}名`],
+      ];
+      $("detailSummary").innerHTML = summary.map(detailBox).join("");
+
+      const reception = [
+        ["撮影対象", subjects.length
+          ? subjects.map((subject) => subject.subject_name_snapshot || subject.subject_name).join("、")
+          : "未登録"],
+        ["撮影目的", reservation.shooting_purpose || "未入力"],
+        ["希望カット", reservation.desired_shots || "未入力"],
+        ["オプション", options.length
+          ? options.map((option) => option.option_name_snapshot || option.option_name).join("、")
+          : "なし"],
+        ["撮影時の配慮", reservation.accommodation_note || "なし"],
+        ["事前ヒアリング", intake.summary || "未入力"],
+        ["アレルギー・注意事項", customer.allergies_and_care || "なし"],
+        ["お客様メモ", reservation.customer_note || "なし"],
+        ["予約状態", C.getLabel("reservationStatus", reservation.reservation_status)],
+      ];
+      $("receptionDetails").innerHTML = reception.map(detailBox).join("");
+
+      $("internalNote").value = reservation.internal_note || "";
+      renderStatusButtons();
+      renderMessageCards();
+    }
+
+    function detailBox([label, value]) {
+      return `<div class="detail-box"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;
+    }
+
+    function renderStatusButtons() {
+      $("statusButtons").innerHTML = C.VISIT_STATUS_FLOW.map((status) => `
+        <button class="status-btn ${state.selectedVisitStatus === status ? "active" : ""}"
+          type="button" data-choose-status="${esc(status)}">
+          ${esc(shortStatus(status))}
+        </button>
+      `).join("");
+    }
+
+    function shortStatus(status) {
+      const map = {
+        scheduled: "来店予定",
+        arrived: "受付済み",
+        preparing: "撮影準備",
+        shooting: "撮影中",
+        selecting_on_site: "店頭確認",
+        checkout_guidance: "会計案内",
+        completed: "当日完了",
+      };
+      return map[status] || C.getLabel("visitStatus", status);
+    }
+
+    function filledMessage(item, reservation) {
+      const values = {
+        customer_name: customerName(reservation),
+        reservation_time: fmtTime(reservation.start_at),
+        plan_name: planName(reservation),
+      };
+      let body = item.body;
+      Object.entries(values).forEach(([key, value]) => {
+        body = body.replaceAll(`{${key}}`, value);
+      });
+      return body;
+    }
+
+    function renderMessageCards() {
+      const reservation = state.selected?.reservation || {};
+      $("messageCards").innerHTML = Object.entries(messages).map(([key, item]) => {
+        const body = filledMessage(item, reservation);
+        return `
+          <div class="message-card">
+            <h5>${esc(item.title)}</h5>
+            <p>${esc(body)}</p>
+            <button class="btn btn-secondary btn-small" type="button"
+              data-copy-message="${esc(key)}">文面をコピー</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function saveStatus() {
+      const reservation = state.selected?.reservation;
+      if (!reservation) return;
+
+      await runBusy("進行状態を保存しています...", () =>
+        C.adminPost(C.ENDPOINTS.IPAD_RESERVATION_STATUS, {
+          reservation_id: reservation.id,
+          visit_status: state.selectedVisitStatus,
+          internal_note: $("internalNote").value,
+          updated_by: "reception_ipad",
+        })
+      );
+
+      toast(`「${C.getLabel("visitStatus", state.selectedVisitStatus)}」へ更新しました。`);
+      closeModal();
+      await loadReservations({ silent: true });
+    }
+
+    async function copyMessage(key) {
+      const item = messages[key];
+      const reservation = state.selected?.reservation;
+      if (!item || !reservation) return;
+
+      const body = filledMessage(item, reservation);
+      await C.copyText(body);
+
+      try {
+        await C.adminPost(C.ENDPOINTS.IPAD_MESSAGE_LOG_COPY, {
+          reservation_id: reservation.id,
+          customer_id: state.selected?.customer?.id || reservation.customer_id || null,
+          message_type: item.type,
+          channel: "copy",
+          recipient: customerName(reservation),
+          body_snapshot: body,
+          action_type: "copied",
+          acted_by: "reception_ipad",
+          metadata: { screen: "owner-ipad.html", version: VERSION },
+        });
+      } catch (error) {
+        console.warn("文面コピー履歴を記録できませんでした。", error);
+      }
+
+      toast("案内文面をコピーしました。");
+    }
+
+    function closeModal() {
+      $("detailModal").hidden = true;
+      document.body.style.overflow = "";
+    }
+
+    function clearAdminCode() {
+      C.clearAdminCode();
+      stopAutoRefresh();
+      state.verified = false;
+      $("ipadApp").hidden = true;
+      $("authGate").hidden = false;
+      $("adminCodeInput").value = "";
+      $("authMessage").textContent = "管理コードを削除しました。";
+      toast("管理コードを削除しました。", "info");
+    }
+
+    function openPage(page) {
+      window.open(
+        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10" } : {}),
+        "_blank",
+        "noopener"
+      );
+    }
+
+    function startAutoRefresh() {
+      stopAutoRefresh();
+      state.refreshTimer = window.setInterval(() => {
+        if (!document.hidden && state.verified && $("detailModal").hidden) {
+          loadReservations({ silent: true });
+        }
+      }, 60000);
+    }
+
+    function stopAutoRefresh() {
+      if (state.refreshTimer) {
+        window.clearInterval(state.refreshTimer);
+        state.refreshTimer = null;
+      }
+    }
+
+    function bindEvents() {
+      $("verifyBtn").addEventListener("click", verifyAndStart);
+      $("adminCodeInput").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") verifyAndStart();
+      });
+      $("toggleCodeBtn").addEventListener("click", () => {
+        const input = $("adminCodeInput");
+        input.type = input.type === "password" ? "text" : "password";
+        $("toggleCodeBtn").textContent = input.type === "password" ? "表示" : "非表示";
+      });
+
+      $("clearCodeBtn").addEventListener("click", clearAdminCode);
+      $("refreshTopBtn").addEventListener("click", () => loadReservations());
+      $("loadBtn").addEventListener("click", () => loadReservations());
+      $("todayBtn").addEventListener("click", () => {
+        $("workDate").value = C.todayYmd();
+        loadReservations();
+      });
+      $("workDate").addEventListener("change", () => loadReservations());
+      $("searchInput").addEventListener("input", C.debounce(renderSearch, 180));
+
+      $("ownerOpenBtn").addEventListener("click", () => openPage(C.PAGES.OWNER));
+      $("staffOpenBtn").addEventListener("click", () => openPage(C.PAGES.STAFF));
+
+      document.querySelector(".lanes").addEventListener("click", (event) => {
+        const openButton = event.target.closest("[data-open-id]");
+        if (openButton) openDetail(openButton.dataset.openId);
+
+        const nextButton = event.target.closest("[data-next-id]");
+        if (nextButton) quickNext(nextButton.dataset.nextId, nextButton.dataset.nextStatus);
+      });
+
+      $("searchResults").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-search-open]");
+        if (button) openDetail(button.dataset.searchOpen);
+      });
+
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest("#searchResults") && !event.target.closest("#searchInput")) {
+          $("searchResults").hidden = true;
+        }
+      });
+
+      $("statusButtons").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-choose-status]");
+        if (!button) return;
+        state.selectedVisitStatus = button.dataset.chooseStatus;
+        renderStatusButtons();
+      });
+
+      $("messageCards").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-copy-message]");
+        if (button) copyMessage(button.dataset.copyMessage);
+      });
+
+      $("saveStatusBtn").addEventListener("click", saveStatus);
+      $("modalCloseX").addEventListener("click", closeModal);
+      $("modalCloseBtn").addEventListener("click", closeModal);
+      $("detailModal").addEventListener("click", (event) => {
+        if (event.target === $("detailModal")) closeModal();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !$("detailModal").hidden) closeModal();
+      });
+
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && state.verified) loadReservations({ silent: true });
+      });
+    }
+
+    bindEvents();
+    $("adminCodeInput").value = C.getAdminCode();
+    tryAutoStart();
+  })();
+  </script>
+</body>
+</html>
