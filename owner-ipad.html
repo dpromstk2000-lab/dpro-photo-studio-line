@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#075f55" />
   <meta name="description" content="DPROフォトスタジオ 受付iPad画面" />
   <title>DPROフォトスタジオ｜受付iPad</title>
-  <!-- Version: STUDIO-10-R3-OWNER-IPAD-20260715 -->
+  <!-- Version: STUDIO-10-R5-OWNER-IPAD-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -566,6 +566,29 @@
       font-size: .82rem;
       white-space: pre-wrap;
     }
+    .availability-guide {
+      grid-column: 1 / -1;
+      padding: 14px;
+      border: 1px solid #c7d9d5;
+      border-radius: 12px;
+      background: #f8fbfa;
+      text-align: left;
+    }
+    .availability-guide.info { border-color: #b9d9d2; background: #eef8f5; }
+    .availability-guide.warning { border-color: #e8c97f; background: #fff5dd; }
+    .availability-guide.error { border-color: #edb8b2; background: #fff0ed; }
+    .availability-guide h5 { margin: 0 0 5px; font-size: .98rem; }
+    .availability-guide p { margin: 0; color: #526b67; font-size: .84rem; }
+    .availability-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+    .availability-actions .btn { min-height: 40px; }
+    .availability-loading {
+      grid-column: 1 / -1;
+      padding: 18px;
+      text-align: center;
+      color: #4d6863;
+      font-weight: 850;
+    }
+
 
     .modal-backdrop {
       position: fixed;
@@ -901,7 +924,7 @@
           <div class="manual-section-head">
             <div>
               <h4>2. 予約内容を入力</h4>
-              <p>撮影プランと日付を選ぶと、30分単位の空き時間を表示します。</p>
+              <p>撮影プランと日付を選ぶと、30分単位の空き時間と、表示できない場合の理由を案内します。</p>
             </div>
             <span id="manualCustomerModeBadge" class="badge amber">新規顧客</span>
           </div>
@@ -945,10 +968,18 @@
                 <button id="manualDateDisplay" class="date-display-button" type="button">日付を選択</button>
                 <input id="manualDate" class="native-date-input" type="date" tabindex="-1" aria-hidden="true" />
               </div>
+              <div id="manualBookingLimitNote" class="field-note">
+                撮影プランを選ぶと、最短予約日を表示します。
+              </div>
             </div>
             <div class="field span-2">
               <label>空き時間</label>
-              <div id="manualSlots" class="slot-grid"><div class="empty-lane">プランと撮影日を選択してください。</div></div>
+              <div id="manualSlots" class="slot-grid">
+                <div class="availability-guide info">
+                  <h5>空き時間を確認する準備</h5>
+                  <p>撮影プランと撮影日を選択してください。担当カメラマンは「おまかせ」の方が空きを見つけやすくなります。</p>
+                </div>
+              </div>
               <div id="manualSelectedSlotMeta" class="booking-summary">空き時間を選択してください。</div>
             </div>
             <div id="manualRegisteredSubjectField" class="field span-2" hidden>
@@ -1056,7 +1087,7 @@
       return;
     }
 
-    const VERSION = "STUDIO-10-R3-OWNER-IPAD-20260715";
+    const VERSION = "STUDIO-10-R5-OWNER-IPAD-20260715";
     const $ = (id) => document.getElementById(id);
     const esc = (value) => C.escapeHtml(value ?? "");
 
@@ -1265,6 +1296,7 @@
       $("workDate").value = C.todayYmd();
       $("manualDate").min = C.todayYmd();
       $("manualDate").value = C.todayYmd();
+      updateManualBookingDateLimits();
       renderDateButtons();
       await loadReservations();
       startAutoRefresh();
@@ -1367,7 +1399,14 @@
       $("manualResource").value = "";
       $("manualDate").value = $("workDate").value || C.todayYmd();
       $("manualDate").min = C.todayYmd();
-      $("manualSlots").innerHTML = '<div class="empty-lane">プランと撮影日を選択してください。</div>';
+      $("manualDate").removeAttribute("max");
+      $("manualBookingLimitNote").textContent =
+        "撮影プランを選ぶと、最短予約日を表示します。";
+      renderAvailabilityGuide({
+        title: "撮影プランと撮影日を選択してください",
+        message: "両方を選ぶと、30分単位の空き時間を確認できます。",
+        tone: "info",
+      });
       $("manualSelectedSlotMeta").textContent = "空き時間を選択してください。";
       $("manualRegisteredSubjectField").hidden = true;
       $("manualRegisteredSubject").innerHTML = '<option value="">＋ 新しい撮影対象者を入力</option>';
@@ -1752,36 +1791,392 @@
       renderSubjectCompatibility();
     }
 
-    async function loadManualSlots() {
+    function ymdCompare(a, b) {
+      return String(a || "").localeCompare(String(b || ""));
+    }
+
+    function planBookingLeadDays(plan = selectedManualPlan()) {
+      const value = Number(plan?.booking_lead_days ?? 0);
+      return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+    }
+
+    function planBookingOpenDays(plan = selectedManualPlan()) {
+      const value = Number(plan?.booking_open_days ?? 180);
+      return Number.isFinite(value) ? Math.max(1, Math.trunc(value)) : 180;
+    }
+
+    function earliestBookableDate(plan = selectedManualPlan()) {
+      return C.addDays(C.todayYmd(), planBookingLeadDays(plan));
+    }
+
+    function latestBookableDate(plan = selectedManualPlan()) {
+      return C.addDays(C.todayYmd(), planBookingOpenDays(plan));
+    }
+
+    function updateManualBookingDateLimits() {
+      const plan = selectedManualPlan();
+      const input = $("manualDate");
+
+      if (!plan) {
+        input.min = C.todayYmd();
+        input.removeAttribute("max");
+        $("manualBookingLimitNote").textContent =
+          "撮影プランを選ぶと、最短予約日を表示します。";
+        return;
+      }
+
+      const leadDays = planBookingLeadDays(plan);
+      const earliest = earliestBookableDate(plan);
+      const latest = latestBookableDate(plan);
+
+      input.min = earliest;
+      input.max = latest;
+
+      if (leadDays > 0) {
+        $("manualBookingLimitNote").textContent =
+          `${plan.plan_name}は${leadDays}日前まで受付。最短予約日は${formatDateButton(earliest)}です。`;
+      } else {
+        $("manualBookingLimitNote").textContent =
+          `${plan.plan_name}は${formatDateButton(earliest)}から予約できます。`;
+      }
+    }
+
+    function renderLeadTimeGuide(plan, selectedDate, apiMessage = "") {
+      const leadDays = planBookingLeadDays(plan);
+      const earliest = earliestBookableDate(plan);
+      const planName = plan?.plan_name || "この撮影プラン";
+      const selectedLabel = formatDateButton(selectedDate);
+      const earliestLabel = formatDateButton(earliest);
+
+      renderAvailabilityGuide({
+        title: `${planName}は${leadDays}日前までのご予約です`,
+        message:
+          `${selectedLabel}は受付期限を過ぎています。最短で予約できる日は${earliestLabel}です。` +
+          (apiMessage ? ` ${apiMessage}` : ""),
+        tone: "warning",
+        actions: [
+          availabilityActionButton("earliest-date", `最短予約日の${earliestLabel}を見る`, "primary"),
+          availabilityActionButton("find-next", "次の空き日を探す", "secondary"),
+          availabilityActionButton("choose-plan", "別のプランを選ぶ", "neutral"),
+        ],
+      });
+
+      $("manualSelectedSlotMeta").textContent =
+        `${selectedLabel}は受付期限外です。最短予約日：${earliestLabel}`;
+    }
+
+    function renderBookingWindowGuide(plan, selectedDate, apiMessage = "") {
+      const latest = latestBookableDate(plan);
+      const planName = plan?.plan_name || "この撮影プラン";
+      renderAvailabilityGuide({
+        title: `${planName}の予約受付期間外です`,
+        message:
+          `${formatDateButton(selectedDate)}は現在の受付期間外です。` +
+          `現在選べる最終日は${formatDateButton(latest)}です。` +
+          (apiMessage ? ` ${apiMessage}` : ""),
+        tone: "warning",
+        actions: [
+          availabilityActionButton("latest-date", `最終受付日の${formatDateButton(latest)}を見る`, "primary"),
+          availabilityActionButton("choose-plan", "別のプランを選ぶ", "neutral"),
+        ],
+      });
+      $("manualSelectedSlotMeta").textContent =
+        `${formatDateButton(selectedDate)}は予約受付期間外です。`;
+    }
+
+    function concreteAvailabilityErrorMessage(error) {
+      return String(
+        error?.payload?.error ||
+        error?.payload?.message ||
+        error?.message ||
+        "空き時間を確認できませんでした。"
+      ).trim();
+    }
+
+    function handleAvailabilityApiError(error, plan, date, staffId) {
+      const message = concreteAvailabilityErrorMessage(error);
+      const earliest = earliestBookableDate(plan);
+      const latest = latestBookableDate(plan);
+
+      if (
+        /直前予約|受付期限|何日前/.test(message) ||
+        ymdCompare(date, earliest) < 0
+      ) {
+        renderLeadTimeGuide(plan, date, message);
+        return;
+      }
+
+      if (
+        /予約受付期間外|受付期間外/.test(message) ||
+        ymdCompare(date, latest) > 0
+      ) {
+        renderBookingWindowGuide(plan, date, message);
+        return;
+      }
+
+      if (/過去の日付/.test(message)) {
+        renderAvailabilityGuide({
+          title: "過去の日付は予約できません",
+          message,
+          tone: "warning",
+          actions: [
+            availabilityActionButton("earliest-date", `最短予約日の${formatDateButton(earliest)}を見る`, "primary"),
+          ],
+        });
+        $("manualSelectedSlotMeta").textContent = message;
+        return;
+      }
+
+      if (/スタッフ|担当/.test(message) && staffId) {
+        renderAvailabilityGuide({
+          title: "選択した担当者では確認できません",
+          message: `${message} 担当を「おまかせ」に変更して再確認してください。`,
+          tone: "warning",
+          actions: [
+            availabilityActionButton("any-staff", "担当をおまかせに変更", "primary"),
+            availabilityActionButton("retry", "再取得", "neutral"),
+          ],
+        });
+        $("manualSelectedSlotMeta").textContent = message;
+        return;
+      }
+
+      renderAvailabilityGuide({
+        title: "空き時間を確認できませんでした",
+        message,
+        tone: "error",
+        actions: [
+          availabilityActionButton("retry", "再取得", "primary"),
+          availabilityActionButton("previous-day", "前日を見る", "neutral"),
+          availabilityActionButton("next-day", "翌日を見る", "neutral"),
+          availabilityActionButton("choose-plan", "別のプランを選ぶ", "neutral"),
+        ],
+      });
+      $("manualSelectedSlotMeta").textContent = message;
+    }
+
+    function availabilityActionButton(action, label, tone = "neutral") {
+      return `<button class="btn btn-${tone} btn-small" type="button" data-availability-action="${esc(action)}">${esc(label)}</button>`;
+    }
+
+    function renderAvailabilityGuide({ title, message, tone = "info", actions = [] }) {
+      $("manualSlots").innerHTML = `
+        <div class="availability-guide ${esc(tone)}">
+          <h5>${esc(title)}</h5>
+          <p>${esc(message)}</p>
+          ${actions.length ? `<div class="availability-actions">${actions.join("")}</div>` : ""}
+        </div>`;
+    }
+
+    function manualAvailabilityInputs() {
+      return {
+        planId: $("manualPlan").value,
+        date: $("manualDate").value,
+        staffId: $("manualStaff").value,
+      };
+    }
+
+    function availabilityReason(result, staffId) {
+      const raw = String(result?.reason || result?.message || result?.closed_reason || "").trim();
+      const lower = raw.toLowerCase();
+
+      if (result?.is_closed === true || result?.closed === true ||
+          /定休日|休業|closed|holiday/.test(lower)) {
+        return {
+          title: "この日は受付できません",
+          message: raw || "定休日または臨時休業日に設定されています。別の日を選択してください。",
+          tone: "warning",
+        };
+      }
+      if (result?.outside_booking_window === true ||
+          /受付期間|予約期間|受付開始|受付終了|booking window/.test(lower)) {
+        return {
+          title: "予約受付期間外です",
+          message: raw || "この日は現在の予約受付期間外です。別の日を選択してください。",
+          tone: "warning",
+        };
+      }
+      if (result?.past_date === true || /過去/.test(lower)) {
+        return {
+          title: "過去の日付は選択できません",
+          message: raw || "今日以降の日付を選択してください。",
+          tone: "warning",
+        };
+      }
+      if (staffId) {
+        return {
+          title: "選択した担当者では空きがありません",
+          message: raw || "担当カメラマンを「おまかせ」にすると、空き時間が見つかる場合があります。",
+          tone: "warning",
+        };
+      }
+      return {
+        title: "この条件では空き時間がありません",
+        message: raw || "満席、撮影スペース使用中、またはプラン所要時間を確保できない可能性があります。",
+        tone: "warning",
+      };
+    }
+
+    function changeManualDate(days) {
+      const current = $("manualDate").value || C.todayYmd();
+      $("manualDate").value = C.addDays(current, days);
+      renderDateButtons();
+      loadManualSlots().catch(() => {});
+    }
+
+    async function requestManualAvailability(date) {
       const planId = $("manualPlan").value;
-      const date = $("manualDate").value;
       const staffId = $("manualStaff").value;
+      return C.apiGet(C.ENDPOINTS.PUBLIC_AVAILABILITY, {
+        plan_id: planId,
+        date,
+        staff_id: staffId || undefined,
+      });
+    }
+
+    function renderAvailableSlots(slots) {
+      $("manualSlots").innerHTML = slots.map((slot, index) => `
+        <button class="slot-btn" type="button" data-slot-index="${index}">
+          ${esc(slot.time)}
+        </button>`).join("");
+    }
+
+    async function findNextAvailableDate() {
+      if (!$("manualPlan").value) {
+        renderAvailabilityGuide({
+          title: "撮影プランを選択してください",
+          message: "次の空き日を探すには、先に撮影プランを選択してください。",
+          tone: "warning",
+        });
+        return;
+      }
+
+      const plan = selectedManualPlan();
+      const baseDate = $("manualDate").value || C.todayYmd();
+      const earliest = earliestBookableDate(plan);
+      const latest = latestBookableDate(plan);
+      const firstCandidate =
+        ymdCompare(baseDate, earliest) < 0 ? earliest : C.addDays(baseDate, 1);
+
+      renderAvailabilityGuide({
+        title: "次の空き日を探しています",
+        message:
+          `${formatDateButton(firstCandidate)}から最大14日分を順番に確認しています。`,
+        tone: "info",
+      });
+
+      for (let offset = 0; offset < 14; offset += 1) {
+        const candidate = C.addDays(firstCandidate, offset);
+        if (ymdCompare(candidate, latest) > 0) break;
+        try {
+          const result = await requestManualAvailability(candidate);
+          const slots = (result?.slots || []).filter((slot) => slot.available);
+          if (slots.length) {
+            $("manualDate").value = candidate;
+            renderDateButtons();
+            state.manualAvailability = result;
+            state.manualSelectedSlot = null;
+            renderAvailableSlots(slots);
+            $("manualSelectedSlotMeta").textContent =
+              `${formatDateButton(candidate)}に空きが見つかりました。時間を選択してください。`;
+            toast(`${formatDateButton(candidate)}に空きが見つかりました。`, "info");
+            return;
+          }
+        } catch {}
+      }
+
+      renderAvailabilityGuide({
+        title: "14日以内に空きが見つかりませんでした",
+        message: "担当を「おまかせ」に変更するか、さらに先の日付を選択してください。",
+        tone: "warning",
+        actions: [
+          availabilityActionButton("any-staff", "担当をおまかせ", "secondary"),
+          availabilityActionButton("next-day", "翌日を見る", "neutral"),
+          availabilityActionButton("retry", "もう一度確認", "primary"),
+        ],
+      });
+    }
+
+    async function loadManualSlots() {
+      const { planId, date, staffId } = manualAvailabilityInputs();
       state.manualSelectedSlot = null;
       state.manualAvailability = null;
       $("manualSelectedSlotMeta").textContent = "空き時間を選択してください。";
-      if (!planId || !date) {
-        $("manualSlots").innerHTML = '<div class="empty-lane">プランと撮影日を選択してください。</div>';
+      updateManualBookingDateLimits();
+
+      if (!planId && !date) {
+        renderAvailabilityGuide({
+          title: "撮影プランと撮影日を選択してください",
+          message: "両方を選ぶと、30分単位の空き時間を確認できます。",
+          tone: "info",
+        });
         return;
       }
+      if (!planId) {
+        renderAvailabilityGuide({
+          title: "撮影プランを選択してください",
+          message: "プランの所要時間によって空き時間が変わります。",
+          tone: "warning",
+        });
+        return;
+      }
+      if (!date) {
+        renderAvailabilityGuide({
+          title: "撮影日を選択してください",
+          message: "日付を選ぶと、その日の営業時間・休業日・予約状況を確認します。",
+          tone: "warning",
+        });
+        return;
+      }
+
+      const plan = selectedManualPlan();
+      const earliest = earliestBookableDate(plan);
+      const latest = latestBookableDate(plan);
+
+      if (ymdCompare(date, earliest) < 0) {
+        renderLeadTimeGuide(plan, date);
+        return;
+      }
+
+      if (ymdCompare(date, latest) > 0) {
+        renderBookingWindowGuide(plan, date);
+        return;
+      }
+
+      $("manualSlots").innerHTML =
+        '<div class="availability-loading">空き時間を確認しています...</div>';
+
       try {
-        const result = await runBusy("空き時間を確認しています...", () =>
-          C.apiGet(C.ENDPOINTS.PUBLIC_AVAILABILITY, {
-            plan_id: planId,
-            date,
-            staff_id: staffId || undefined,
-          })
-        );
+        const result = await requestManualAvailability(date);
         state.manualAvailability = result;
-        const slots = (result.slots || []).filter((slot) => slot.available);
-        $("manualSlots").innerHTML = slots.length
-          ? slots.map((slot, index) => `
-              <button class="slot-btn" type="button" data-slot-index="${index}">
-                ${esc(slot.time)}
-              </button>
-            `).join("")
-          : `<div class="empty-lane">${esc(result.reason || "空いている時間がありません。")}</div>`;
-      } catch {
-        $("manualSlots").innerHTML = '<div class="empty-lane">空き時間を取得できませんでした。</div>';
+        const slots = (result?.slots || []).filter((slot) => slot.available);
+
+        if (slots.length) {
+          renderAvailableSlots(slots);
+          $("manualSelectedSlotMeta").textContent =
+            `${formatDateButton(date)}は${slots.length}枠空いています。時間を選択してください。`;
+          return;
+        }
+
+        const reason = availabilityReason(result, staffId);
+        const actions = [
+          availabilityActionButton("previous-day", "前日を見る", "neutral"),
+          availabilityActionButton("next-day", "翌日を見る", "neutral"),
+          availabilityActionButton("find-next", "次の空き日を探す", "primary"),
+        ];
+        if (staffId) {
+          actions.unshift(
+            availabilityActionButton("any-staff", "担当をおまかせに変更", "secondary")
+          );
+        }
+        actions.push(availabilityActionButton("retry", "再取得", "neutral"));
+
+        renderAvailabilityGuide({ ...reason, actions });
+        $("manualSelectedSlotMeta").textContent =
+          `${formatDateButton(date)}：${reason.title}`;
+      } catch (error) {
+        handleAvailabilityApiError(error, selectedManualPlan(), date, staffId);
+        console.warn("空き時間取得エラー", error);
       }
     }
 
@@ -2216,7 +2611,7 @@
 
     function openPage(page) {
       window.open(
-        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R3" } : {}),
+        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R5" } : {}),
         "_blank",
         "noopener"
       );
@@ -2278,10 +2673,11 @@
       $("manualNewCustomerBtn").addEventListener("click", () => useNewCustomer());
       $("manualPhone").addEventListener("input", updateManualPhoneNote);
       $("manualPlan").addEventListener("change", () => {
-        const plan = (state.settings?.plans || []).find((row) => row.id === $("manualPlan").value);
+        const plan = selectedManualPlan();
         updateManualStaffOptions();
         if (plan?.default_resource_id) $("manualResource").value = plan.default_resource_id;
         state.manualSelectedSlot = null;
+        updateManualBookingDateLimits();
         refreshManualSubjectRules({ preserveSelection: true });
         loadManualSlots().catch(() => {});
       });
@@ -2353,8 +2749,43 @@
         }
       });
       $("manualSlots").addEventListener("click", (event) => {
-        const button = event.target.closest("[data-slot-index]");
-        if (button) selectManualSlot(button.dataset.slotIndex);
+        const slotButton = event.target.closest("[data-slot-index]");
+        if (slotButton) {
+          selectManualSlot(slotButton.dataset.slotIndex);
+          return;
+        }
+
+        const actionButton = event.target.closest("[data-availability-action]");
+        if (!actionButton) return;
+
+        const action = actionButton.dataset.availabilityAction;
+        if (action === "previous-day") changeManualDate(-1);
+        if (action === "next-day") changeManualDate(1);
+        if (action === "retry") loadManualSlots().catch(() => {});
+        if (action === "earliest-date") {
+          $("manualDate").value = earliestBookableDate();
+          renderDateButtons();
+          loadManualSlots().catch(() => {});
+        }
+        if (action === "latest-date") {
+          $("manualDate").value = latestBookableDate();
+          renderDateButtons();
+          loadManualSlots().catch(() => {});
+        }
+        if (action === "choose-plan") {
+          $("manualPlan").focus();
+          $("manualPlan").scrollIntoView({ behavior: "smooth", block: "center" });
+          toast("別の撮影プランを選択してください。", "info");
+        }
+        if (action === "any-staff") {
+          $("manualStaff").value = "";
+          loadManualSlots().catch(() => {});
+        }
+        if (action === "find-next") {
+          findNextAvailableDate().catch((error) => {
+            toast(errorMessage(error), "error", 5200);
+          });
+        }
       });
       $("manualModal").addEventListener("click", (event) => {
         if (event.target === $("manualModal")) closeManualBooking();
