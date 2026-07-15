@@ -635,7 +635,7 @@
           <p class="eyebrow">DPRO PHOTO STUDIO LINE</p>
           <h1>営業前システムチェック</h1>
         </div>
-        <span class="version-badge">STEP STUDIO-10-R8</span>
+        <span class="version-badge">STEP STUDIO-10-R9</span>
       </div>
       <p class="hero-copy">
         Worker・Supabase・共通設定・管理認証・営業デモデータを一画面で確認します。
@@ -758,7 +758,7 @@
     </section>
 
     <p class="footer">
-      DPRO 写真館・フォトスタジオ LINE ／ STUDIO-10-R8-SYSTEM-CHECK-20260715<br>
+      DPRO 写真館・フォトスタジオ LINE ／ STUDIO-10-R9-SYSTEM-CHECK-20260715<br>
       写真データ自体は保存せず、外部ギャラリーURLと業務進捗を管理する設計です。
     </p>
   </main>
@@ -770,9 +770,9 @@
     (function initializeSystemCheck() {
       "use strict";
 
-      const PAGE_VERSION = "STUDIO-10-R8-SYSTEM-CHECK-20260715";
+      const PAGE_VERSION = "STUDIO-10-R9-SYSTEM-CHECK-20260715";
       const EXPECTED_CONFIG_VERSION = "STUDIO-4-CONFIG-20260714";
-      const EXPECTED_WORKER_VERSION = "STUDIO-10-R8-WORKER-DEMO-RESET-SUBJECT-DEDUP-20260715";
+      const EXPECTED_WORKER_VERSION = "STUDIO-10-R9-WORKER-SUBJECT-DAY-DUPLICATE-GUARD-20260715";
       const MANUAL_STORAGE_KEY = "dpro_studio_system_check_manual_v2";
 
       const checkDefinitions = [
@@ -783,7 +783,7 @@
         { id: "routes", title: "APIルート", description: "公開・管理・スタッフ・iPad用APIが公開されているか確認します。" },
         { id: "admin", title: "管理コード認証", description: "管理APIへ安全に接続できるか確認します。" },
         { id: "phone", title: "電話番号正規化", description: "ハイフン・空白・全角・+81形式を同じ番号として判定します。" },
-        { id: "guards", title: "予約・写真データ安全設計", description: "30分枠、担当者・撮影スペース重複防止、外部ギャラリー運用を確認します。" },
+        { id: "guards", title: "予約・写真データ安全設計", description: "30分枠、担当者・撮影スペース・同一撮影対象者の同日重複防止、外部ギャラリー運用を確認します。" },
         { id: "dashboard", title: "管理ダッシュボード", description: "本日の撮影、タスク、セレクト、納品、再注文相談を確認します。" },
         { id: "demoFreshness", title: "営業デモ初期状態", description: "顧客4名・デモ予約4件・未完了タスク4件の基準状態を確認します。" },
       ];
@@ -1092,6 +1092,10 @@
           slot_minutes_30: Number(healthPayload.slot_minutes) === 30,
           staff_overlap_guard: healthPayload.staff_overlap_guard === true,
           resource_overlap_guard: healthPayload.resource_overlap_guard === true,
+          same_subject_same_day_guard:
+            healthPayload.same_subject_same_day_guard === true,
+          duplicate_subject_master_guard:
+            healthPayload.duplicate_subject_master_guard === true,
           external_gallery_only: healthPayload.external_gallery_only === true,
           photo_storage_created_false: healthPayload.photo_storage_created === false,
           production_guard: healthPayload.production_guard === true,
@@ -1100,7 +1104,9 @@
         const failed = Object.entries(conditions).filter(([, value]) => !value).map(([key]) => key);
         return {
           state: failed.length ? "error" : "ok",
-          detail: failed.length ? `安全設定の不一致：${failed.join("、")}` : "30分枠・担当者/撮影スペース重複防止・外部ギャラリー運用・本番保護を確認しました。",
+          detail: failed.length
+            ? `安全設定の不一致：${failed.join("、")}`
+            : "30分枠・担当者/撮影スペース重複防止・同一撮影対象者の同日重複防止・対象者マスタ重複防止・外部ギャラリー運用・本番保護を確認しました。",
           payload: conditions,
         };
       }
@@ -1392,7 +1398,7 @@
           { label: "お客様マイページ", url: `${siteBase}/member.html?demo=1`, future: true },
           { label: "写真館PC管理", url: `${siteBase}/owner.html?demo=1`, future: true },
           { label: "カメラマン・スタッフ", url: `${siteBase}/staff.html?demo=1`, future: true },
-          { label: "受付iPad", url: `${siteBase}/owner-ipad.html?demo=1&v=STUDIO-10-R8`, future: true },
+          { label: "受付iPad", url: `${siteBase}/owner-ipad.html?demo=1&v=STUDIO-10-R9`, future: true },
         ];
         elements.linkGrid.innerHTML = links.map((item, index) => `
           <article class="link-card">
