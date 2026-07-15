@@ -1,0 +1,1375 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f5d58">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>DPRO 写真館・フォトスタジオ LINE｜営業前システムチェック</title>
+  <style>
+    :root {
+      --bg: #f3f6f5;
+      --surface: #ffffff;
+      --surface-soft: #f7faf9;
+      --ink: #172321;
+      --muted: #5f706d;
+      --line: #d8e2df;
+      --brand: #1f5d58;
+      --brand-dark: #153f3c;
+      --brand-soft: #e3f1ee;
+      --ok: #197447;
+      --ok-soft: #e8f6ef;
+      --warn: #9a6410;
+      --warn-soft: #fff4dc;
+      --error: #b33a3a;
+      --error-soft: #fff0f0;
+      --info: #315f91;
+      --info-soft: #edf5ff;
+      --shadow: 0 14px 34px rgba(21, 63, 60, 0.09);
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+      --focus: 0 0 0 4px rgba(31, 93, 88, 0.18);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% -10%, rgba(31, 93, 88, 0.12), transparent 30rem),
+        radial-gradient(circle at 100% 0%, rgba(177, 137, 71, 0.09), transparent 26rem),
+        var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+      font-size: 17px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+    button { touch-action: manipulation; }
+    a { color: inherit; }
+
+    .page-shell {
+      width: min(1240px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 26px 0 64px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 30px;
+      color: #fff;
+      border-radius: 28px;
+      background: linear-gradient(135deg, var(--brand-dark), var(--brand) 68%, #2b746d);
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -80px;
+      top: -110px;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      border: 42px solid rgba(255,255,255,0.07);
+      pointer-events: none;
+    }
+
+    .hero-top {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      font-size: 0.84rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      opacity: 0.82;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.75rem, 4vw, 2.75rem);
+      line-height: 1.24;
+      letter-spacing: 0.01em;
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 1;
+      max-width: 820px;
+      margin: 14px 0 0;
+      color: rgba(255,255,255,0.88);
+      font-size: 1.03rem;
+    }
+
+    .version-badge {
+      flex: 0 0 auto;
+      padding: 9px 13px;
+      border: 1px solid rgba(255,255,255,0.28);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+
+    .overall-panel {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 18px;
+      margin-top: 24px;
+      padding: 18px 20px;
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.11);
+      backdrop-filter: blur(8px);
+    }
+
+    .overall-title {
+      margin: 0 0 2px;
+      font-size: 1.15rem;
+      font-weight: 900;
+    }
+
+    .overall-message {
+      margin: 0;
+      color: rgba(255,255,255,0.82);
+      font-size: 0.92rem;
+    }
+
+    .overall-pill {
+      min-width: 150px;
+      padding: 11px 16px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.15);
+      text-align: center;
+      font-weight: 900;
+    }
+
+    .section {
+      margin-top: 24px;
+      padding: 26px;
+      border: 1px solid rgba(216, 226, 223, 0.9);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: 0 8px 24px rgba(21, 63, 60, 0.055);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: clamp(1.25rem, 2.5vw, 1.55rem);
+      line-height: 1.35;
+    }
+
+    .section-note {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 17px;
+      border: 1px solid transparent;
+      border-radius: 13px;
+      cursor: pointer;
+      font-weight: 850;
+      text-decoration: none;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn:focus-visible, input:focus-visible { outline: none; box-shadow: var(--focus); }
+    .btn:disabled { cursor: not-allowed; opacity: 0.58; transform: none; }
+
+    .btn-primary {
+      color: #fff;
+      background: var(--brand);
+      box-shadow: 0 8px 18px rgba(31, 93, 88, 0.2);
+    }
+
+    .btn-primary:hover { background: var(--brand-dark); }
+    .btn-secondary { color: var(--brand-dark); background: var(--brand-soft); border-color: #c4dfd9; }
+    .btn-ghost { color: var(--ink); background: #fff; border-color: var(--line); }
+    .btn-danger { color: var(--error); background: var(--error-soft); border-color: #f0caca; }
+
+    .auth-grid {
+      display: grid;
+      grid-template-columns: minmax(230px, 1fr) auto auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 0.88rem;
+      font-weight: 850;
+    }
+
+    .field input {
+      width: 100%;
+      min-height: 50px;
+      padding: 11px 14px;
+      color: var(--ink);
+      border: 1px solid #becdca;
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .auth-options {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .check-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .check-inline input { width: 19px; height: 19px; accent-color: var(--brand); }
+
+    .notice {
+      margin-top: 14px;
+      padding: 13px 15px;
+      border-radius: 12px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      font-size: 0.89rem;
+    }
+
+    .auth-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 850;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #9ba7a5;
+      box-shadow: 0 0 0 4px rgba(155,167,165,0.16);
+    }
+
+    .dot.ok { background: var(--ok); box-shadow: 0 0 0 4px rgba(25,116,71,0.15); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 0 4px rgba(154,100,16,0.15); }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .metric {
+      min-height: 110px;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface-soft);
+    }
+
+    .metric-label { color: var(--muted); font-size: 0.78rem; font-weight: 800; }
+    .metric-value { margin-top: 4px; font-size: 1.8rem; line-height: 1.25; font-weight: 950; }
+    .metric-unit { margin-left: 3px; color: var(--muted); font-size: 0.75rem; font-weight: 700; }
+
+    .check-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .check-card {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 15px;
+      min-height: 92px;
+      padding: 15px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: #fff;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .check-card[data-state="running"] { border-color: #a9cbe8; background: var(--info-soft); }
+    .check-card[data-state="ok"] { border-color: #b8dec9; background: var(--ok-soft); }
+    .check-card[data-state="warn"] { border-color: #efd7a7; background: var(--warn-soft); }
+    .check-card[data-state="error"] { border-color: #efc1c1; background: var(--error-soft); }
+
+    .check-icon {
+      display: grid;
+      width: 44px;
+      height: 44px;
+      place-items: center;
+      border-radius: 14px;
+      background: #eef2f1;
+      font-size: 1.25rem;
+      font-weight: 950;
+    }
+
+    .check-card[data-state="running"] .check-icon { color: var(--info); background: #dcecff; }
+    .check-card[data-state="ok"] .check-icon { color: var(--ok); background: #d5efe1; }
+    .check-card[data-state="warn"] .check-icon { color: var(--warn); background: #fde9bd; }
+    .check-card[data-state="error"] .check-icon { color: var(--error); background: #f9d7d7; }
+
+    .check-title { margin: 0; font-size: 1rem; font-weight: 900; }
+    .check-detail { margin: 4px 0 0; color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
+
+    .state-pill {
+      min-width: 86px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: #eef2f1;
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.78rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .check-card[data-state="running"] .state-pill { color: var(--info); background: #dcecff; }
+    .check-card[data-state="ok"] .state-pill { color: var(--ok); background: #d5efe1; }
+    .check-card[data-state="warn"] .state-pill { color: var(--warn); background: #fde9bd; }
+    .check-card[data-state="error"] .state-pill { color: var(--error); background: #f9d7d7; }
+
+    .demo-box {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: center;
+      padding: 20px;
+      border: 1px solid #c4dfd9;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #f3fbf8, #edf5f3);
+    }
+
+    .demo-box h3 { margin: 0; font-size: 1.15rem; }
+    .demo-box p { margin: 7px 0 0; color: var(--muted); font-size: 0.9rem; }
+
+    .demo-result {
+      display: none;
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 13px;
+      border: 1px solid var(--line);
+      background: var(--surface-soft);
+      font-size: 0.9rem;
+    }
+
+    .demo-result.show { display: block; }
+    .demo-result.ok { border-color: #b8dec9; background: var(--ok-soft); color: #155f3c; }
+    .demo-result.error { border-color: #efc1c1; background: var(--error-soft); color: #8f2d2d; }
+
+    .manual-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .manual-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--surface-soft);
+      cursor: pointer;
+    }
+
+    .manual-item input {
+      flex: 0 0 auto;
+      width: 21px;
+      height: 21px;
+      margin-top: 2px;
+      accent-color: var(--ok);
+    }
+
+    .manual-item strong { display: block; font-size: 0.94rem; }
+    .manual-item span { display: block; margin-top: 3px; color: var(--muted); font-size: 0.8rem; }
+
+    .progress-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .progress {
+      flex: 1;
+      overflow: hidden;
+      height: 12px;
+      border-radius: 999px;
+      background: #e6ecea;
+    }
+
+    .progress-bar {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--brand), #3d8a80);
+      transition: width 0.25s ease;
+    }
+
+    .progress-label { min-width: 58px; font-weight: 900; text-align: right; }
+
+    .link-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .link-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface-soft);
+    }
+
+    .link-card strong { display: block; }
+    .url-text {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .link-actions { display: flex; gap: 7px; }
+    .mini-btn {
+      display: inline-grid;
+      min-width: 40px;
+      height: 40px;
+      place-items: center;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--brand-dark);
+      background: #fff;
+      cursor: pointer;
+      font-weight: 900;
+      text-decoration: none;
+    }
+
+    .future-tag {
+      display: inline-flex;
+      margin-left: 6px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: var(--warn);
+      background: var(--warn-soft);
+      font-size: 0.68rem;
+      font-weight: 850;
+      vertical-align: middle;
+    }
+
+    details.raw-panel {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fbfcfc;
+    }
+
+    details.raw-panel summary {
+      padding: 14px 16px;
+      cursor: pointer;
+      font-weight: 850;
+    }
+
+    pre {
+      overflow: auto;
+      max-height: 480px;
+      margin: 0;
+      padding: 16px;
+      border-top: 1px solid var(--line);
+      color: #243330;
+      background: #f1f5f4;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .toast-stack {
+      position: fixed;
+      z-index: 1000;
+      right: 18px;
+      bottom: 18px;
+      display: grid;
+      gap: 10px;
+      width: min(380px, calc(100% - 36px));
+    }
+
+    .toast {
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      font-size: 0.9rem;
+      font-weight: 750;
+      animation: toast-in 0.2s ease both;
+    }
+
+    .toast.ok { color: #155f3c; border-color: #b8dec9; background: var(--ok-soft); }
+    .toast.error { color: #8f2d2d; border-color: #efc1c1; background: var(--error-soft); }
+    .toast.warn { color: #7d520d; border-color: #efd7a7; background: var(--warn-soft); }
+
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .spinner {
+      width: 17px;
+      height: 17px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer {
+      margin-top: 24px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.8rem;
+    }
+
+    @media (max-width: 1020px) {
+      .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 760px) {
+      body { font-size: 16px; }
+      .page-shell { width: min(100% - 20px, 1240px); padding-top: 10px; }
+      .hero { padding: 22px 18px; border-radius: 21px; }
+      .hero-top { display: block; }
+      .version-badge { display: inline-flex; margin-top: 14px; }
+      .overall-panel { grid-template-columns: 1fr; }
+      .overall-pill { min-width: 0; }
+      .section { padding: 20px 15px; border-radius: 19px; }
+      .section-head { display: block; }
+      .section-head .actions { margin-top: 14px; }
+      .auth-grid { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .check-card { grid-template-columns: 44px minmax(0, 1fr); }
+      .check-card .state-pill { grid-column: 2; justify-self: start; }
+      .demo-box { grid-template-columns: 1fr; }
+      .manual-grid, .link-grid { grid-template-columns: 1fr; }
+      .link-card { grid-template-columns: 1fr; }
+      .link-actions { justify-content: flex-start; }
+    }
+
+    @media (max-width: 430px) {
+      .metric-grid { grid-template-columns: 1fr; }
+      .metric { min-height: auto; }
+      .actions .btn { width: 100%; }
+      .demo-box .btn { width: 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page-shell">
+    <header class="hero">
+      <div class="hero-top">
+        <div>
+          <p class="eyebrow">DPRO PHOTO STUDIO LINE</p>
+          <h1>営業前システムチェック</h1>
+        </div>
+        <span class="version-badge">STEP STUDIO-5</span>
+      </div>
+      <p class="hero-copy">
+        Worker・Supabase・共通設定・管理認証・営業デモデータを一画面で確認します。
+        この画面は営業担当・管理者専用です。お客様へは案内しません。
+      </p>
+      <div class="overall-panel" aria-live="polite">
+        <div>
+          <p class="overall-title" id="overallTitle">チェックを開始してください</p>
+          <p class="overall-message" id="overallMessage">管理コードを確認後、「全自動チェック」を押します。</p>
+        </div>
+        <div class="overall-pill" id="overallPill">未実行</div>
+      </div>
+    </header>
+
+    <section class="section" aria-labelledby="authTitle">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title" id="authTitle">1. 管理コード認証</h2>
+          <p class="section-note">管理APIと営業デモ準備を実行するために使用します。</p>
+        </div>
+        <div class="auth-state" id="authState"><span class="dot"></span><span>未確認</span></div>
+      </div>
+
+      <div class="auth-grid">
+        <div class="field">
+          <label for="adminCode">管理コード</label>
+          <input id="adminCode" type="password" inputmode="numeric" autocomplete="current-password" placeholder="管理コードを入力" aria-describedby="authHelp">
+        </div>
+        <button class="btn btn-primary" id="verifyButton" type="button">認証する</button>
+        <button class="btn btn-ghost" id="clearCodeButton" type="button">保存解除</button>
+      </div>
+
+      <div class="auth-options">
+        <label class="check-inline"><input id="showCode" type="checkbox">管理コードを表示</label>
+        <label class="check-inline"><input id="persistCode" type="checkbox">このブラウザに保存</label>
+        <span id="demoModeText"></span>
+      </div>
+      <div class="notice" id="authHelp">
+        通常はセッション中だけ保存します。「このブラウザに保存」を選んだ場合のみ、ブラウザを閉じた後も残ります。
+        本番運用ではCloudflare側の管理コードを必ず変更してください。
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="autoTitle">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title" id="autoTitle">2. 全自動チェック</h2>
+          <p class="section-note">公開APIは管理コードなしでも確認できます。管理APIは認証後に確認します。</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-secondary" id="openHealthButton" type="button">Healthを開く</button>
+          <button class="btn btn-primary" id="runAllButton" type="button">全自動チェック</button>
+        </div>
+      </div>
+
+      <div class="metric-grid" aria-label="データ件数">
+        <div class="metric"><div class="metric-label">スタッフ</div><div class="metric-value"><span id="metricStaff">—</span><span class="metric-unit">名</span></div></div>
+        <div class="metric"><div class="metric-label">撮影スペース</div><div class="metric-value"><span id="metricResources">—</span><span class="metric-unit">件</span></div></div>
+        <div class="metric"><div class="metric-label">撮影プラン</div><div class="metric-value"><span id="metricPlans">—</span><span class="metric-unit">件</span></div></div>
+        <div class="metric"><div class="metric-label">顧客</div><div class="metric-value"><span id="metricCustomers">—</span><span class="metric-unit">名</span></div></div>
+        <div class="metric"><div class="metric-label">デモ予約</div><div class="metric-value"><span id="metricDemoReservations">—</span><span class="metric-unit">件</span></div></div>
+        <div class="metric"><div class="metric-label">未完了タスク</div><div class="metric-value"><span id="metricTasks">—</span><span class="metric-unit">件</span></div></div>
+      </div>
+
+      <div class="check-list" id="checkList"></div>
+
+      <details class="raw-panel">
+        <summary>直近のAPI応答・エラー詳細を表示</summary>
+        <pre id="rawOutput">まだ実行されていません。</pre>
+      </details>
+    </section>
+
+    <section class="section" aria-labelledby="demoTitle">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title" id="demoTitle">3. 営業デモデータ準備</h2>
+          <p class="section-note">営業当日の予約・タスク・セレクト・納品・再注文相談を、今日の日付に合わせて再準備します。</p>
+        </div>
+      </div>
+
+      <div class="demo-box">
+        <div>
+          <h3>デモ店舗専用の安全な再準備</h3>
+          <p>
+            固定デモ顧客4名・固定デモ予約4件を重複しない方式で再作成します。
+            実顧客データは削除しませんが、デモ店舗以外では実行できません。
+          </p>
+        </div>
+        <button class="btn btn-primary" id="demoPrepareButton" type="button">営業デモを再準備</button>
+      </div>
+      <div class="demo-result" id="demoResult" role="status"></div>
+    </section>
+
+    <section class="section" aria-labelledby="manualTitle">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title" id="manualTitle">4. 営業前の手動確認</h2>
+          <p class="section-note">営業直前に目視で確認し、完了した項目へチェックを入れます。</p>
+        </div>
+        <button class="btn btn-ghost" id="resetManualButton" type="button">手動チェック解除</button>
+      </div>
+
+      <div class="manual-grid" id="manualGrid"></div>
+      <div class="progress-wrap">
+        <div class="progress" aria-hidden="true"><div class="progress-bar" id="manualProgressBar"></div></div>
+        <div class="progress-label" id="manualProgressLabel">0/6</div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="linkTitle">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title" id="linkTitle">5. 確認URL一覧</h2>
+          <p class="section-note">URLは省略せず、そのまま開く・コピーできます。</p>
+        </div>
+      </div>
+      <div class="link-grid" id="linkGrid"></div>
+    </section>
+
+    <p class="footer">
+      DPRO 写真館・フォトスタジオ LINE ／ STUDIO-5-SYSTEM-CHECK-20260715<br>
+      写真データ自体は保存せず、外部ギャラリーURLと業務進捗を管理する設計です。
+    </p>
+  </main>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
+  <script>
+    (function initializeSystemCheck() {
+      "use strict";
+
+      const PAGE_VERSION = "STUDIO-5-SYSTEM-CHECK-20260715";
+      const EXPECTED_CONFIG_VERSION = "STUDIO-4-CONFIG-20260714";
+      const EXPECTED_WORKER_VERSION = "STUDIO-3-WORKER-API-20260714";
+      const MANUAL_STORAGE_KEY = "dpro_studio_system_check_manual_v1";
+
+      const checkDefinitions = [
+        { id: "config", title: "共通設定 config.js", description: "共通URL・API・表示ラベル・通信関数の読込を確認します。" },
+        { id: "health", title: "Worker・Supabase接続", description: "Workerの稼働、Supabase接続、基本データ件数を確認します。" },
+        { id: "publicConfig", title: "公開店舗設定", description: "店舗情報、30分枠、スタッフ、撮影スペースを確認します。" },
+        { id: "plans", title: "撮影プラン", description: "営業デモに必要な撮影プランが取得できるか確認します。" },
+        { id: "routes", title: "APIルート", description: "公開・管理・スタッフ・iPad用APIが公開されているか確認します。" },
+        { id: "admin", title: "管理コード認証", description: "管理APIへ安全に接続できるか確認します。" },
+        { id: "phone", title: "電話番号正規化", description: "ハイフン・空白・全角・+81形式を同じ番号として判定します。" },
+        { id: "guards", title: "予約・写真データ安全設計", description: "30分枠、担当者・撮影スペース重複防止、外部ギャラリー運用を確認します。" },
+        { id: "dashboard", title: "管理ダッシュボード", description: "本日の撮影、タスク、セレクト、納品、再注文相談を確認します。" },
+        { id: "demoFreshness", title: "営業デモの日付・内容", description: "今日の予約と営業デモ用タスクが準備されているか確認します。" },
+      ];
+
+      const manualDefinitions = [
+        { id: "auto", title: "全自動チェックを実行した", note: "赤いエラーがないことを確認" },
+        { id: "demo", title: "営業デモを今日の日付で再準備した", note: "本日の撮影1件・タスク4件が目安" },
+        { id: "customer", title: "実顧客情報が表示されていない", note: "営業ではPHOTO-DEMOの顧客だけを使用" },
+        { id: "links", title: "使用する画面URLを開いた", note: "後続STEPで画面追加後に確認" },
+        { id: "display", title: "PC・タブレットの表示を確認した", note: "ブラウザ倍率100%を推奨" },
+        { id: "talk", title: "営業デモの操作順を確認した", note: "予約→当日→セレクト→納品→再注文" },
+      ];
+
+      const state = {
+        checks: Object.fromEntries(checkDefinitions.map((item) => [item.id, { state: "idle", detail: item.description }])),
+        payloads: {},
+        running: false,
+        lastRunAt: null,
+      };
+
+      const elements = {};
+
+      function cacheElements() {
+        [
+          "overallTitle", "overallMessage", "overallPill", "adminCode", "verifyButton", "clearCodeButton",
+          "showCode", "persistCode", "authState", "demoModeText", "runAllButton", "openHealthButton",
+          "checkList", "rawOutput", "demoPrepareButton", "demoResult", "manualGrid", "resetManualButton",
+          "manualProgressBar", "manualProgressLabel", "linkGrid", "toastStack", "metricStaff", "metricResources",
+          "metricPlans", "metricCustomers", "metricDemoReservations", "metricTasks"
+        ].forEach((id) => { elements[id] = document.getElementById(id); });
+      }
+
+      function getConfig() {
+        return window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG || null;
+      }
+
+      function escapeHtml(value) {
+        const config = getConfig();
+        if (config?.escapeHtml) return config.escapeHtml(value);
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function renderChecks() {
+        elements.checkList.innerHTML = checkDefinitions.map((definition) => {
+          const result = state.checks[definition.id] || { state: "idle", detail: definition.description };
+          const icon = ({ idle: "—", running: "↻", ok: "✓", warn: "!", error: "×" })[result.state] || "—";
+          const label = ({ idle: "未実行", running: "確認中", ok: "OK", warn: "要確認", error: "エラー" })[result.state] || "未実行";
+          return `
+            <article class="check-card" data-state="${escapeHtml(result.state)}" id="check-${escapeHtml(definition.id)}">
+              <div class="check-icon" aria-hidden="true">${icon}</div>
+              <div>
+                <h3 class="check-title">${escapeHtml(definition.title)}</h3>
+                <p class="check-detail">${escapeHtml(result.detail || definition.description)}</p>
+              </div>
+              <span class="state-pill">${label}</span>
+            </article>`;
+        }).join("");
+        updateOverall();
+      }
+
+      function setCheck(id, checkState, detail, payload) {
+        state.checks[id] = { state: checkState, detail: detail || "" };
+        if (payload !== undefined) {
+          state.payloads[id] = payload;
+          updateRawOutput(id, payload);
+        }
+        renderChecks();
+      }
+
+      function updateRawOutput(label, payload) {
+        const now = new Date().toLocaleString("ja-JP");
+        let formatted;
+        try { formatted = JSON.stringify(payload, null, 2); }
+        catch { formatted = String(payload); }
+        elements.rawOutput.textContent = `[${now}] ${label}\n${formatted}`;
+      }
+
+      function updateOverall() {
+        const values = Object.values(state.checks);
+        const errors = values.filter((item) => item.state === "error").length;
+        const warnings = values.filter((item) => item.state === "warn").length;
+        const running = values.some((item) => item.state === "running");
+        const completed = values.filter((item) => ["ok", "warn", "error"].includes(item.state)).length;
+        const okCount = values.filter((item) => item.state === "ok").length;
+        const manual = getManualState();
+        const manualDone = manualDefinitions.every((item) => manual[item.id]);
+
+        if (running || state.running) {
+          elements.overallTitle.textContent = "システムを確認しています";
+          elements.overallMessage.textContent = "APIごとに順番に確認しています。画面を閉じずにお待ちください。";
+          elements.overallPill.textContent = "確認中";
+          return;
+        }
+
+        if (!completed) {
+          elements.overallTitle.textContent = "チェックを開始してください";
+          elements.overallMessage.textContent = "管理コードを確認後、「全自動チェック」を押します。";
+          elements.overallPill.textContent = "未実行";
+          return;
+        }
+
+        if (errors > 0) {
+          elements.overallTitle.textContent = "修正が必要な項目があります";
+          elements.overallMessage.textContent = `${errors}件のエラーがあります。赤い項目の内容を確認してください。`;
+          elements.overallPill.textContent = `エラー ${errors}件`;
+          return;
+        }
+
+        if (warnings > 0) {
+          elements.overallTitle.textContent = "一部の確認が残っています";
+          elements.overallMessage.textContent = `${warnings}件が要確認です。管理認証または営業デモ再準備を確認してください。`;
+          elements.overallPill.textContent = `要確認 ${warnings}件`;
+          return;
+        }
+
+        if (okCount === values.length && manualDone) {
+          elements.overallTitle.textContent = "営業準備完了です";
+          elements.overallMessage.textContent = "自動チェックと手動確認がすべて完了しています。";
+          elements.overallPill.textContent = "営業準備OK";
+          return;
+        }
+
+        elements.overallTitle.textContent = "自動チェックは正常です";
+        elements.overallMessage.textContent = "手動確認を完了すると、営業準備OKになります。";
+        elements.overallPill.textContent = "自動判定OK";
+      }
+
+      function setMetrics(database = {}) {
+        elements.metricStaff.textContent = numberOrDash(database.staff_count);
+        elements.metricResources.textContent = numberOrDash(database.resource_count);
+        elements.metricPlans.textContent = numberOrDash(database.plan_count);
+        elements.metricCustomers.textContent = numberOrDash(database.customer_count);
+        elements.metricDemoReservations.textContent = numberOrDash(database.demo_reservation_count);
+        elements.metricTasks.textContent = numberOrDash(database.open_task_count);
+      }
+
+      function numberOrDash(value) {
+        return Number.isFinite(Number(value)) ? String(Number(value)) : "—";
+      }
+
+      function normalizeError(error) {
+        return {
+          message: error?.message || "不明なエラーが発生しました。",
+          status: error?.status || 0,
+          code: error?.code || "UNKNOWN_ERROR",
+          details: error?.details || null,
+        };
+      }
+
+      function errorDetail(prefix, error) {
+        const normalized = normalizeError(error);
+        return `${prefix}：${normalized.message}${normalized.status ? `（HTTP ${normalized.status}）` : ""}`;
+      }
+
+      async function runSingleCheck(id, task) {
+        setCheck(id, "running", "確認しています…");
+        try {
+          const result = await task();
+          setCheck(id, result.state || "ok", result.detail || "正常です。", result.payload);
+          return result;
+        } catch (error) {
+          setCheck(id, "error", errorDetail("確認失敗", error), normalizeError(error));
+          return { state: "error", error };
+        }
+      }
+
+      async function checkConfig() {
+        const config = getConfig();
+        if (!config) throw new Error("config.jsを読み込めません。GitHubへの配置とファイル名を確認してください。");
+        const issues = [];
+        if (config.VERSION !== EXPECTED_CONFIG_VERSION) issues.push(`config版が${config.VERSION || "不明"}`);
+        if (config.WORKER_VERSION !== EXPECTED_WORKER_VERSION) issues.push(`Worker想定版が${config.WORKER_VERSION || "不明"}`);
+        if (config.STUDIO_CODE !== "dpro_photo_demo") issues.push("店舗コードが想定値と異なります");
+        if (!String(config.API_BASE_URL || "").startsWith("https://")) issues.push("Worker URLがHTTPSではありません");
+        return {
+          state: issues.length ? "warn" : "ok",
+          detail: issues.length ? issues.join("／") : `${config.VERSION}・店舗コード・Worker URLを確認しました。`,
+          payload: { page_version: PAGE_VERSION, config_version: config.VERSION, worker_version_expected: config.WORKER_VERSION, studio_code: config.STUDIO_CODE, api_base_url: config.API_BASE_URL },
+        };
+      }
+
+      async function checkHealth() {
+        const config = requireConfig();
+        const payload = await config.apiGet(config.ENDPOINTS.HEALTH);
+        if (!payload?.ok || !payload?.database?.ok) throw new Error("WorkerまたはデータベースがOKを返していません。");
+        if (payload.version !== EXPECTED_WORKER_VERSION) {
+          return { state: "warn", detail: `接続OKですが、Worker版は${payload.version || "不明"}です。`, payload };
+        }
+        setMetrics(payload.database);
+        return { state: "ok", detail: `${payload.database.studio_name}へ接続しました。顧客${payload.database.customer_count}名・デモ予約${payload.database.demo_reservation_count}件です。`, payload };
+      }
+
+      async function checkPublicConfig() {
+        const config = requireConfig();
+        const payload = await config.apiGet(config.ENDPOINTS.PUBLIC_CONFIG);
+        const staffCount = Array.isArray(payload.staff) ? payload.staff.length : 0;
+        const resourceCount = Array.isArray(payload.resources) ? payload.resources.length : 0;
+        const slotMinutes = Number(payload.settings?.slot_minutes);
+        const issues = [];
+        if (slotMinutes !== 30) issues.push(`予約枠が${slotMinutes || "不明"}分`);
+        if (staffCount < 3) issues.push(`スタッフ${staffCount}名`);
+        if (resourceCount < 3) issues.push(`撮影スペース${resourceCount}件`);
+        return {
+          state: issues.length ? "warn" : "ok",
+          detail: issues.length ? `要確認：${issues.join("／")}` : `30分枠・スタッフ${staffCount}名・撮影スペース${resourceCount}件を確認しました。`,
+          payload,
+        };
+      }
+
+      async function checkPlans() {
+        const config = requireConfig();
+        const payload = await config.apiGet(config.ENDPOINTS.PUBLIC_PLANS);
+        const plans = Array.isArray(payload.plans) ? payload.plans : [];
+        const names = plans.map((item) => item.plan_name).filter(Boolean);
+        return {
+          state: plans.length >= 7 ? "ok" : "warn",
+          detail: plans.length >= 7 ? `撮影プラン${plans.length}件を取得しました。` : `撮影プランが${plans.length}件です。STEP STUDIO-2の初期データを確認してください。`,
+          payload: { ok: payload.ok, plan_count: plans.length, plan_names: names, category_count: Array.isArray(payload.categories) ? payload.categories.length : 0 },
+        };
+      }
+
+      async function checkRoutes() {
+        const config = requireConfig();
+        const payload = await config.apiGet(config.ENDPOINTS.ROUTES);
+        const publicCount = Array.isArray(payload.routes?.public) ? payload.routes.public.length : 0;
+        const adminCount = Array.isArray(payload.routes?.admin) ? payload.routes.admin.length : 0;
+        const staffCount = Array.isArray(payload.routes?.staff_ipad) ? payload.routes.staff_ipad.length : 0;
+        const ok = publicCount >= 10 && adminCount >= 15 && staffCount >= 3;
+        return {
+          state: ok ? "ok" : "warn",
+          detail: `公開${publicCount}・管理${adminCount}・スタッフ/iPad${staffCount}ルートを確認しました。`,
+          payload,
+        };
+      }
+
+      async function checkAdmin() {
+        const config = requireConfig();
+        const code = String(config.getAdminCode() || "").trim();
+        if (!code) return { state: "warn", detail: "管理コードが未設定です。上の認証欄から認証してください。", payload: { verified: false, reason: "ADMIN_CODE_REQUIRED" } };
+        const payload = await config.verifyAdminCode(code);
+        updateAuthState(true, "認証済み");
+        return { state: payload?.verified ? "ok" : "error", detail: payload?.verified ? "管理コード認証に成功しました。" : "管理コードを確認できませんでした。", payload };
+      }
+
+      async function checkPhone() {
+        const config = requireConfig();
+        if (!config.getAdminCode()) return { state: "warn", detail: "管理コード認証後に電話番号正規化を確認します。", payload: { skipped: true } };
+        const payload = await config.adminGet(config.ENDPOINTS.ADMIN_PHONE_NORMALIZE_CHECK);
+        return {
+          state: payload.standard_match ? "ok" : "error",
+          detail: payload.standard_match ? "5種類の表記が09099991111へ正規化されました。" : "電話番号正規化の結果が一致していません。",
+          payload,
+        };
+      }
+
+      async function checkGuards() {
+        const healthPayload = state.payloads.health;
+        if (!healthPayload) throw new Error("先にWorker・Supabase接続を確認してください。");
+        const conditions = {
+          slot_minutes_30: Number(healthPayload.slot_minutes) === 30,
+          staff_overlap_guard: healthPayload.staff_overlap_guard === true,
+          resource_overlap_guard: healthPayload.resource_overlap_guard === true,
+          external_gallery_only: healthPayload.external_gallery_only === true,
+          photo_storage_created_false: healthPayload.photo_storage_created === false,
+          production_guard: healthPayload.production_guard === true,
+          demo_studio: healthPayload.database?.is_demo === true,
+        };
+        const failed = Object.entries(conditions).filter(([, value]) => !value).map(([key]) => key);
+        return {
+          state: failed.length ? "error" : "ok",
+          detail: failed.length ? `安全設定の不一致：${failed.join("、")}` : "30分枠・担当者/撮影スペース重複防止・外部ギャラリー運用・本番保護を確認しました。",
+          payload: conditions,
+        };
+      }
+
+      async function checkDashboard() {
+        const config = requireConfig();
+        if (!config.getAdminCode()) return { state: "warn", detail: "管理コード認証後に管理ダッシュボードを確認します。", payload: { skipped: true } };
+        const payload = await config.adminGet(config.ENDPOINTS.ADMIN_DASHBOARD);
+        if (!payload?.ok) throw new Error("管理ダッシュボードがOKを返していません。");
+        const counts = payload.counts || {};
+        return {
+          state: "ok",
+          detail: `本日予約${counts.today_reservations ?? 0}件・未完了タスク${counts.open_tasks ?? 0}件・再注文相談${counts.reorder_open ?? 0}件を取得しました。`,
+          payload,
+        };
+      }
+
+      async function checkDemoFreshness() {
+        const dashboard = state.payloads.dashboard;
+        if (!dashboard || dashboard.skipped) return { state: "warn", detail: "管理ダッシュボード確認後に営業デモ内容を判定します。", payload: { skipped: true } };
+        const todayCount = Array.isArray(dashboard.today) ? dashboard.today.length : Number(dashboard.counts?.today_reservations || 0);
+        const taskCount = Array.isArray(dashboard.tasks) ? dashboard.tasks.length : Number(dashboard.counts?.open_tasks || 0);
+        const postCount = Array.isArray(dashboard.post_production) ? dashboard.post_production.length : 0;
+        const reorderCount = Array.isArray(dashboard.reorders) ? dashboard.reorders.length : Number(dashboard.counts?.reorder_open || 0);
+        const ready = todayCount >= 1 && taskCount >= 4 && postCount >= 2 && reorderCount >= 1;
+        return {
+          state: ready ? "ok" : "warn",
+          detail: ready
+            ? `今日の撮影${todayCount}件・タスク${taskCount}件・撮影後進捗${postCount}件・再注文${reorderCount}件を確認しました。`
+            : `営業デモを再準備してください。現在：今日${todayCount}件・タスク${taskCount}件・撮影後${postCount}件・再注文${reorderCount}件です。`,
+          payload: { today_reservations: todayCount, tasks: taskCount, post_production: postCount, reorders: reorderCount, ready },
+        };
+      }
+
+      async function runAllChecks(options = {}) {
+        if (state.running) return;
+        state.running = true;
+        setBusy(elements.runAllButton, true, "確認中…");
+        checkDefinitions.forEach((item) => { state.checks[item.id] = { state: "idle", detail: item.description }; });
+        state.payloads = {};
+        setMetrics({});
+        renderChecks();
+
+        try {
+          await runSingleCheck("config", checkConfig);
+          await runSingleCheck("health", checkHealth);
+          await runSingleCheck("publicConfig", checkPublicConfig);
+          await runSingleCheck("plans", checkPlans);
+          await runSingleCheck("routes", checkRoutes);
+          await runSingleCheck("admin", checkAdmin);
+          await runSingleCheck("phone", checkPhone);
+          await runSingleCheck("guards", checkGuards);
+          await runSingleCheck("dashboard", checkDashboard);
+          await runSingleCheck("demoFreshness", checkDemoFreshness);
+          state.lastRunAt = new Date();
+          const errors = Object.values(state.checks).filter((item) => item.state === "error").length;
+          const warnings = Object.values(state.checks).filter((item) => item.state === "warn").length;
+          if (!errors && !warnings) showToast("全自動チェックはすべて正常です。", "ok");
+          else if (!errors) showToast(`自動チェック完了：要確認${warnings}件です。`, "warn");
+          else showToast(`自動チェック完了：エラー${errors}件です。`, "error");
+          if (!options.silent) document.getElementById("autoTitle")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        } finally {
+          state.running = false;
+          setBusy(elements.runAllButton, false, "全自動チェック");
+          updateOverall();
+        }
+      }
+
+      function requireConfig() {
+        const config = getConfig();
+        if (!config) throw new Error("config.jsを読み込めません。");
+        return config;
+      }
+
+      async function verifyAdmin() {
+        const config = requireConfig();
+        const code = String(elements.adminCode.value || "").trim();
+        if (!code) {
+          showToast("管理コードを入力してください。", "warn");
+          elements.adminCode.focus();
+          return;
+        }
+        setBusy(elements.verifyButton, true, "認証中…");
+        try {
+          const payload = await config.verifyAdminCode(code);
+          if (!payload?.verified) throw new Error("管理コードを確認できませんでした。");
+          config.saveAdminCode(code, { sessionOnly: !elements.persistCode.checked });
+          updateAuthState(true, elements.persistCode.checked ? "認証済み・ブラウザ保存" : "認証済み・セッション保存");
+          setCheck("admin", "ok", "管理コード認証に成功しました。", payload);
+          showToast("管理コードを確認しました。", "ok");
+        } catch (error) {
+          updateAuthState(false, "認証失敗");
+          setCheck("admin", "error", errorDetail("管理コード認証失敗", error), normalizeError(error));
+          showToast(error?.message || "管理コードを確認できませんでした。", "error");
+        } finally {
+          setBusy(elements.verifyButton, false, "認証する");
+        }
+      }
+
+      function updateAuthState(verified, text) {
+        const dotClass = verified ? "ok" : "warn";
+        elements.authState.innerHTML = `<span class="dot ${dotClass}"></span><span>${escapeHtml(text)}</span>`;
+      }
+
+      function syncAdminCode() {
+        const config = getConfig();
+        if (!config) return;
+        const code = String(config.getAdminCode() || "");
+        elements.adminCode.value = code;
+        if (code) updateAuthState(false, "保存済み・未検証");
+        else updateAuthState(false, "未確認");
+        elements.demoModeText.textContent = config.RUNTIME?.demoMode
+          ? "デモURL：管理コードはセッションへ自動設定されています。"
+          : "通常URL：管理コードは自動設定されません。";
+      }
+
+      function clearAdminCode() {
+        const config = getConfig();
+        config?.clearAdminCode();
+        elements.adminCode.value = "";
+        updateAuthState(false, "保存解除済み");
+        setCheck("admin", "warn", "管理コードの保存を解除しました。再認証してください。", { cleared: true });
+        showToast("管理コードの保存を解除しました。", "ok");
+      }
+
+      async function prepareDemo() {
+        const config = requireConfig();
+        if (!config.getAdminCode()) {
+          showToast("先に管理コードを認証してください。", "warn");
+          elements.adminCode.focus();
+          return;
+        }
+
+        const accepted = window.confirm(
+          "営業デモデータを今日の日付に合わせて再準備します。\n\n" +
+          "固定デモ顧客4名・固定デモ予約4件を再設定します。実行しますか？"
+        );
+        if (!accepted) return;
+
+        setBusy(elements.demoPrepareButton, true, "再準備中…");
+        showDemoResult("", "");
+        try {
+          const payload = await config.adminPost(config.ENDPOINTS.ADMIN_DEMO_PREPARE, {});
+          const db = payload.database || {};
+          setMetrics(db);
+          showDemoResult(
+            `営業デモデータを再準備しました。基準日：${payload.jst_date || "—"}／デモ顧客：${payload.demo_customers ?? "—"}名／デモ予約：${payload.demo_reservations ?? "—"}件／未完了タスク：${db.open_task_count ?? "—"}件`,
+            "ok"
+          );
+          updateRawOutput("demo_prepare", payload);
+          showToast("営業デモを今日の日付で再準備しました。", "ok");
+          await runAllChecks({ silent: true });
+        } catch (error) {
+          const message = errorDetail("営業デモ準備失敗", error);
+          showDemoResult(message, "error");
+          updateRawOutput("demo_prepare_error", normalizeError(error));
+          showToast(error?.message || "営業デモ準備に失敗しました。", "error");
+        } finally {
+          setBusy(elements.demoPrepareButton, false, "営業デモを再準備");
+        }
+      }
+
+      function showDemoResult(message, type) {
+        elements.demoResult.className = "demo-result";
+        elements.demoResult.textContent = message || "";
+        if (message) elements.demoResult.classList.add("show", type === "error" ? "error" : "ok");
+      }
+
+      function setBusy(button, busy, text) {
+        if (!button) return;
+        button.disabled = busy;
+        button.innerHTML = busy ? `<span class="spinner" aria-hidden="true"></span>${escapeHtml(text)}` : escapeHtml(text);
+      }
+
+      function showToast(message, type = "ok") {
+        const toast = document.createElement("div");
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        elements.toastStack.appendChild(toast);
+        window.setTimeout(() => toast.remove(), 4200);
+      }
+
+      function getManualState() {
+        try {
+          const value = JSON.parse(localStorage.getItem(MANUAL_STORAGE_KEY) || "{}");
+          return value && typeof value === "object" ? value : {};
+        } catch { return {}; }
+      }
+
+      function saveManualState(value) {
+        try { localStorage.setItem(MANUAL_STORAGE_KEY, JSON.stringify(value)); }
+        catch { /* 保存不可環境では画面内だけ利用 */ }
+      }
+
+      function renderManualChecks() {
+        const manual = getManualState();
+        elements.manualGrid.innerHTML = manualDefinitions.map((item) => `
+          <label class="manual-item">
+            <input type="checkbox" data-manual-id="${escapeHtml(item.id)}" ${manual[item.id] ? "checked" : ""}>
+            <span><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.note)}</span></span>
+          </label>`).join("");
+        elements.manualGrid.querySelectorAll("input[data-manual-id]").forEach((input) => {
+          input.addEventListener("change", handleManualChange);
+        });
+        updateManualProgress();
+      }
+
+      function handleManualChange(event) {
+        const manual = getManualState();
+        manual[event.target.dataset.manualId] = event.target.checked;
+        saveManualState(manual);
+        updateManualProgress();
+        updateOverall();
+      }
+
+      function updateManualProgress() {
+        const manual = getManualState();
+        const completed = manualDefinitions.filter((item) => manual[item.id]).length;
+        const total = manualDefinitions.length;
+        const percentage = total ? Math.round((completed / total) * 100) : 0;
+        elements.manualProgressBar.style.width = `${percentage}%`;
+        elements.manualProgressLabel.textContent = `${completed}/${total}`;
+      }
+
+      function resetManualChecks() {
+        try { localStorage.removeItem(MANUAL_STORAGE_KEY); } catch { /* noop */ }
+        renderManualChecks();
+        updateOverall();
+        showToast("手動チェックを解除しました。", "ok");
+      }
+
+      function renderLinks() {
+        const config = getConfig();
+        const siteBase = config?.SITE_BASE_URL || "https://dpromstk2000-lab.github.io/dpro-photo-studio-line";
+        const workerBase = config?.API_BASE_URL || "https://dpro-photo-studio-line-api.dpromstk2000.workers.dev";
+        const links = [
+          { label: "営業前システムチェック", url: `${siteBase}/system-check.html?demo=1`, future: false },
+          { label: "共通設定 config.js", url: `${siteBase}/config.js?v=STUDIO-4-CONFIG-20260714`, future: false },
+          { label: "Worker Health", url: `${workerBase}/api/health`, future: false },
+          { label: "Worker API一覧", url: `${workerBase}/api/routes`, future: false },
+          { label: "公開店舗設定", url: `${workerBase}/api/public/config`, future: false },
+          { label: "お客様向け撮影予約", url: `${siteBase}/index.html?demo=1`, future: true },
+          { label: "お客様マイページ", url: `${siteBase}/member.html?demo=1`, future: true },
+          { label: "写真館PC管理", url: `${siteBase}/owner.html?demo=1`, future: true },
+          { label: "カメラマン・スタッフ", url: `${siteBase}/staff.html?demo=1`, future: true },
+          { label: "受付iPad", url: `${siteBase}/owner-ipad.html?demo=1`, future: true },
+        ];
+        elements.linkGrid.innerHTML = links.map((item, index) => `
+          <article class="link-card">
+            <div>
+              <strong>${escapeHtml(item.label)}${item.future ? '<span class="future-tag">後続STEP</span>' : ""}</strong>
+              <span class="url-text">${escapeHtml(item.url)}</span>
+            </div>
+            <div class="link-actions">
+              <a class="mini-btn" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(item.label)}を開く">開く</a>
+              <button class="mini-btn" type="button" data-copy-index="${index}" aria-label="${escapeHtml(item.label)}のURLをコピー">コピー</button>
+            </div>
+          </article>`).join("");
+        elements.linkGrid.querySelectorAll("button[data-copy-index]").forEach((button) => {
+          button.addEventListener("click", async () => {
+            const item = links[Number(button.dataset.copyIndex)];
+            try {
+              if (config?.copyText) await config.copyText(item.url);
+              else await navigator.clipboard.writeText(item.url);
+              showToast(`${item.label}のURLをコピーしました。`, "ok");
+            } catch (error) {
+              showToast(error?.message || "URLをコピーできませんでした。", "error");
+            }
+          });
+        });
+      }
+
+      function bindEvents() {
+        elements.showCode.addEventListener("change", () => {
+          elements.adminCode.type = elements.showCode.checked ? "text" : "password";
+        });
+        elements.adminCode.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") verifyAdmin();
+        });
+        elements.verifyButton.addEventListener("click", verifyAdmin);
+        elements.clearCodeButton.addEventListener("click", clearAdminCode);
+        elements.runAllButton.addEventListener("click", () => runAllChecks());
+        elements.demoPrepareButton.addEventListener("click", prepareDemo);
+        elements.resetManualButton.addEventListener("click", resetManualChecks);
+        elements.openHealthButton.addEventListener("click", () => {
+          const config = getConfig();
+          const url = config?.URLS?.workerHealth || "https://dpro-photo-studio-line-api.dpromstk2000.workers.dev/api/health";
+          window.open(url, "_blank", "noopener,noreferrer");
+        });
+      }
+
+      function initialize() {
+        cacheElements();
+        renderChecks();
+        renderManualChecks();
+        renderLinks();
+        bindEvents();
+        syncAdminCode();
+
+        if (!getConfig()) {
+          setCheck("config", "error", "config.jsを読み込めません。GitHubへの配置を確認してください。", { config_loaded: false });
+          showToast("config.jsを読み込めません。", "error");
+          return;
+        }
+
+        setCheck("config", "ok", `${getConfig().VERSION}を読み込みました。`, { config_loaded: true, version: getConfig().VERSION, page_version: PAGE_VERSION });
+        window.setTimeout(() => runAllChecks({ silent: true }), 350);
+      }
+
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
+      else initialize();
+    })();
+  </script>
+</body>
+</html>
