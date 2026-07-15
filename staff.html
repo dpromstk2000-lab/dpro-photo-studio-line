@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#075c52" />
+  <meta name="description" content="DPROフォトスタジオ カメラマン・スタッフ用当日進行画面" />
+  <title>DPROフォトスタジオ｜撮影スタッフ画面</title>
+  <!-- Version: STUDIO-9-STAFF-20260715 -->
+  <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
+  <style>
+    :root {
+      --ink: #102d2a;
+      --muted: #657c79;
+      --line: #d7e4e1;
+      --line-strong: #b9d4ce;
+      --bg: #f1f7f5;
+      --panel: #ffffff;
+      --soft: #eef7f4;
+      --soft-blue: #edf6fb;
+      --soft-amber: #fff5df;
+      --soft-red: #fff0ee;
+      --green: #087467;
+      --green-dark: #05584f;
+      --green-deep: #064a43;
+      --blue: #327b9a;
+      --amber: #b97812;
+      --red: #b34b43;
+      --shadow: 0 14px 34px rgba(22, 72, 65, .09);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --header-h: 94px;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 98% 0%, rgba(19, 132, 118, .10), transparent 25rem),
+        linear-gradient(180deg, #edf6f3 0, var(--bg) 24rem);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP",
+        "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      font-size: 16px;
+      line-height: 1.55;
+      min-height: 100vh;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      min-height: var(--header-h);
+      color: #fff;
+      background:
+        radial-gradient(circle at 96% 16%, rgba(255,255,255,.10) 0 4.6rem, transparent 4.7rem),
+        linear-gradient(110deg, #064e47, #087669);
+      box-shadow: 0 5px 18px rgba(5, 63, 56, .20);
+    }
+
+    .topbar-inner {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 15px 24px;
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-eyebrow {
+      margin: 0 0 2px;
+      font-weight: 900;
+      letter-spacing: .12em;
+      font-size: .76rem;
+      opacity: .92;
+    }
+
+    .brand-title {
+      margin: 0;
+      font-size: clamp(1.35rem, 2.4vw, 2rem);
+      line-height: 1.25;
+      letter-spacing: .02em;
+    }
+
+    .brand-meta {
+      margin: 4px 0 0;
+      font-size: .84rem;
+      opacity: .9;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 9px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      min-height: 42px;
+      border-radius: 11px;
+      border: 1px solid transparent;
+      padding: 9px 15px;
+      font-weight: 850;
+      color: var(--ink);
+      background: #fff;
+      transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+    }
+
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn-primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--green-dark), var(--green));
+      box-shadow: 0 7px 16px rgba(5, 93, 81, .17);
+    }
+    .btn-secondary {
+      color: var(--green-deep);
+      border-color: #a9d3cb;
+      background: #edf9f6;
+    }
+    .btn-neutral {
+      color: var(--ink);
+      border-color: var(--line);
+      background: #fff;
+    }
+    .btn-danger {
+      color: #9d3d36;
+      border-color: #efbeb8;
+      background: #fff4f2;
+    }
+    .btn-small {
+      min-height: 35px;
+      padding: 6px 11px;
+      font-size: .84rem;
+      border-radius: 9px;
+    }
+    .btn-wide { width: 100%; }
+
+    .auth-wrap {
+      width: min(560px, calc(100% - 32px));
+      margin: 60px auto;
+    }
+
+    .auth-card, .panel, .reservation-card, .modal {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.96);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+    }
+
+    .auth-card { padding: 26px; }
+    .auth-card h2 { margin: 0 0 6px; font-size: 1.5rem; }
+    .auth-card p { margin: 0 0 18px; color: var(--muted); }
+    .auth-row { display: grid; grid-template-columns: 1fr auto auto; gap: 9px; }
+
+    .input, select, textarea {
+      width: 100%;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid #c5d9d5;
+      border-radius: 10px;
+      padding: 10px 12px;
+      outline: none;
+    }
+    .input:focus, select:focus, textarea:focus {
+      border-color: #50a69a;
+      box-shadow: 0 0 0 3px rgba(20, 132, 118, .12);
+    }
+    textarea { min-height: 104px; resize: vertical; }
+
+    .app-shell {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 22px 24px 48px;
+    }
+
+    .control-panel {
+      padding: 16px;
+      margin-bottom: 16px;
+      display: grid;
+      grid-template-columns: minmax(210px, 1.15fr) minmax(170px, .8fr) auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .field label {
+      display: block;
+      margin: 0 0 5px;
+      font-weight: 850;
+      font-size: .86rem;
+    }
+    .field-note { color: var(--muted); font-size: .78rem; margin-top: 4px; }
+
+    .control-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .page-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 8px 0 14px;
+    }
+
+    .page-head h2 { margin: 0; font-size: clamp(1.55rem, 2.7vw, 2.25rem); }
+    .page-head p { margin: 2px 0 0; color: var(--muted); }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .summary-card {
+      min-height: 104px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.92);
+    }
+    .summary-card span { color: var(--muted); font-weight: 780; font-size: .84rem; }
+    .summary-card strong { display: block; margin-top: 5px; font-size: 1.75rem; line-height: 1.1; }
+    .summary-card small { color: var(--muted); }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.7fr) minmax(330px, .72fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel { padding: 18px; }
+    .panel + .panel { margin-top: 16px; }
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 13px;
+    }
+    .panel-head h3 { margin: 0; font-size: 1.22rem; }
+    .panel-head p { margin: 3px 0 0; color: var(--muted); font-size: .87rem; }
+
+    .schedule {
+      display: grid;
+      gap: 12px;
+    }
+
+    .reservation-card {
+      overflow: hidden;
+      box-shadow: none;
+      border-radius: 15px;
+    }
+
+    .reservation-main {
+      display: grid;
+      grid-template-columns: 98px minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 15px;
+    }
+
+    .time-block {
+      border-radius: 12px;
+      text-align: center;
+      padding: 11px 6px;
+      background: var(--soft);
+      color: var(--green-deep);
+      border: 1px solid #d4e8e3;
+    }
+    .time-block strong { display: block; font-size: 1.45rem; line-height: 1.05; }
+    .time-block small { display: block; margin-top: 4px; font-weight: 800; }
+
+    .reservation-info h4 {
+      margin: 0 0 3px;
+      font-size: 1.08rem;
+    }
+    .reservation-meta { color: var(--muted); font-size: .84rem; }
+    .reservation-note {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 9px;
+      background: #f5f9f8;
+      color: #405f5b;
+      font-size: .84rem;
+      white-space: pre-wrap;
+    }
+
+    .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 25px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 850;
+      color: #38514e;
+      background: #edf3f2;
+    }
+    .badge.green { color: #086456; background: #ddf2eb; }
+    .badge.blue { color: #246780; background: #e3f2f8; }
+    .badge.amber { color: #96610a; background: #fff0c8; }
+    .badge.red { color: #a4413a; background: #ffe1dd; }
+
+    .reservation-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      min-width: 135px;
+    }
+
+    .progress-strip {
+      border-top: 1px solid var(--line);
+      background: #fbfdfd;
+      padding: 12px 15px 14px;
+    }
+
+    .progress-steps {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+
+    .progress-step {
+      position: relative;
+      text-align: center;
+      color: #91a39f;
+      font-weight: 800;
+      font-size: .68rem;
+      padding-top: 18px;
+    }
+    .progress-step::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 3px;
+      transform: translateX(-50%);
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #d6e2df;
+      border: 3px solid #f8fbfa;
+      box-shadow: 0 0 0 1px #cddbd8;
+      z-index: 2;
+    }
+    .progress-step::after {
+      content: "";
+      position: absolute;
+      left: -50%;
+      top: 8px;
+      width: 100%;
+      height: 2px;
+      background: #d8e5e2;
+      z-index: 1;
+    }
+    .progress-step:first-child::after { display: none; }
+    .progress-step.done, .progress-step.current { color: var(--green-deep); }
+    .progress-step.done::before, .progress-step.current::before {
+      background: var(--green);
+      box-shadow: 0 0 0 1px var(--green);
+    }
+    .progress-step.done::after, .progress-step.current::after { background: #79bcb2; }
+
+    .empty {
+      padding: 32px 18px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed #bfcfcb;
+      border-radius: 13px;
+      background: #fafdfc;
+    }
+
+    .task-list, .note-list { display: grid; gap: 9px; }
+    .task-item {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+    .task-item h4 { margin: 4px 0 3px; font-size: .95rem; }
+    .task-item p { margin: 0; color: var(--muted); font-size: .82rem; }
+    .task-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+
+    .guide-note {
+      padding: 12px;
+      border: 1px solid #c5ddd8;
+      border-radius: 12px;
+      background: #f3faf8;
+      font-size: .86rem;
+      color: #41625d;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      z-index: 80;
+      inset: 0;
+      padding: 18px;
+      display: grid;
+      place-items: center;
+      background: rgba(4, 37, 33, .54);
+      backdrop-filter: blur(4px);
+    }
+
+    .modal {
+      width: min(1120px, 100%);
+      max-height: calc(100vh - 36px);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+    }
+
+    .modal-head {
+      padding: 17px 19px;
+      color: #fff;
+      background: linear-gradient(110deg, #07594f, #0b796c);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+    .modal-head h3 { margin: 0; font-size: 1.34rem; }
+    .modal-head p { margin: 3px 0 0; opacity: .88; font-size: .84rem; }
+
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      border: 1px solid rgba(255,255,255,.4);
+      border-radius: 10px;
+      color: #fff;
+      background: rgba(255,255,255,.12);
+      font-size: 1.4rem;
+      line-height: 1;
+    }
+
+    .modal-tabs {
+      display: flex;
+      gap: 5px;
+      padding: 10px 13px;
+      overflow-x: auto;
+      background: #f4f9f7;
+      border-bottom: 1px solid var(--line);
+    }
+    .modal-tab {
+      min-width: 128px;
+      border: 0;
+      border-radius: 9px;
+      padding: 9px 12px;
+      color: #56716d;
+      font-weight: 850;
+      background: transparent;
+    }
+    .modal-tab.active { color: #fff; background: var(--green); }
+
+    .modal-body { overflow: auto; padding: 18px; background: #fff; }
+    .modal-panel { display: none; }
+    .modal-panel.active { display: block; }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 9px;
+    }
+    .detail-box {
+      min-height: 72px;
+      padding: 10px;
+      border-radius: 11px;
+      background: #f3f8f7;
+    }
+    .detail-box span { display: block; color: var(--muted); font-size: .76rem; font-weight: 750; }
+    .detail-box strong { display: block; margin-top: 4px; font-size: .91rem; white-space: pre-wrap; }
+
+    .detail-section {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+    }
+    .detail-section h4 { margin: 0 0 9px; font-size: 1rem; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 11px;
+    }
+    .span-2 { grid-column: span 2; }
+
+    .quick-status {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .status-btn {
+      min-height: 52px;
+      border: 1px solid #bcd6d1;
+      border-radius: 11px;
+      color: var(--green-deep);
+      background: #f2faf8;
+      font-weight: 880;
+    }
+    .status-btn.active {
+      color: #fff;
+      border-color: var(--green);
+      background: var(--green);
+    }
+
+    .check-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fafdfc;
+    }
+    .check-item input { width: 19px; height: 19px; }
+
+    .modal-foot {
+      padding: 12px 18px;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      border-top: 1px solid var(--line);
+      background: #f7faf9;
+    }
+
+    .loading-cover {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      display: grid;
+      place-items: center;
+      background: rgba(245, 251, 249, .78);
+      backdrop-filter: blur(3px);
+    }
+    .loading-box {
+      min-width: 220px;
+      padding: 18px 22px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      text-align: center;
+      font-weight: 850;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .toast-region {
+      position: fixed;
+      z-index: 140;
+      right: 18px;
+      bottom: 18px;
+      display: grid;
+      gap: 8px;
+      width: min(390px, calc(100% - 36px));
+    }
+    .toast {
+      padding: 12px 14px;
+      color: #fff;
+      border-radius: 11px;
+      font-weight: 780;
+      background: #155f55;
+      box-shadow: 0 12px 25px rgba(0,0,0,.18);
+    }
+    .toast.error { background: #a3413b; }
+    .toast.info { background: #376f86; }
+
+    .footer {
+      padding: 24px 10px 6px;
+      text-align: center;
+      color: #748a86;
+      font-size: .78rem;
+    }
+
+    @media (max-width: 1050px) {
+      .summary-grid { grid-template-columns: repeat(3, 1fr); }
+      .main-grid { grid-template-columns: 1fr; }
+      .side-column { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+      .side-column .panel + .panel { margin-top: 0; }
+      .detail-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+
+    @media (max-width: 760px) {
+      :root { --header-h: auto; }
+      body { font-size: 15px; }
+      .topbar { position: static; }
+      .topbar-inner { padding: 13px 15px; align-items: flex-start; }
+      .top-actions { width: 100%; justify-content: flex-start; }
+      .topbar-inner { flex-direction: column; gap: 10px; }
+      .app-shell { padding: 14px 12px 38px; }
+      .control-panel { grid-template-columns: 1fr; }
+      .control-actions { justify-content: stretch; }
+      .control-actions .btn { flex: 1; }
+      .page-head { align-items: flex-start; flex-direction: column; }
+      .summary-grid { grid-template-columns: repeat(2, 1fr); }
+      .summary-card { min-height: 92px; }
+      .reservation-main { grid-template-columns: 78px minmax(0,1fr); }
+      .reservation-actions {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .progress-step { font-size: .6rem; }
+      .side-column { grid-template-columns: 1fr; }
+      .modal-backdrop { padding: 0; align-items: end; }
+      .modal {
+        width: 100%;
+        max-height: 96vh;
+        border-radius: 20px 20px 0 0;
+      }
+      .detail-grid, .form-grid, .quick-status, .check-grid { grid-template-columns: 1fr; }
+      .span-2 { grid-column: auto; }
+      .modal-foot { flex-wrap: wrap; }
+      .modal-foot .btn { flex: 1; }
+      .auth-row { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 430px) {
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .reservation-main { gap: 9px; padding: 12px; }
+      .time-block strong { font-size: 1.2rem; }
+      .progress-strip { overflow-x: auto; }
+      .progress-steps { min-width: 520px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <p class="brand-eyebrow">DPRO PHOTO STUDIO LINE</p>
+        <h1 id="topTitle" class="brand-title">DPROフォトスタジオ｜撮影スタッフ</h1>
+        <p id="topMeta" class="brand-meta">本日の撮影進行・撮影カルテ・お客様対応</p>
+      </div>
+      <div class="top-actions">
+        <button id="refreshTopBtn" class="btn btn-neutral" type="button">最新情報へ更新</button>
+        <button id="ownerOpenBtn" class="btn btn-neutral" type="button">PC管理を開く</button>
+        <button id="clearCodeBtn" class="btn btn-danger" type="button">管理コード削除</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="authGate" class="auth-wrap">
+      <div class="auth-card">
+        <h2>スタッフ画面を開く</h2>
+        <p>写真館から案内された管理コードを入力してください。</p>
+        <div class="auth-row">
+          <input id="adminCodeInput" class="input" type="password" inputmode="numeric"
+            autocomplete="current-password" placeholder="管理コード" />
+          <button id="toggleCodeBtn" class="btn btn-neutral" type="button">表示</button>
+          <button id="verifyBtn" class="btn btn-primary" type="button">認証する</button>
+        </div>
+        <p id="authMessage" class="field-note" style="margin-top:10px;"></p>
+      </div>
+    </section>
+
+    <section id="staffApp" class="app-shell" hidden>
+      <section class="panel control-panel">
+        <div class="field">
+          <label for="staffSelect">担当スタッフ</label>
+          <select id="staffSelect">
+            <option value="">全スタッフの予定</option>
+          </select>
+          <div class="field-note">自分の名前を選ぶと、担当撮影だけに絞れます。</div>
+        </div>
+        <div class="field">
+          <label for="workDate">表示日</label>
+          <input id="workDate" class="input" type="date" />
+        </div>
+        <div class="control-actions">
+          <button id="todayBtn" class="btn btn-secondary" type="button">今日へ戻る</button>
+          <button id="loadBtn" class="btn btn-primary" type="button">予定を表示</button>
+        </div>
+      </section>
+
+      <div class="page-head">
+        <div>
+          <h2 id="pageDateTitle">本日の撮影</h2>
+          <p id="pageStaffMeta">全スタッフの撮影予定を表示しています。</p>
+        </div>
+        <button id="compactRefreshBtn" class="btn btn-neutral" type="button">再読み込み</button>
+      </div>
+
+      <section class="summary-grid" aria-label="本日の件数">
+        <div class="summary-card"><span>撮影予定</span><strong id="countAll">0</strong><small>予約件数</small></div>
+        <div class="summary-card"><span>来店・準備</span><strong id="countArrived">0</strong><small>受付〜準備中</small></div>
+        <div class="summary-card"><span>撮影中</span><strong id="countShooting">0</strong><small>現在撮影中</small></div>
+        <div class="summary-card"><span>当日対応完了</span><strong id="countCompleted">0</strong><small>会計・案内完了</small></div>
+        <div class="summary-card"><span>要確認</span><strong id="countAttention">0</strong><small>変更・キャンセル等</small></div>
+      </section>
+
+      <div class="main-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h3>撮影スケジュール</h3>
+              <p>カードから進行更新・詳細確認・撮影カルテ入力ができます。</p>
+            </div>
+          </div>
+          <div id="scheduleList" class="schedule"></div>
+        </section>
+
+        <aside class="side-column">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>今日の注意事項</h3>
+                <p>撮影前に確認する内容です。</p>
+              </div>
+            </div>
+            <div id="attentionList" class="note-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>スタッフ画面の使い方</h3>
+                <p>当日の基本操作</p>
+              </div>
+            </div>
+            <div class="guide-note">
+              ① 来店したら「受付済み」<br />
+              ② 準備開始・撮影開始を更新<br />
+              ③ 撮影後にカルテを保存<br />
+              ④ 会計・納品案内後に「当日完了」<br /><br />
+              写真データそのものは、この画面には保存しません。
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <footer class="footer">DPROフォトスタジオ｜撮影スタッフ業務画面</footer>
+    </section>
+  </main>
+
+  <div id="detailModal" class="modal-backdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header class="modal-head">
+        <div>
+          <h3 id="modalTitle">撮影詳細</h3>
+          <p id="modalMeta"></p>
+        </div>
+        <button id="modalCloseX" class="icon-btn" type="button" aria-label="閉じる">×</button>
+      </header>
+
+      <nav class="modal-tabs" aria-label="詳細メニュー">
+        <button class="modal-tab active" type="button" data-tab="overview">予約・事前確認</button>
+        <button class="modal-tab" type="button" data-tab="progress">当日進行</button>
+        <button class="modal-tab" type="button" data-tab="shooting">撮影カルテ</button>
+        <button class="modal-tab" type="button" data-tab="tasks">タスク・文面</button>
+      </nav>
+
+      <div class="modal-body">
+        <section id="tab-overview" class="modal-panel active">
+          <div id="detailSummary" class="detail-grid"></div>
+          <div class="detail-section">
+            <h4>撮影対象・事前ヒアリング</h4>
+            <div id="overviewRows" class="detail-grid"></div>
+          </div>
+        </section>
+
+        <section id="tab-progress" class="modal-panel">
+          <div class="detail-section" style="margin-top:0;">
+            <h4>来店・撮影進行</h4>
+            <div id="quickStatusButtons" class="quick-status"></div>
+            <div class="field" style="margin-top:12px;">
+              <label for="internalNote">スタッフ間の内部メモ</label>
+              <textarea id="internalNote" placeholder="当日の引き継ぎ、注意事項など"></textarea>
+            </div>
+            <div style="margin-top:10px;">
+              <button id="saveProgressBtn" class="btn btn-primary" type="button">進行状態とメモを保存</button>
+            </div>
+          </div>
+          <div class="detail-section">
+            <h4>お客様への声かけ例</h4>
+            <div id="progressMessageExamples" class="task-list"></div>
+          </div>
+        </section>
+
+        <section id="tab-shooting" class="modal-panel">
+          <div class="detail-section" style="margin-top:0;">
+            <h4>撮影準備チェック</h4>
+            <div class="check-grid">
+              <label class="check-item"><input id="checkConsent" type="checkbox" />撮影内容・希望を確認</label>
+              <label class="check-item"><input id="checkCostume" type="checkbox" />衣装・身だしなみ確認</label>
+              <label class="check-item"><input id="checkEquipment" type="checkbox" />機材・照明・背景確認</label>
+              <label class="check-item"><input id="checkSafety" type="checkbox" />安全・体調・配慮事項確認</label>
+            </div>
+          </div>
+
+          <div class="form-grid" style="margin-top:12px;">
+            <div class="field">
+              <label for="customerCondition">お客様・お子さま・ペットの様子</label>
+              <textarea id="customerCondition" placeholder="緊張、眠気、人見知り、体調など"></textarea>
+            </div>
+            <div class="field">
+              <label for="shootingNote">撮影内容・進行メモ</label>
+              <textarea id="shootingNote" placeholder="撮影した構成、流れ、反応など"></textarea>
+            </div>
+            <div class="field">
+              <label for="costumeNote">衣装・着付けメモ</label>
+              <textarea id="costumeNote"></textarea>
+            </div>
+            <div class="field">
+              <label for="hairNote">ヘアメイクメモ</label>
+              <textarea id="hairNote"></textarea>
+            </div>
+            <div class="field">
+              <label for="favoriteNote">好評だったカット</label>
+              <textarea id="favoriteNote" placeholder="笑顔、家族写真、兄弟写真など"></textarea>
+            </div>
+            <div class="field">
+              <label for="technicalNote">照明・背景・機材メモ</label>
+              <textarea id="technicalNote"></textarea>
+            </div>
+            <div class="field span-2">
+              <label for="nextAction">次に行うこと</label>
+              <textarea id="nextAction" placeholder="セレクト案内、納品準備、追加提案など"></textarea>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <h4>撮影時刻</h4>
+            <div class="control-actions" style="justify-content:flex-start;">
+              <button id="startShootingBtn" class="btn btn-secondary" type="button">撮影開始時刻を記録</button>
+              <button id="completeShootingBtn" class="btn btn-secondary" type="button">撮影完了時刻を記録</button>
+              <button id="clearShootingTimesBtn" class="btn btn-neutral" type="button">時刻を解除</button>
+            </div>
+            <p id="shootingTimeMeta" class="field-note"></p>
+          </div>
+        </section>
+
+        <section id="tab-tasks" class="modal-panel">
+          <div class="form-grid">
+            <div>
+              <div class="panel-head">
+                <div><h3>関連タスク</h3><p>この予約に紐づく対応項目</p></div>
+              </div>
+              <div id="detailTasks" class="task-list"></div>
+            </div>
+            <div>
+              <div class="panel-head">
+                <div><h3>案内文面をコピー</h3><p>LINEへ貼り付けて使用します。</p></div>
+              </div>
+              <div class="field">
+                <label for="messagePreset">文面を選ぶ</label>
+                <select id="messagePreset"></select>
+              </div>
+              <div class="field" style="margin-top:9px;">
+                <label for="messageBody">コピーする文面</label>
+                <textarea id="messageBody" style="min-height:210px;"></textarea>
+              </div>
+              <button id="copyMessageBtn" class="btn btn-primary btn-wide" type="button" style="margin-top:9px;">文面をコピー</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer class="modal-foot">
+        <button id="saveShootingBtn" class="btn btn-primary" type="button">撮影カルテを保存</button>
+        <button id="modalCloseBtn" class="btn btn-neutral" type="button">閉じる</button>
+      </footer>
+    </section>
+  </div>
+
+  <div id="loadingCover" class="loading-cover" hidden>
+    <div id="loadingText" class="loading-box">読み込み中...</div>
+  </div>
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+  <script>
+  (() => {
+    "use strict";
+
+    const C = window.DPRO_STUDIO;
+    if (!C) {
+      document.body.innerHTML =
+        '<div style="padding:32px;font-family:sans-serif"><h1>config.jsを読み込めませんでした。</h1><p>同じ階層にconfig.jsを配置してください。</p></div>';
+      return;
+    }
+
+    const VERSION = "STUDIO-9-STAFF-20260715";
+    const $ = (id) => document.getElementById(id);
+    const esc = (value) => C.escapeHtml(value ?? "");
+    const visitFlow = C.VISIT_STATUS_FLOW;
+    const visitLabels = C.LABELS.visitStatus;
+    const taskLabels = C.LABELS.taskType;
+    const priorityLabels = C.LABELS.priority;
+    const state = {
+      verified: false,
+      settings: null,
+      rows: [],
+      selected: null,
+      selectedVisitStatus: null,
+      shootingStartedAt: null,
+      shootingCompletedAt: null,
+    };
+
+    const messagePresets = {
+      arrival: {
+        label: "来店受付のお礼",
+        type: "arrival",
+        body: "{customer_name}様\n本日はご来店ありがとうございます。\n撮影準備が整い次第、スタッフよりご案内いたします。"
+      },
+      preparation: {
+        label: "撮影準備のご案内",
+        type: "preparation",
+        body: "{customer_name}様\n撮影の準備を進めております。\n衣装やお持ち物で確認したいことがある場合は、スタッフへお知らせください。"
+      },
+      selection: {
+        label: "写真セレクト予定のご案内",
+        type: "selection_guide",
+        body: "{customer_name}様\n本日は撮影ありがとうございました。\nお写真のセレクト準備ができましたら、LINEで改めてご案内いたします。"
+      },
+      finish: {
+        label: "撮影終了のお礼",
+        type: "shooting_complete",
+        body: "{customer_name}様\n本日は撮影にお越しいただき、ありがとうございました。\n仕上がり・セレクト・納品については、準備が整い次第LINEでご案内いたします。"
+      }
+    };
+
+    function toast(message, type = "success", duration = 3400) {
+      const el = document.createElement("div");
+      el.className = `toast ${type}`;
+      el.textContent = message;
+      $("toastRegion").appendChild(el);
+      setTimeout(() => el.remove(), duration);
+    }
+
+    function showLoading(message = "読み込み中...") {
+      $("loadingText").textContent = message;
+      $("loadingCover").hidden = false;
+    }
+    function hideLoading() { $("loadingCover").hidden = true; }
+    function errorMessage(error) { return error?.message || "処理中にエラーが発生しました。"; }
+
+    async function runBusy(message, callback) {
+      showLoading(message);
+      try { return await callback(); }
+      catch (error) {
+        toast(errorMessage(error), "error", 5200);
+        throw error;
+      } finally { hideLoading(); }
+    }
+
+    function badge(text, tone = "") {
+      return `<span class="badge ${tone}">${esc(text)}</span>`;
+    }
+
+    function statusTone(value) {
+      if (["confirmed", "completed", "delivered", "done"].includes(value)) return "green";
+      if (["shooting", "arrived", "preparing", "selecting_on_site"].includes(value)) return "blue";
+      if (["change_requested", "cancel_requested", "selection_pending", "open"].includes(value)) return "amber";
+      if (["cancelled", "no_show"].includes(value)) return "red";
+      return "";
+    }
+
+    function fmtDate(value) {
+      return value ? C.formatDate(value, { weekday: "short" }) : "-";
+    }
+    function fmtTime(value) {
+      return value ? C.formatTime(value) : "-";
+    }
+    function fmtDateTime(value) {
+      return value ? C.formatDateTime(value) : "-";
+    }
+
+    function reservationName(row) {
+      return row?.customer_name_snapshot || row?.customer_name || "お名前未登録";
+    }
+    function planName(row) {
+      return row?.plan_name_snapshot || row?.plan_name || "撮影プラン";
+    }
+    function staffName(row) {
+      return row?.staff_name_snapshot || row?.staff_name || "担当未定";
+    }
+    function resourceName(row) {
+      return row?.resource_name_snapshot || row?.resource_name || "撮影場所未定";
+    }
+
+    function selectedStaff() {
+      const id = $("staffSelect").value;
+      return (state.settings?.staff || []).find((row) => row.id === id) || null;
+    }
+
+    async function verifyAndStart() {
+      const code = $("adminCodeInput").value.trim();
+      if (!code) {
+        $("authMessage").textContent = "管理コードを入力してください。";
+        return;
+      }
+
+      await runBusy("管理コードを確認しています...", async () => {
+        await C.verifyAdminCode(code);
+        C.saveAdminCode(code, { sessionOnly: C.isDemoMode() });
+        state.verified = true;
+        $("authGate").hidden = true;
+        $("staffApp").hidden = false;
+        await loadBaseData();
+      });
+      toast("スタッフ画面を開きました。");
+    }
+
+    async function tryAutoStart() {
+      const code = C.getAdminCode();
+      if (!code) return;
+      $("adminCodeInput").value = code;
+      try {
+        await C.verifyAdminCode(code);
+        state.verified = true;
+        $("authGate").hidden = true;
+        $("staffApp").hidden = false;
+        await loadBaseData();
+      } catch {
+        C.clearAdminCode();
+      }
+    }
+
+    async function loadBaseData() {
+      state.settings = await C.adminGet(C.ENDPOINTS.ADMIN_SETTINGS);
+      renderStudioHeader();
+      renderStaffOptions();
+      renderMessagePresetOptions();
+      $("workDate").value = C.todayYmd();
+      await loadSchedule();
+    }
+
+    function renderStudioHeader() {
+      const studio = state.settings?.studio || {};
+      $("topTitle").textContent = `${studio.studio_name || C.STUDIO_NAME}｜撮影スタッフ`;
+      $("topMeta").textContent = `${studio.phone || "電話未登録"}｜${studio.address || "住所未登録"}｜当日の撮影進行・撮影カルテ`;
+    }
+
+    function renderStaffOptions() {
+      const staffRows = (state.settings?.staff || []).filter((row) => row.is_active !== false);
+      const stored = C.getStoredValue(C.STORAGE_KEYS.STAFF_ID, "");
+      $("staffSelect").innerHTML = '<option value="">全スタッフの予定</option>' +
+        staffRows.map((row) =>
+          `<option value="${esc(row.id)}">${esc(row.staff_name)}（${esc(C.getLabel("staffRole", row.role))}）</option>`
+        ).join("");
+      if (staffRows.some((row) => row.id === stored)) $("staffSelect").value = stored;
+    }
+
+    function renderMessagePresetOptions() {
+      $("messagePreset").innerHTML = Object.entries(messagePresets)
+        .map(([key, item]) => `<option value="${esc(key)}">${esc(item.label)}</option>`)
+        .join("");
+      renderMessageBody();
+    }
+
+    async function loadSchedule() {
+      const date = $("workDate").value || C.todayYmd();
+      const staffId = $("staffSelect").value;
+
+      await runBusy("撮影予定を読み込んでいます...", async () => {
+        const result = await C.adminGet(C.ENDPOINTS.STAFF_TODAY, {
+          date,
+          staff_id: staffId || undefined,
+        });
+        state.rows = result.reservations || [];
+      });
+
+      if (staffId) C.setStoredValue(C.STORAGE_KEYS.STAFF_ID, staffId);
+      else C.removeStoredValue(C.STORAGE_KEYS.STAFF_ID);
+
+      renderPageHeader(date);
+      renderSummary();
+      renderSchedule();
+      renderAttention();
+    }
+
+    function renderPageHeader(date) {
+      $("pageDateTitle").textContent = `${C.formatDate(date, { weekday: "short" })}の撮影`;
+      const staff = selectedStaff();
+      $("pageStaffMeta").textContent = staff
+        ? `${staff.staff_name}さんの担当撮影を表示しています。`
+        : "全スタッフの撮影予定を表示しています。";
+    }
+
+    function renderSummary() {
+      const rows = state.rows;
+      $("countAll").textContent = rows.length;
+      $("countArrived").textContent = rows.filter((r) => ["arrived", "preparing"].includes(r.visit_status)).length;
+      $("countShooting").textContent = rows.filter((r) => r.visit_status === "shooting").length;
+      $("countCompleted").textContent = rows.filter((r) => r.visit_status === "completed").length;
+      $("countAttention").textContent = rows.filter((r) =>
+        ["change_requested", "cancel_requested"].includes(r.reservation_status) ||
+        Boolean(r.accommodation_note) ||
+        Boolean(r.internal_note)
+      ).length;
+    }
+
+    function renderSchedule() {
+      if (!state.rows.length) {
+        $("scheduleList").innerHTML =
+          '<div class="empty"><strong>この日の撮影予定はありません。</strong><br />担当者または日付を変更してご確認ください。</div>';
+        return;
+      }
+
+      $("scheduleList").innerHTML = state.rows.map((row) => {
+        const nextStatus = C.getNextVisitStatus(row.visit_status);
+        const nextLabel = nextStatus ? visitLabels[nextStatus] : "";
+        const subjects = (row.subjects || []).map((s) => s.subject_name_snapshot).filter(Boolean).join("、");
+        const note = row.accommodation_note || row.internal_note || "";
+        return `
+          <article class="reservation-card">
+            <div class="reservation-main">
+              <div class="time-block">
+                <strong>${esc(fmtTime(row.start_at))}</strong>
+                <small>${esc(fmtTime(row.end_at))}まで</small>
+              </div>
+              <div class="reservation-info">
+                <h4>${esc(reservationName(row))} 様｜${esc(planName(row))}</h4>
+                <div class="reservation-meta">
+                  ${esc(staffName(row))}｜${esc(resourceName(row))}｜${esc(row.participant_count || 1)}名
+                </div>
+                <div class="badges">
+                  ${badge(C.getLabel("reservationStatus", row.reservation_status), statusTone(row.reservation_status))}
+                  ${badge(C.getLabel("visitStatus", row.visit_status), statusTone(row.visit_status))}
+                  ${subjects ? badge(`撮影対象：${subjects}`, "green") : ""}
+                </div>
+                ${note ? `<div class="reservation-note">${esc(note)}</div>` : ""}
+              </div>
+              <div class="reservation-actions">
+                <button class="btn btn-primary btn-small" type="button"
+                  data-open-reservation="${esc(row.id)}">詳細・カルテ</button>
+                ${nextStatus ? `<button class="btn btn-secondary btn-small" type="button"
+                  data-next-status="${esc(row.id)}" data-status="${esc(nextStatus)}">次へ：${esc(nextLabel)}</button>` : ""}
+              </div>
+            </div>
+            <div class="progress-strip">
+              ${renderProgress(row.visit_status)}
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderProgress(currentStatus) {
+      const currentIndex = visitFlow.indexOf(currentStatus);
+      return `<div class="progress-steps">${
+        visitFlow.map((status, index) => {
+          const className = index < currentIndex ? "done" : index === currentIndex ? "current" : "";
+          return `<div class="progress-step ${className}">${esc(shortVisitLabel(status))}</div>`;
+        }).join("")
+      }</div>`;
+    }
+
+    function shortVisitLabel(status) {
+      const map = {
+        scheduled: "来店予定",
+        arrived: "受付",
+        preparing: "準備",
+        shooting: "撮影",
+        selecting_on_site: "店頭確認",
+        checkout_guidance: "会計案内",
+        completed: "完了",
+      };
+      return map[status] || visitLabels[status] || status;
+    }
+
+    function renderAttention() {
+      const notes = [];
+      state.rows.forEach((row) => {
+        if (row.reservation_status === "change_requested") {
+          notes.push({ tone: "amber", title: `${reservationName(row)}様｜変更希望`, body: "変更内容をオーナー・受付へ確認してください。" });
+        }
+        if (row.reservation_status === "cancel_requested") {
+          notes.push({ tone: "red", title: `${reservationName(row)}様｜キャンセル希望`, body: "確定前のため、受付担当へ確認してください。" });
+        }
+        if (row.accommodation_note) {
+          notes.push({ tone: "blue", title: `${reservationName(row)}様｜撮影時の配慮`, body: row.accommodation_note });
+        }
+        if (row.internal_note) {
+          notes.push({ tone: "amber", title: `${reservationName(row)}様｜内部メモ`, body: row.internal_note });
+        }
+      });
+
+      $("attentionList").innerHTML = notes.length
+        ? notes.slice(0, 8).map((item) => `
+          <div class="task-item">
+            ${badge(item.tone === "red" ? "重要" : "確認", item.tone)}
+            <h4>${esc(item.title)}</h4>
+            <p>${esc(item.body)}</p>
+          </div>
+        `).join("")
+        : '<div class="empty">現在、特別な注意事項はありません。</div>';
+    }
+
+    async function quickAdvance(reservationId, status) {
+      const row = state.rows.find((item) => item.id === reservationId);
+      if (!row) return;
+      await runBusy(`${visitLabels[status] || status}へ更新しています...`, () =>
+        C.adminPost(C.ENDPOINTS.STAFF_RESERVATION_STATUS, {
+          reservation_id: reservationId,
+          visit_status: status,
+          updated_by: selectedStaff()?.staff_name || "staff_screen",
+        })
+      );
+      toast(`${reservationName(row)}様を「${visitLabels[status]}」へ更新しました。`);
+      await loadSchedule();
+    }
+
+    async function openReservation(reservationId) {
+      await runBusy("予約詳細を読み込んでいます...", async () => {
+        state.selected = await C.adminGet(C.ENDPOINTS.ADMIN_RESERVATION_DETAIL, {
+          reservation_id: reservationId,
+        });
+      });
+      renderDetail();
+      $("detailModal").hidden = false;
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeModal() {
+      $("detailModal").hidden = true;
+      document.body.style.overflow = "";
+    }
+
+    function renderDetail() {
+      const d = state.selected || {};
+      const r = d.reservation || {};
+      const customer = d.customer || {};
+      const subjects = d.subjects || [];
+      const options = d.options || [];
+      const intake = d.intake || {};
+      const record = d.shooting_record || {};
+
+      $("modalTitle").textContent = `${reservationName(r)} 様｜${planName(r)}`;
+      $("modalMeta").textContent = `${r.reservation_no || ""}｜${fmtDateTime(r.start_at)}〜${fmtTime(r.end_at)}｜${staffName(r)}`;
+
+      const summaryRows = [
+        ["お客様", `${customer.customer_name || reservationName(r)} 様`],
+        ["電話番号", C.formatPhone(customer.phone || r.customer_phone_snapshot || "")],
+        ["撮影プラン", planName(r)],
+        ["担当", staffName(r)],
+        ["撮影場所", resourceName(r)],
+        ["参加人数", `${r.participant_count || 1}名`],
+        ["予約状態", C.getLabel("reservationStatus", r.reservation_status)],
+        ["当日進行", C.getLabel("visitStatus", r.visit_status)],
+      ];
+      $("detailSummary").innerHTML = summaryRows.map(detailBox).join("");
+
+      const overview = [
+        ["撮影対象", subjects.length ? subjects.map((s) => `${s.subject_name_snapshot}（${C.getLabel("subjectType", s.subject_type_snapshot)}）`).join("、") : "未登録"],
+        ["撮影目的", r.shooting_purpose || "未入力"],
+        ["希望の雰囲気", r.desired_mood || "未入力"],
+        ["希望カット", r.desired_shots || "未入力"],
+        ["オプション", options.length ? options.map((o) => o.option_name_snapshot).join("、") : "なし"],
+        ["撮影時の配慮", r.accommodation_note || "なし"],
+        ["お客様メモ", r.customer_note || "なし"],
+        ["事前ヒアリング", intake.summary || "未入力"],
+        ["アレルギー・注意事項", customer.allergies_and_care || "なし"],
+        ["内部注意事項", r.internal_note || "なし"],
+      ];
+      $("overviewRows").innerHTML = overview.map(detailBox).join("");
+
+      state.selectedVisitStatus = r.visit_status || "scheduled";
+      renderQuickStatusButtons();
+      $("internalNote").value = r.internal_note || "";
+      renderProgressMessages();
+
+      const checklist = record.preparation_checklist || {};
+      $("checkConsent").checked = checklist.consent === true;
+      $("checkCostume").checked = checklist.costume === true;
+      $("checkEquipment").checked = checklist.equipment === true;
+      $("checkSafety").checked = checklist.safety === true;
+      $("customerCondition").value = record.customer_condition_note || "";
+      $("shootingNote").value = record.shooting_note || "";
+      $("costumeNote").value = record.costume_note || "";
+      $("hairNote").value = record.hair_makeup_note || "";
+      $("favoriteNote").value = record.favorite_shots_note || "";
+      $("technicalNote").value = record.technical_note || "";
+      $("nextAction").value = record.next_action || "";
+      state.shootingStartedAt = record.started_at || null;
+      state.shootingCompletedAt = record.completed_at || null;
+      renderShootingTimeMeta();
+
+      renderTasks(d.tasks || []);
+      renderMessageBody();
+      activateTab("overview");
+    }
+
+    function detailBox([label, value]) {
+      return `<div class="detail-box"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;
+    }
+
+    function renderQuickStatusButtons() {
+      $("quickStatusButtons").innerHTML = visitFlow.map((status) => `
+        <button class="status-btn ${state.selectedVisitStatus === status ? "active" : ""}"
+          type="button" data-choose-status="${esc(status)}">${esc(shortVisitLabel(status))}</button>
+      `).join("");
+    }
+
+    function renderProgressMessages() {
+      const rows = [
+        ["受付時", "本日はご来店ありがとうございます。ご予約内容とお持ち物を確認いたします。"],
+        ["撮影前", "撮影のご希望や、お子さま・ペットのご様子を確認しながら進めます。"],
+        ["撮影後", "本日はありがとうございました。セレクトや納品のご案内はLINEでお知らせします。"],
+      ];
+      $("progressMessageExamples").innerHTML = rows.map(([title, body]) => `
+        <div class="task-item">
+          <h4>${esc(title)}</h4>
+          <p>${esc(body)}</p>
+          <div class="task-actions">
+            <button class="btn btn-neutral btn-small" type="button" data-copy-example="${esc(body)}">コピー</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderTasks(tasks) {
+      $("detailTasks").innerHTML = tasks.length ? tasks.map((task) => `
+        <div class="task-item">
+          <div class="badges">
+            ${badge(priorityLabels[task.priority] || task.priority || "通常", task.priority === "high" || task.priority === "urgent" ? "amber" : "")}
+            ${badge(C.getLabel("taskStatus", task.task_status), statusTone(task.task_status))}
+          </div>
+          <h4>${esc(task.title || taskLabels[task.task_type] || "タスク")}</h4>
+          <p>${esc(task.detail || "")}</p>
+          <p style="margin-top:4px;">期限：${esc(fmtDateTime(task.due_at))}</p>
+          <div class="task-actions">
+            ${task.task_status === "open" ? `<button class="btn btn-secondary btn-small" type="button"
+              data-task-status="${esc(task.id)}" data-status="in_progress">対応開始</button>` : ""}
+            ${task.task_status !== "done" ? `<button class="btn btn-primary btn-small" type="button"
+              data-task-status="${esc(task.id)}" data-status="done">対応済み</button>` : ""}
+          </div>
+        </div>
+      `).join("") : '<div class="empty">関連タスクはありません。</div>';
+    }
+
+    function activateTab(name) {
+      document.querySelectorAll(".modal-tab").forEach((button) => {
+        button.classList.toggle("active", button.dataset.tab === name);
+      });
+      document.querySelectorAll(".modal-panel").forEach((panel) => {
+        panel.classList.toggle("active", panel.id === `tab-${name}`);
+      });
+      $("saveShootingBtn").hidden = name !== "shooting";
+    }
+
+    async function saveProgress() {
+      const r = state.selected?.reservation;
+      if (!r) return;
+      await runBusy("進行状態を保存しています...", () =>
+        C.adminPost(C.ENDPOINTS.STAFF_RESERVATION_STATUS, {
+          reservation_id: r.id,
+          visit_status: state.selectedVisitStatus,
+          internal_note: $("internalNote").value,
+          updated_by: selectedStaff()?.staff_name || "staff_screen",
+        })
+      );
+      toast("進行状態と内部メモを保存しました。");
+      await reloadSelected();
+      await loadSchedule();
+    }
+
+    function nowIso() { return new Date().toISOString(); }
+
+    function renderShootingTimeMeta() {
+      $("shootingTimeMeta").textContent =
+        `撮影開始：${state.shootingStartedAt ? fmtDateTime(state.shootingStartedAt) : "未記録"} ／ ` +
+        `撮影完了：${state.shootingCompletedAt ? fmtDateTime(state.shootingCompletedAt) : "未記録"}`;
+    }
+
+    async function saveShooting() {
+      const r = state.selected?.reservation;
+      if (!r) return;
+      const staff = selectedStaff();
+      await runBusy("撮影カルテを保存しています...", () =>
+        C.adminPost(C.ENDPOINTS.STAFF_SHOOTING_RECORD_SAVE, {
+          reservation_id: r.id,
+          primary_staff_id: staff?.id || r.assigned_staff_id || null,
+          preparation_checklist: {
+            consent: $("checkConsent").checked,
+            costume: $("checkCostume").checked,
+            equipment: $("checkEquipment").checked,
+            safety: $("checkSafety").checked,
+          },
+          customer_condition_note: $("customerCondition").value,
+          shooting_note: $("shootingNote").value,
+          costume_note: $("costumeNote").value,
+          hair_makeup_note: $("hairNote").value,
+          favorite_shots_note: $("favoriteNote").value,
+          technical_note: $("technicalNote").value,
+          next_action: $("nextAction").value,
+          started_at: state.shootingStartedAt,
+          completed_at: state.shootingCompletedAt,
+          updated_by: staff?.staff_name || "staff_screen",
+        })
+      );
+      toast("撮影カルテを保存しました。");
+      await reloadSelected();
+    }
+
+    async function updateTask(taskId, status) {
+      await runBusy("タスク状態を更新しています...", () =>
+        C.adminPost(C.ENDPOINTS.STAFF_TASK_STATUS, {
+          task_id: taskId,
+          task_status: status,
+          updated_by: selectedStaff()?.staff_name || "staff_screen",
+        })
+      );
+      toast(`タスクを「${C.getLabel("taskStatus", status)}」へ更新しました。`);
+      await reloadSelected();
+    }
+
+    function renderMessageBody() {
+      const preset = messagePresets[$("messagePreset").value] || Object.values(messagePresets)[0];
+      const r = state.selected?.reservation || {};
+      const values = {
+        customer_name: reservationName(r),
+        plan_name: planName(r),
+        reservation_date: r.start_at ? fmtDate(r.start_at) : "",
+        reservation_time: r.start_at ? fmtTime(r.start_at) : "",
+        staff_name: staffName(r),
+      };
+      let body = preset?.body || "";
+      Object.entries(values).forEach(([key, value]) => {
+        body = body.replaceAll(`{${key}}`, value);
+      });
+      $("messageBody").value = body;
+    }
+
+    async function copyMessage() {
+      const r = state.selected?.reservation;
+      if (!r) return;
+      const preset = messagePresets[$("messagePreset").value] || Object.values(messagePresets)[0];
+      const body = $("messageBody").value.trim();
+      if (!body) {
+        toast("コピーする文面がありません。", "error");
+        return;
+      }
+      await C.copyText(body);
+      try {
+        await C.adminPost(C.ENDPOINTS.STAFF_MESSAGE_LOG_COPY, {
+          reservation_id: r.id,
+          customer_id: state.selected?.customer?.id || r.customer_id || null,
+          message_type: preset?.type || "general",
+          channel: "copy",
+          recipient: reservationName(r),
+          body_snapshot: body,
+          action_type: "copied",
+          acted_by: selectedStaff()?.staff_name || "staff_screen",
+          metadata: { screen: "staff.html", version: VERSION },
+        });
+      } catch (error) {
+        console.warn("文面コピー履歴の記録に失敗しました。", error);
+      }
+      toast("文面をコピーしました。");
+    }
+
+    async function reloadSelected() {
+      const id = state.selected?.reservation?.id;
+      if (!id) return;
+      state.selected = await C.adminGet(C.ENDPOINTS.ADMIN_RESERVATION_DETAIL, {
+        reservation_id: id,
+      });
+      renderDetail();
+    }
+
+    function clearAdminCode() {
+      C.clearAdminCode();
+      state.verified = false;
+      $("staffApp").hidden = true;
+      $("authGate").hidden = false;
+      $("adminCodeInput").value = "";
+      $("authMessage").textContent = "管理コードを削除しました。";
+      toast("管理コードを削除しました。", "info");
+    }
+
+    function openOwner() {
+      window.open(C.buildPageUrl(C.PAGES.OWNER, C.isDemoMode() ? { demo: 1, v: "STUDIO-9" } : {}), "_blank", "noopener");
+    }
+
+    function bindEvents() {
+      $("verifyBtn").addEventListener("click", verifyAndStart);
+      $("adminCodeInput").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") verifyAndStart();
+      });
+      $("toggleCodeBtn").addEventListener("click", () => {
+        const input = $("adminCodeInput");
+        input.type = input.type === "password" ? "text" : "password";
+        $("toggleCodeBtn").textContent = input.type === "password" ? "表示" : "非表示";
+      });
+      $("clearCodeBtn").addEventListener("click", clearAdminCode);
+      $("refreshTopBtn").addEventListener("click", loadSchedule);
+      $("compactRefreshBtn").addEventListener("click", loadSchedule);
+      $("loadBtn").addEventListener("click", loadSchedule);
+      $("todayBtn").addEventListener("click", () => {
+        $("workDate").value = C.todayYmd();
+        loadSchedule();
+      });
+      $("ownerOpenBtn").addEventListener("click", openOwner);
+      $("staffSelect").addEventListener("change", loadSchedule);
+      $("workDate").addEventListener("change", loadSchedule);
+
+      $("scheduleList").addEventListener("click", (event) => {
+        const openButton = event.target.closest("[data-open-reservation]");
+        if (openButton) openReservation(openButton.dataset.openReservation);
+        const nextButton = event.target.closest("[data-next-status]");
+        if (nextButton) quickAdvance(nextButton.dataset.nextStatus, nextButton.dataset.status);
+      });
+
+      document.querySelectorAll(".modal-tab").forEach((button) => {
+        button.addEventListener("click", () => activateTab(button.dataset.tab));
+      });
+      $("modalCloseX").addEventListener("click", closeModal);
+      $("modalCloseBtn").addEventListener("click", closeModal);
+      $("detailModal").addEventListener("click", (event) => {
+        if (event.target === $("detailModal")) closeModal();
+      });
+
+      $("quickStatusButtons").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-choose-status]");
+        if (!button) return;
+        state.selectedVisitStatus = button.dataset.chooseStatus;
+        renderQuickStatusButtons();
+      });
+      $("saveProgressBtn").addEventListener("click", saveProgress);
+      $("saveShootingBtn").addEventListener("click", saveShooting);
+
+      $("startShootingBtn").addEventListener("click", () => {
+        state.shootingStartedAt = nowIso();
+        state.selectedVisitStatus = "shooting";
+        renderShootingTimeMeta();
+        renderQuickStatusButtons();
+        toast("撮影開始時刻を記録しました。保存すると確定します。", "info");
+      });
+      $("completeShootingBtn").addEventListener("click", () => {
+        state.shootingCompletedAt = nowIso();
+        renderShootingTimeMeta();
+        toast("撮影完了時刻を記録しました。保存すると確定します。", "info");
+      });
+      $("clearShootingTimesBtn").addEventListener("click", () => {
+        state.shootingStartedAt = null;
+        state.shootingCompletedAt = null;
+        renderShootingTimeMeta();
+      });
+
+      $("detailTasks").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-task-status]");
+        if (button) updateTask(button.dataset.taskStatus, button.dataset.status);
+      });
+
+      $("progressMessageExamples").addEventListener("click", async (event) => {
+        const button = event.target.closest("[data-copy-example]");
+        if (!button) return;
+        await C.copyText(button.dataset.copyExample);
+        toast("声かけ文面をコピーしました。");
+      });
+
+      $("messagePreset").addEventListener("change", renderMessageBody);
+      $("copyMessageBtn").addEventListener("click", copyMessage);
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !$("detailModal").hidden) closeModal();
+      });
+    }
+
+    bindEvents();
+    $("adminCodeInput").value = C.getAdminCode();
+    tryAutoStart();
+  })();
+  </script>
+</body>
+</html>
