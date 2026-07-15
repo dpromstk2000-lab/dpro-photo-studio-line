@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#075f55" />
   <meta name="description" content="DPROフォトスタジオ 受付iPad画面" />
   <title>DPROフォトスタジオ｜受付iPad</title>
-  <!-- Version: STUDIO-10-R6-OWNER-IPAD-20260715 -->
+  <!-- Version: STUDIO-10-R7-OWNER-IPAD-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -1136,7 +1136,7 @@
       return;
     }
 
-    const VERSION = "STUDIO-10-R6-OWNER-IPAD-20260715";
+    const VERSION = "STUDIO-10-R7-OWNER-IPAD-20260715";
     const $ = (id) => document.getElementById(id);
     const esc = (value) => C.escapeHtml(value ?? "");
 
@@ -1681,18 +1681,42 @@
       const reservations = detail.reservations || [];
       const latestReservation = reservations[0] || {};
       const record = detail.latest_shooting_record || {};
-      const latestChart = record.shooting_note || record.customer_condition_note || record.favorite_shots_note || "カルテ未登録";
+      const latestChart =
+        record.shooting_note ||
+        record.customer_condition_note ||
+        record.favorite_shots_note ||
+        "カルテ未登録";
+
+      const plan = selectedManualPlan();
+      const rule = inferredPlanSubjectRule(plan);
+      const allSubjects = (detail.subjects || []).filter(
+        (subject) => subject.is_active !== false
+      );
+      const visibleSubjects = rule
+        ? allSubjects.filter((subject) => rule.allowed.includes(subject.subject_type))
+        : allSubjects;
+
       const rows = [
         ["顧客番号", customer.customer_no || row.customer_no || "-"],
         ["電話番号", C.formatPhone(customer.phone || row.phone || "")],
         ["撮影回数", `${customer.total_shoot_count ?? row.total_shoot_count ?? 0}回`],
-        ["最終撮影・予約", row.last_reservation_start_at ? C.formatDate(row.last_reservation_start_at, { weekday: "short" }) : "履歴なし"],
+        [
+          "最終撮影・予約",
+          row.last_reservation_start_at
+            ? C.formatDate(row.last_reservation_start_at, { weekday: "short" })
+            : "履歴なし",
+        ],
         ["前回担当", row.last_staff_name || latestReservation.staff_name_snapshot || "未登録"],
         ["予約履歴", `${reservations.length}件`],
         ["最新撮影カルテ", latestChart],
         ["顧客・ご家族共通の注意事項", customer.allergies_and_care || "なし"],
         ["顧客共通の内部注意事項", customer.internal_note || "なし"],
       ];
+
+      const subjectSectionTitle = plan
+        ? `${plan.plan_name}に一致する撮影対象者の注意事項`
+        : "登録済み撮影対象者ごとの注意事項";
+
       $("manualSelectedCustomer").hidden = false;
       $("manualSelectedCustomer").innerHTML = `
         <div class="selected-customer-head">
@@ -1700,19 +1724,36 @@
             <h5>${esc(customer.customer_name || row.customer_name || "")} 様を選択中</h5>
             <p>過去情報を確認してから予約内容を入力してください。</p>
           </div>
-          <button class="btn btn-neutral btn-small" type="button" data-change-customer>顧客を選び直す</button>
+          <button class="btn btn-neutral btn-small" type="button" data-change-customer>
+            顧客を選び直す
+          </button>
         </div>
+
         <div class="detail-grid">${rows.map(detailBox).join("")}</div>
-        <div class="subject-care-panel${(detail.subjects || []).some((subject) => subjectCareText(subject)) ? " warning" : ""}">
-          <h6>登録済み撮影対象者ごとの注意事項</h6>
+
+        <div class="subject-care-panel${
+          visibleSubjects.some((subject) => subjectCareText(subject))
+            ? " warning"
+            : ""
+        }">
+          <h6>${esc(subjectSectionTitle)}</h6>
           ${
-            (detail.subjects || []).length
-              ? (detail.subjects || []).map((subject) => `
-                  <p><strong>${esc(subject.subject_name)}（${esc(C.getLabel("subjectType", subject.subject_type))}）</strong><br />${
-                    esc(subjectCareText(subject) || "個別の注意事項なし")
-                  }</p>
-                `).join("")
-              : "<p>登録済みの撮影対象者はいません。</p>"
+            visibleSubjects.length
+              ? visibleSubjects
+                  .map(
+                    (subject) => `
+                    <p>
+                      <strong>${esc(subject.subject_name)}（${esc(
+                        C.getLabel("subjectType", subject.subject_type)
+                      )}）</strong><br />
+                      ${esc(subjectCareText(subject) || "個別の注意事項なし")}
+                    </p>
+                  `
+                  )
+                  .join("")
+              : plan
+                ? `<p>${esc(plan.plan_name)}に一致する登録済み撮影対象者はいません。新しい撮影対象者を入力してください。</p>`
+                : "<p>登録済みの撮影対象者はいません。</p>"
           }
         </div>
       `;
@@ -2383,6 +2424,7 @@
 
       const subjectAccommodation = selectedSubjectAccommodationNote();
       const payload = {
+        selected_customer_id: identity.customerId,
         customer_name: customerNameValue,
         phone,
         reservation_source: $("manualSource").value,
@@ -2783,7 +2825,7 @@
 
     function openPage(page) {
       window.open(
-        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R6" } : {}),
+        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R7" } : {}),
         "_blank",
         "noopener"
       );
@@ -2851,6 +2893,7 @@
         state.manualSelectedSlot = null;
         updateManualBookingDateLimits();
         refreshManualSubjectRules({ preserveSelection: true });
+        if (state.manualSelectedCustomer) renderSelectedCustomer();
         loadManualSlots().catch(() => {});
       });
       $("manualStaff").addEventListener("change", () => loadManualSlots().catch(() => {}));
