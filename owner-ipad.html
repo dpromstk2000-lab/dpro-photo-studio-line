@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#075f55" />
   <meta name="description" content="DPROフォトスタジオ 受付iPad画面" />
   <title>DPROフォトスタジオ｜受付iPad</title>
-  <!-- Version: STUDIO-10-R7-OWNER-IPAD-20260715 -->
+  <!-- Version: STUDIO-10-R8-OWNER-IPAD-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -1136,7 +1136,7 @@
       return;
     }
 
-    const VERSION = "STUDIO-10-R7-OWNER-IPAD-20260715";
+    const VERSION = "STUDIO-10-R8-OWNER-IPAD-20260715";
     const $ = (id) => document.getElementById(id);
     const esc = (value) => C.escapeHtml(value ?? "");
 
@@ -1507,7 +1507,7 @@
         ? `新しい撮影対象者「${typedName}」`
         : "新しい撮影対象者";
       body.textContent =
-        "新しい撮影対象者として登録します。対象者別の注意事項は、予約後に顧客詳細から追加できます。";
+        "新しい撮影対象者として登録します。同じ顧客に同じ名前・同じ種別の対象者が登録済みの場合は、既存対象者を再利用します。対象者別の注意事項は予約後に顧客詳細から追加できます。";
     }
 
     function selectedSubjectAccommodationNote() {
@@ -2466,7 +2466,14 @@
         $("workDate").value = reservationDate;
         renderDateButtons();
         closeManualBooking();
-        toast(`予約を登録しました：${reservation.reservation_no || "登録完了"}`);
+        const reusedSubject = Array.isArray(result.subjects)
+          ? result.subjects.find((subject) => subject.subject_reused === true)
+          : null;
+        toast(
+          reusedSubject
+            ? `予約を登録しました。既存の撮影対象者「${reusedSubject.subject_name || subjectName}」を再利用しました。`
+            : `予約を登録しました：${reservation.reservation_no || "登録完了"}`
+        );
         await loadReservations({ silent: true });
         if (reservation.id) await openDetail(reservation.id);
       } finally {
@@ -2825,7 +2832,7 @@
 
     function openPage(page) {
       window.open(
-        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R7" } : {}),
+        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R8" } : {}),
         "_blank",
         "noopener"
       );

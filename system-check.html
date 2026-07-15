@@ -635,7 +635,7 @@
           <p class="eyebrow">DPRO PHOTO STUDIO LINE</p>
           <h1>営業前システムチェック</h1>
         </div>
-        <span class="version-badge">STEP STUDIO-5</span>
+        <span class="version-badge">STEP STUDIO-10-R8</span>
       </div>
       <p class="hero-copy">
         Worker・Supabase・共通設定・管理認証・営業デモデータを一画面で確認します。
@@ -718,13 +718,15 @@
 
       <div class="demo-box">
         <div>
-          <h3>デモ店舗専用の安全な再準備</h3>
+          <h3>デモ店舗専用の完全初期化</h3>
           <p>
-            固定デモ顧客4名・固定デモ予約4件を重複しない方式で再作成します。
-            実顧客データは削除しませんが、デモ店舗以外では実行できません。
+            デモ店舗内の顧客・撮影対象者・予約・タスク・再注文・文面履歴を削除し、
+            固定デモ顧客4名・固定デモ予約4件・未完了タスク4件へ戻します。
+            スタッフ・撮影スペース・プラン・営業時間などの設定は保持され、
+            デモ店舗以外では実行できません。
           </p>
         </div>
-        <button class="btn btn-primary" id="demoPrepareButton" type="button">営業デモを再準備</button>
+        <button class="btn btn-primary" id="demoPrepareButton" type="button">営業デモを完全初期化</button>
       </div>
       <div class="demo-result" id="demoResult" role="status"></div>
     </section>
@@ -756,7 +758,7 @@
     </section>
 
     <p class="footer">
-      DPRO 写真館・フォトスタジオ LINE ／ STUDIO-5-SYSTEM-CHECK-20260715<br>
+      DPRO 写真館・フォトスタジオ LINE ／ STUDIO-10-R8-SYSTEM-CHECK-20260715<br>
       写真データ自体は保存せず、外部ギャラリーURLと業務進捗を管理する設計です。
     </p>
   </main>
@@ -768,27 +770,27 @@
     (function initializeSystemCheck() {
       "use strict";
 
-      const PAGE_VERSION = "STUDIO-5-SYSTEM-CHECK-20260715";
+      const PAGE_VERSION = "STUDIO-10-R8-SYSTEM-CHECK-20260715";
       const EXPECTED_CONFIG_VERSION = "STUDIO-4-CONFIG-20260714";
-      const EXPECTED_WORKER_VERSION = "STUDIO-3-WORKER-API-20260714";
-      const MANUAL_STORAGE_KEY = "dpro_studio_system_check_manual_v1";
+      const EXPECTED_WORKER_VERSION = "STUDIO-10-R8-WORKER-DEMO-RESET-SUBJECT-DEDUP-20260715";
+      const MANUAL_STORAGE_KEY = "dpro_studio_system_check_manual_v2";
 
       const checkDefinitions = [
         { id: "config", title: "共通設定 config.js", description: "共通URL・API・表示ラベル・通信関数の読込を確認します。" },
         { id: "health", title: "Worker・Supabase接続", description: "Workerの稼働、Supabase接続、基本データ件数を確認します。" },
-        { id: "publicConfig", title: "公開店舗設定", description: "店舗情報、30分枠、スタッフ、撮影スペースを確認します。" },
+        { id: "publicConfig", title: "公開店舗設定", description: "30分枠・公開カメラマン2名・全体スタッフ3名・撮影スペースを確認します。" },
         { id: "plans", title: "撮影プラン", description: "営業デモに必要な撮影プランが取得できるか確認します。" },
         { id: "routes", title: "APIルート", description: "公開・管理・スタッフ・iPad用APIが公開されているか確認します。" },
         { id: "admin", title: "管理コード認証", description: "管理APIへ安全に接続できるか確認します。" },
         { id: "phone", title: "電話番号正規化", description: "ハイフン・空白・全角・+81形式を同じ番号として判定します。" },
         { id: "guards", title: "予約・写真データ安全設計", description: "30分枠、担当者・撮影スペース重複防止、外部ギャラリー運用を確認します。" },
         { id: "dashboard", title: "管理ダッシュボード", description: "本日の撮影、タスク、セレクト、納品、再注文相談を確認します。" },
-        { id: "demoFreshness", title: "営業デモの日付・内容", description: "今日の予約と営業デモ用タスクが準備されているか確認します。" },
+        { id: "demoFreshness", title: "営業デモ初期状態", description: "顧客4名・デモ予約4件・未完了タスク4件の基準状態を確認します。" },
       ];
 
       const manualDefinitions = [
         { id: "auto", title: "全自動チェックを実行した", note: "赤いエラーがないことを確認" },
-        { id: "demo", title: "営業デモを今日の日付で再準備した", note: "本日の撮影1件・タスク4件が目安" },
+        { id: "demo", title: "営業デモを完全初期化した", note: "顧客4名・デモ予約4件・未完了タスク4件" },
         { id: "customer", title: "実顧客情報が表示されていない", note: "営業ではPHOTO-DEMOの顧客だけを使用" },
         { id: "links", title: "使用する画面URLを開いた", note: "後続STEPで画面追加後に確認" },
         { id: "display", title: "PC・タブレットの表示を確認した", note: "ブラウザ倍率100%を推奨" },
@@ -958,13 +960,22 @@
         if (!config) throw new Error("config.jsを読み込めません。GitHubへの配置とファイル名を確認してください。");
         const issues = [];
         if (config.VERSION !== EXPECTED_CONFIG_VERSION) issues.push(`config版が${config.VERSION || "不明"}`);
-        if (config.WORKER_VERSION !== EXPECTED_WORKER_VERSION) issues.push(`Worker想定版が${config.WORKER_VERSION || "不明"}`);
+        if (!config.WORKER_VERSION) issues.push("config.jsのWorker基準版が未設定です");
         if (config.STUDIO_CODE !== "dpro_photo_demo") issues.push("店舗コードが想定値と異なります");
         if (!String(config.API_BASE_URL || "").startsWith("https://")) issues.push("Worker URLがHTTPSではありません");
         return {
           state: issues.length ? "warn" : "ok",
-          detail: issues.length ? issues.join("／") : `${config.VERSION}・店舗コード・Worker URLを確認しました。`,
-          payload: { page_version: PAGE_VERSION, config_version: config.VERSION, worker_version_expected: config.WORKER_VERSION, studio_code: config.STUDIO_CODE, api_base_url: config.API_BASE_URL },
+          detail: issues.length
+            ? issues.join("／")
+            : `${config.VERSION}・店舗コード・Worker URLを確認しました。Workerの実版はHealthで判定します。`,
+          payload: {
+            page_version: PAGE_VERSION,
+            config_version: config.VERSION,
+            config_worker_baseline: config.WORKER_VERSION,
+            worker_version_required: EXPECTED_WORKER_VERSION,
+            studio_code: config.STUDIO_CODE,
+            api_base_url: config.API_BASE_URL,
+          },
         };
       }
 
@@ -972,27 +983,59 @@
         const config = requireConfig();
         const payload = await config.apiGet(config.ENDPOINTS.HEALTH);
         if (!payload?.ok || !payload?.database?.ok) throw new Error("WorkerまたはデータベースがOKを返していません。");
-        if (payload.version !== EXPECTED_WORKER_VERSION) {
-          return { state: "warn", detail: `接続OKですが、Worker版は${payload.version || "不明"}です。`, payload };
-        }
         setMetrics(payload.database);
-        return { state: "ok", detail: `${payload.database.studio_name}へ接続しました。顧客${payload.database.customer_count}名・デモ予約${payload.database.demo_reservation_count}件です。`, payload };
+        if (payload.version !== EXPECTED_WORKER_VERSION) {
+          return {
+            state: "warn",
+            detail: `接続OKですが、Worker版は${payload.version || "不明"}です。必要版：${EXPECTED_WORKER_VERSION}`,
+            payload,
+          };
+        }
+        return {
+          state: "ok",
+          detail: `${payload.database.studio_name}へ接続しました。顧客${payload.database.customer_count}名・デモ予約${payload.database.demo_reservation_count}件・未完了タスク${payload.database.open_task_count}件です。`,
+          payload,
+        };
       }
 
       async function checkPublicConfig() {
         const config = requireConfig();
         const payload = await config.apiGet(config.ENDPOINTS.PUBLIC_CONFIG);
-        const staffCount = Array.isArray(payload.staff) ? payload.staff.length : 0;
-        const resourceCount = Array.isArray(payload.resources) ? payload.resources.length : 0;
+        const publicStaffCount = Array.isArray(payload.staff)
+          ? payload.staff.length
+          : 0;
+        const totalStaffCount = Number(
+          state.payloads.health?.database?.staff_count || 0
+        );
+        const resourceCount = Array.isArray(payload.resources)
+          ? payload.resources.length
+          : 0;
         const slotMinutes = Number(payload.settings?.slot_minutes);
         const issues = [];
-        if (slotMinutes !== 30) issues.push(`予約枠が${slotMinutes || "不明"}分`);
-        if (staffCount < 3) issues.push(`スタッフ${staffCount}名`);
-        if (resourceCount < 3) issues.push(`撮影スペース${resourceCount}件`);
+
+        if (slotMinutes !== 30) {
+          issues.push(`予約枠が${slotMinutes || "不明"}分`);
+        }
+        if (publicStaffCount < 2) {
+          issues.push(`公開カメラマン${publicStaffCount}名`);
+        }
+        if (totalStaffCount && totalStaffCount < 3) {
+          issues.push(`全体スタッフ${totalStaffCount}名`);
+        }
+        if (resourceCount < 3) {
+          issues.push(`撮影スペース${resourceCount}件`);
+        }
+
         return {
           state: issues.length ? "warn" : "ok",
-          detail: issues.length ? `要確認：${issues.join("／")}` : `30分枠・スタッフ${staffCount}名・撮影スペース${resourceCount}件を確認しました。`,
-          payload,
+          detail: issues.length
+            ? `要確認：${issues.join("／")}`
+            : `30分枠・公開カメラマン${publicStaffCount}名・全体スタッフ${totalStaffCount || "—"}名・撮影スペース${resourceCount}件を確認しました。`,
+          payload: {
+            ...payload,
+            public_booking_staff_count: publicStaffCount,
+            total_staff_count: totalStaffCount,
+          },
         };
       }
 
@@ -1077,18 +1120,62 @@
 
       async function checkDemoFreshness() {
         const dashboard = state.payloads.dashboard;
-        if (!dashboard || dashboard.skipped) return { state: "warn", detail: "管理ダッシュボード確認後に営業デモ内容を判定します。", payload: { skipped: true } };
-        const todayCount = Array.isArray(dashboard.today) ? dashboard.today.length : Number(dashboard.counts?.today_reservations || 0);
-        const taskCount = Array.isArray(dashboard.tasks) ? dashboard.tasks.length : Number(dashboard.counts?.open_tasks || 0);
-        const postCount = Array.isArray(dashboard.post_production) ? dashboard.post_production.length : 0;
-        const reorderCount = Array.isArray(dashboard.reorders) ? dashboard.reorders.length : Number(dashboard.counts?.reorder_open || 0);
-        const ready = todayCount >= 1 && taskCount >= 4 && postCount >= 2 && reorderCount >= 1;
+        const health = state.payloads.health;
+
+        if (!dashboard || dashboard.skipped || !health?.database) {
+          return {
+            state: "warn",
+            detail: "Worker接続と管理ダッシュボード確認後に営業デモ内容を判定します。",
+            payload: { skipped: true },
+          };
+        }
+
+        const todayCount = Array.isArray(dashboard.today)
+          ? dashboard.today.length
+          : Number(dashboard.counts?.today_reservations || 0);
+        const taskCount = Array.isArray(dashboard.tasks)
+          ? dashboard.tasks.length
+          : Number(dashboard.counts?.open_tasks || 0);
+        const postCount = Array.isArray(dashboard.post_production)
+          ? dashboard.post_production.length
+          : 0;
+        const reorderCount = Array.isArray(dashboard.reorders)
+          ? dashboard.reorders.length
+          : Number(dashboard.counts?.reorder_open || 0);
+        const customerCount = Number(
+          health.database.customer_count || 0
+        );
+        const demoReservationCount = Number(
+          health.database.demo_reservation_count || 0
+        );
+        const openTaskCount = Number(
+          health.database.open_task_count || 0
+        );
+
+        const ready =
+          customerCount === 4 &&
+          demoReservationCount === 4 &&
+          openTaskCount === 4 &&
+          todayCount === 1 &&
+          taskCount === 4 &&
+          postCount === 2 &&
+          reorderCount === 1;
+
         return {
           state: ready ? "ok" : "warn",
           detail: ready
-            ? `今日の撮影${todayCount}件・タスク${taskCount}件・撮影後進捗${postCount}件・再注文${reorderCount}件を確認しました。`
-            : `営業デモを再準備してください。現在：今日${todayCount}件・タスク${taskCount}件・撮影後${postCount}件・再注文${reorderCount}件です。`,
-          payload: { today_reservations: todayCount, tasks: taskCount, post_production: postCount, reorders: reorderCount, ready },
+            ? "初期状態を確認しました。顧客4名・デモ予約4件・未完了タスク4件・今日の撮影1件・撮影後進捗2件・再注文1件です。"
+            : `営業デモを完全初期化してください。現在：顧客${customerCount}名・デモ予約${demoReservationCount}件・未完了タスク${openTaskCount}件・今日${todayCount}件・一覧タスク${taskCount}件・撮影後${postCount}件・再注文${reorderCount}件です。`,
+          payload: {
+            customers: customerCount,
+            demo_reservations: demoReservationCount,
+            open_tasks: openTaskCount,
+            today_reservations: todayCount,
+            dashboard_tasks: taskCount,
+            post_production: postCount,
+            reorders: reorderCount,
+            ready,
+          },
         };
       }
 
@@ -1192,23 +1279,25 @@
         }
 
         const accepted = window.confirm(
-          "営業デモデータを今日の日付に合わせて再準備します。\n\n" +
-          "固定デモ顧客4名・固定デモ予約4件を再設定します。実行しますか？"
+          "営業デモを完全初期化します。\n\n" +
+          "このデモ店舗内の顧客・撮影対象者・予約・タスク・再注文・文面履歴を削除し、固定デモ顧客4名・固定デモ予約4件へ戻します。\n" +
+          "スタッフ・撮影スペース・プラン・営業時間などの設定は保持されます。実行しますか？"
         );
         if (!accepted) return;
 
-        setBusy(elements.demoPrepareButton, true, "再準備中…");
+        setBusy(elements.demoPrepareButton, true, "完全初期化中…");
         showDemoResult("", "");
         try {
           const payload = await config.adminPost(config.ENDPOINTS.ADMIN_DEMO_PREPARE, {});
           const db = payload.database || {};
           setMetrics(db);
+          const reset = payload.demo_reset_deleted || {};
           showDemoResult(
-            `営業デモデータを再準備しました。基準日：${payload.jst_date || "—"}／デモ顧客：${payload.demo_customers ?? "—"}名／デモ予約：${payload.demo_reservations ?? "—"}件／未完了タスク：${db.open_task_count ?? "—"}件`,
+            `営業デモを完全初期化しました。基準日：${payload.jst_date || "—"}／顧客：${db.customer_count ?? "—"}名／デモ予約：${db.demo_reservation_count ?? "—"}件／未完了タスク：${db.open_task_count ?? "—"}件／削除：予約${reset.reservations ?? 0}件・撮影対象者${reset.subjects ?? 0}件・顧客${reset.customers ?? 0}名`,
             "ok"
           );
           updateRawOutput("demo_prepare", payload);
-          showToast("営業デモを今日の日付で再準備しました。", "ok");
+          showToast("営業デモを初期状態へ戻しました。", "ok");
           await runAllChecks({ silent: true });
         } catch (error) {
           const message = errorDetail("営業デモ準備失敗", error);
@@ -1216,7 +1305,7 @@
           updateRawOutput("demo_prepare_error", normalizeError(error));
           showToast(error?.message || "営業デモ準備に失敗しました。", "error");
         } finally {
-          setBusy(elements.demoPrepareButton, false, "営業デモを再準備");
+          setBusy(elements.demoPrepareButton, false, "営業デモを完全初期化");
         }
       }
 
@@ -1303,7 +1392,7 @@
           { label: "お客様マイページ", url: `${siteBase}/member.html?demo=1`, future: true },
           { label: "写真館PC管理", url: `${siteBase}/owner.html?demo=1`, future: true },
           { label: "カメラマン・スタッフ", url: `${siteBase}/staff.html?demo=1`, future: true },
-          { label: "受付iPad", url: `${siteBase}/owner-ipad.html?demo=1`, future: true },
+          { label: "受付iPad", url: `${siteBase}/owner-ipad.html?demo=1&v=STUDIO-10-R8`, future: true },
         ];
         elements.linkGrid.innerHTML = links.map((item, index) => `
           <article class="link-card">
