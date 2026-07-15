@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#075f55" />
   <meta name="description" content="DPROフォトスタジオ 受付iPad画面" />
   <title>DPROフォトスタジオ｜受付iPad</title>
-  <!-- Version: STUDIO-10-R5-OWNER-IPAD-20260715 -->
+  <!-- Version: STUDIO-10-R6-OWNER-IPAD-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -496,6 +496,44 @@
       border-color: #edb7b1;
       background: #fff0ed;
     }
+    .locked-identity {
+      border-color: #b8d5cf !important;
+      color: #284d47 !important;
+      background: #eef7f4 !important;
+      font-weight: 850;
+    }
+    .identity-lock-note {
+      margin-top: 7px;
+      padding: 9px 11px;
+      border: 1px solid #b9d6d0;
+      border-radius: 10px;
+      color: #315b54;
+      background: #edf8f5;
+      font-size: .82rem;
+      font-weight: 800;
+    }
+    .subject-care-panel {
+      margin-top: 8px;
+      padding: 11px 12px;
+      border: 1px solid #c4d9d5;
+      border-radius: 11px;
+      background: #f6faf9;
+    }
+    .subject-care-panel h6 {
+      margin: 0 0 6px;
+      font-size: .86rem;
+    }
+    .subject-care-panel p {
+      margin: 3px 0 0;
+      color: #526c67;
+      font-size: .81rem;
+      white-space: pre-wrap;
+    }
+    .subject-care-panel.warning {
+      border-color: #e7c981;
+      background: #fff6df;
+    }
+
 
     .customer-results { display: grid; gap: 8px; margin-top: 10px; }
     .customer-result {
@@ -950,6 +988,11 @@
               <input id="manualPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="090-1234-5678" />
               <div id="manualPhoneNote" class="field-note"></div>
             </div>
+            <div class="field span-2">
+              <div id="manualIdentityLockNote" class="identity-lock-note" hidden>
+                既存顧客を選択中です。お客様名と電話番号は顧客情報から固定され、撮影対象者名とは別に保存されます。
+              </div>
+            </div>
             <div class="field">
               <label for="manualPlan">撮影プラン</label>
               <select id="manualPlan"><option value="">選択してください</option></select>
@@ -1006,6 +1049,12 @@
             <div class="field span-2">
               <div id="manualSubjectCompatibility" class="subject-compatibility">
                 撮影プランを選ぶと、選択できる撮影対象種別を自動で絞り込みます。
+              </div>
+            </div>
+            <div class="field span-2">
+              <div id="manualSubjectCarePanel" class="subject-care-panel" hidden>
+                <h6 id="manualSubjectCareTitle">撮影対象者の注意事項</h6>
+                <p id="manualSubjectCareBody">対象者別の注意事項はありません。</p>
               </div>
             </div>
             <div class="field span-2">
@@ -1087,7 +1136,7 @@
       return;
     }
 
-    const VERSION = "STUDIO-10-R5-OWNER-IPAD-20260715";
+    const VERSION = "STUDIO-10-R6-OWNER-IPAD-20260715";
     const $ = (id) => document.getElementById(id);
     const esc = (value) => C.escapeHtml(value ?? "");
 
@@ -1375,6 +1424,98 @@
       if (staffRows.some((row) => row.id === previous)) $("manualStaff").value = previous;
     }
 
+    function setManualCustomerIdentityMode(existingCustomerMode) {
+      const locked = existingCustomerMode === true;
+      const nameInput = $("manualCustomerName");
+      const phoneInput = $("manualPhone");
+
+      nameInput.readOnly = locked;
+      phoneInput.readOnly = locked;
+      nameInput.classList.toggle("locked-identity", locked);
+      phoneInput.classList.toggle("locked-identity", locked);
+      $("manualIdentityLockNote").hidden = !locked;
+
+      if (locked) {
+        nameInput.title = "既存顧客のお客様名です。撮影対象者名は下の「主な撮影対象者」へ入力してください。";
+        phoneInput.title = "既存顧客の電話番号です。顧客を選び直すまで変更できません。";
+      } else {
+        nameInput.removeAttribute("title");
+        phoneInput.removeAttribute("title");
+      }
+    }
+
+    function authoritativeManualCustomerIdentity() {
+      const selectedCustomer = state.manualCustomerDetail?.customer;
+      if (state.manualSelectedCustomer && selectedCustomer) {
+        return {
+          customerId: selectedCustomer.id || state.manualSelectedCustomer.customer_id || null,
+          customerName: selectedCustomer.customer_name || state.manualSelectedCustomer.customer_name || "",
+          phone: selectedCustomer.phone || state.manualSelectedCustomer.phone || "",
+          existing: true,
+        };
+      }
+      return {
+        customerId: null,
+        customerName: $("manualCustomerName").value.trim(),
+        phone: $("manualPhone").value.trim(),
+        existing: false,
+      };
+    }
+
+    function selectedManualRegisteredSubjectDetail() {
+      const selectedId = $("manualRegisteredSubject").value;
+      if (!selectedId) return null;
+      return (state.manualCustomerDetail?.subjects || []).find(
+        (subject) => subject.id === selectedId
+      ) || null;
+    }
+
+    function subjectCareText(subject) {
+      if (!subject) return "";
+      return [
+        subject.attention_note ? `注意事項：${subject.attention_note}` : "",
+        subject.shooting_care_note ? `撮影時の配慮：${subject.shooting_care_note}` : "",
+        subject.pet_species ? `種類：${subject.pet_species}` : "",
+        subject.pet_breed ? `品種：${subject.pet_breed}` : "",
+      ].filter(Boolean).join("\n");
+    }
+
+    function renderManualSubjectCare() {
+      const panel = $("manualSubjectCarePanel");
+      const title = $("manualSubjectCareTitle");
+      const body = $("manualSubjectCareBody");
+      const selected = selectedManualRegisteredSubjectDetail();
+
+      if (!state.manualSelectedCustomer) {
+        panel.hidden = true;
+        return;
+      }
+
+      panel.hidden = false;
+      panel.classList.remove("warning");
+
+      if (selected) {
+        title.textContent = `撮影対象者「${selected.subject_name}」の注意事項`;
+        const care = subjectCareText(selected);
+        body.textContent = care || "この撮影対象者には、個別の注意事項は登録されていません。";
+        if (care) panel.classList.add("warning");
+        return;
+      }
+
+      const typedName = $("manualSubjectName").value.trim();
+      title.textContent = typedName
+        ? `新しい撮影対象者「${typedName}」`
+        : "新しい撮影対象者";
+      body.textContent =
+        "新しい撮影対象者として登録します。対象者別の注意事項は、予約後に顧客詳細から追加できます。";
+    }
+
+    function selectedSubjectAccommodationNote() {
+      const selected = selectedManualRegisteredSubjectDetail();
+      if (!selected) return "";
+      return subjectCareText(selected);
+    }
+
     function resetManualBookingForm() {
       state.manualSearchRows = [];
       state.manualSelectedCustomer = null;
@@ -1393,6 +1534,8 @@
       $("manualCustomerName").value = "";
       $("manualPhone").value = "";
       $("manualPhoneNote").textContent = "";
+      setManualCustomerIdentityMode(false);
+      $("manualSubjectCarePanel").hidden = true;
       $("manualPlan").value = "";
       updateManualStaffOptions();
       $("manualStaff").value = "";
@@ -1442,6 +1585,8 @@
       $("manualRegisteredSubject").value = "";
       $("manualSubjectName").readOnly = false;
       $("manualSubjectType").disabled = false;
+      setManualCustomerIdentityMode(false);
+      $("manualSubjectCarePanel").hidden = true;
       $("manualCustomerModeBadge").textContent = "新規顧客";
       $("manualCustomerModeBadge").className = "badge amber";
       const raw = String(prefill || $("manualCustomerSearch").value || "").trim();
@@ -1519,11 +1664,13 @@
       state.manualCustomerDetail = detail;
       $("manualCustomerName").value = detail.customer?.customer_name || row.customer_name || "";
       $("manualPhone").value = detail.customer?.phone || row.phone || "";
+      setManualCustomerIdentityMode(true);
       $("manualCustomerModeBadge").textContent = "既存顧客";
       $("manualCustomerModeBadge").className = "badge green";
       updateManualPhoneNote();
       renderSelectedCustomer();
       refreshManualSubjectRules({ preserveSelection: false });
+      renderManualSubjectCare();
       $("manualCustomerResults").innerHTML = "";
     }
 
@@ -1543,8 +1690,8 @@
         ["前回担当", row.last_staff_name || latestReservation.staff_name_snapshot || "未登録"],
         ["予約履歴", `${reservations.length}件`],
         ["最新撮影カルテ", latestChart],
-        ["アレルギー・配慮事項", customer.allergies_and_care || "なし"],
-        ["内部注意事項", customer.internal_note || "なし"],
+        ["顧客・ご家族共通の注意事項", customer.allergies_and_care || "なし"],
+        ["顧客共通の内部注意事項", customer.internal_note || "なし"],
       ];
       $("manualSelectedCustomer").hidden = false;
       $("manualSelectedCustomer").innerHTML = `
@@ -1556,6 +1703,18 @@
           <button class="btn btn-neutral btn-small" type="button" data-change-customer>顧客を選び直す</button>
         </div>
         <div class="detail-grid">${rows.map(detailBox).join("")}</div>
+        <div class="subject-care-panel${(detail.subjects || []).some((subject) => subjectCareText(subject)) ? " warning" : ""}">
+          <h6>登録済み撮影対象者ごとの注意事項</h6>
+          ${
+            (detail.subjects || []).length
+              ? (detail.subjects || []).map((subject) => `
+                  <p><strong>${esc(subject.subject_name)}（${esc(C.getLabel("subjectType", subject.subject_type))}）</strong><br />${
+                    esc(subjectCareText(subject) || "個別の注意事項なし")
+                  }</p>
+                `).join("")
+              : "<p>登録済みの撮影対象者はいません。</p>"
+          }
+        </div>
       `;
     }
 
@@ -1789,6 +1948,7 @@
         setManualSubjectInputMode(false);
       }
       renderSubjectCompatibility();
+      renderManualSubjectCare();
     }
 
     function ymdCompare(a, b) {
@@ -2196,8 +2356,9 @@
     }
 
     async function submitManualBooking() {
-      const customerNameValue = $("manualCustomerName").value.trim();
-      const phone = $("manualPhone").value.trim();
+      const identity = authoritativeManualCustomerIdentity();
+      const customerNameValue = identity.customerName;
+      const phone = identity.phone;
       const normalizedPhone = C.normalizePhone(phone);
       const planId = $("manualPlan").value;
       if (!customerNameValue) return toast("お客様名を入力してください。", "error");
@@ -2220,6 +2381,7 @@
           ? [{ subject_name: subjectName, subject_type: $("manualSubjectType").value }]
           : [];
 
+      const subjectAccommodation = selectedSubjectAccommodationNote();
       const payload = {
         customer_name: customerNameValue,
         phone,
@@ -2232,10 +2394,19 @@
         reservation_status: "confirmed",
         shooting_purpose: $("manualPurpose").value.trim(),
         desired_shots: $("manualShots").value.trim(),
+        accommodation_note: subjectAccommodation,
         internal_note: $("manualInternalNote").value.trim(),
         subjects,
         is_demo: C.isDemoMode(),
-        metadata: { normalized_phone: normalizedPhone, screen: "owner-ipad.html", version: VERSION },
+        metadata: {
+          normalized_phone: normalizedPhone,
+          selected_customer_id: identity.customerId,
+          customer_identity_locked: identity.existing,
+          selected_subject_id: registeredSubjectId || null,
+          subject_name: subjectName || null,
+          screen: "owner-ipad.html",
+          version: VERSION,
+        },
       };
 
       const submitButton = $("manualSubmitBtn");
@@ -2481,9 +2652,10 @@
         ["オプション", options.length
           ? options.map((option) => option.option_name_snapshot || option.option_name).join("、")
           : "なし"],
-        ["撮影時の配慮", reservation.accommodation_note || "なし"],
+        ["撮影対象者の注意事項", reservation.accommodation_note || "なし"],
         ["事前ヒアリング", intake.summary || "未入力"],
-        ["アレルギー・注意事項", customer.allergies_and_care || "なし"],
+        ["顧客・ご家族共通の注意事項", customer.allergies_and_care || "なし"],
+        ["顧客共通の内部注意事項", customer.internal_note || "なし"],
         ["お客様メモ", reservation.customer_note || "なし"],
         ["予約状態", C.getLabel("reservationStatus", reservation.reservation_status)],
       ];
@@ -2611,7 +2783,7 @@
 
     function openPage(page) {
       window.open(
-        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R5" } : {}),
+        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R6" } : {}),
         "_blank",
         "noopener"
       );
@@ -2698,8 +2870,14 @@
           renderSubjectCompatibility();
         }
       });
-      $("manualSubjectName").addEventListener("input", renderSubjectCompatibility);
-      $("manualSubjectType").addEventListener("change", renderSubjectCompatibility);
+      $("manualSubjectName").addEventListener("input", () => {
+        renderSubjectCompatibility();
+        renderManualSubjectCare();
+      });
+      $("manualSubjectType").addEventListener("change", () => {
+        renderSubjectCompatibility();
+        renderManualSubjectCare();
+      });
       $("manualSubmitBtn").addEventListener("click", () => submitManualBooking().catch(() => {}));
       $("manualCloseX").addEventListener("click", closeManualBooking);
       $("manualCloseBtn").addEventListener("click", closeManualBooking);
@@ -2742,6 +2920,8 @@
           $("manualSubjectName").value = "";
           $("manualSubjectName").readOnly = false;
           $("manualSubjectType").disabled = false;
+          setManualCustomerIdentityMode(false);
+          $("manualSubjectCarePanel").hidden = true;
           $("manualCustomerModeBadge").textContent = "新規顧客";
           $("manualCustomerModeBadge").className = "badge amber";
           refreshManualSubjectRules({ preserveSelection: false });
