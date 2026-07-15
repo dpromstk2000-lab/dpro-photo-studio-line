@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f5d53" />
   <meta name="description" content="DPROフォトスタジオ お客様マイページ。撮影予約、事前案内、写真セレクト、納品状況、再注文相談を確認できます。" />
   <title>DPROフォトスタジオ｜お客様マイページ</title>
-  <!-- Version: STUDIO-7-R1-MEMBER-20260715 -->
+  <!-- Version: STUDIO-7-R2-MEMBER-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -35,6 +35,7 @@
     }
 
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html { scroll-behavior: smooth; }
     body {
       margin: 0;
@@ -482,13 +483,13 @@
     </div>
 
     <section id="accessSection" class="card access-panel">
-      <div id="accessIntro" class="card-title-row">
+      <div id="accessIntro" class="card-title-row" aria-live="polite">
         <div>
           <h2>マイページを開く</h2>
           <p class="subtext">LINEのメニューまたは予約完了画面から開くと、自動で予約情報を表示します。</p>
         </div>
       </div>
-      <div id="accessMissing" class="form-grid">
+      <div id="accessMissing" class="form-grid" aria-label="予約確認用トークン入力">
         <label>
           予約確認用トークン
           <input id="publicTokenInput" type="text" autocomplete="off" placeholder="予約完了時に発行された確認用トークン" />
@@ -496,7 +497,7 @@
         </label>
         <button id="openMemberButton" class="btn btn-primary btn-wide" type="button">予約情報を表示する</button>
       </div>
-      <div id="accessResolved" class="access-resolved" hidden>
+      <div id="accessResolved" class="access-resolved" aria-label="別の予約を確認" hidden>
         <button id="anotherReservationButton" class="btn btn-neutral btn-small" type="button">別の予約を確認する</button>
       </div>
       <div id="demoSwitcher" class="demo-switcher">
@@ -1119,10 +1120,20 @@
 
       function setAccessMode(mode) {
         const resolved = mode === "resolved";
+
+        // Author CSSのdisplay指定がhidden属性を上書きしないよう、
+        // hidden属性とstyle.displayの両方で確実に切り替える。
         els.accessIntro.hidden = resolved;
+        els.accessIntro.style.display = resolved ? "none" : "";
+
         els.accessMissing.hidden = resolved;
+        els.accessMissing.style.display = resolved ? "none" : "";
+
         els.accessResolved.hidden = !resolved;
+        els.accessResolved.style.display = resolved ? "flex" : "none";
+
         els.accessSection.classList.toggle("resolved", resolved);
+        els.accessSection.setAttribute("data-access-mode", resolved ? "resolved" : "entry");
       }
 
       function resetMemberLookup() {
