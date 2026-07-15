@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#075f55" />
   <meta name="description" content="DPROフォトスタジオ 受付iPad画面" />
   <title>DPROフォトスタジオ｜受付iPad</title>
-  <!-- Version: STUDIO-10-OWNER-IPAD-20260715 -->
+  <!-- Version: STUDIO-10-R1-OWNER-IPAD-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -200,6 +200,41 @@
       gap: 8px;
       flex-wrap: wrap;
       justify-content: flex-end;
+    }
+
+    .date-picker-wrap {
+      position: relative;
+    }
+
+    .date-display-button {
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 42px 10px 13px;
+      border: 1px solid #bfd5d0;
+      border-radius: 11px;
+      color: var(--ink);
+      background: #fff;
+      text-align: left;
+      font-weight: 850;
+      position: relative;
+    }
+
+    .date-display-button::after {
+      content: "📅";
+      position: absolute;
+      right: 13px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1rem;
+    }
+
+    .native-date-input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      overflow: hidden;
     }
 
     .page-head {
@@ -400,6 +435,112 @@
     .search-result h4 { margin: 0 0 3px; }
     .search-result p { margin: 0; color: var(--muted); font-size: .82rem; }
 
+    .manual-modal { width: min(1180px, 100%); }
+
+    .manual-section {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+    }
+    .manual-section + .manual-section { margin-top: 13px; }
+    .manual-section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 11px;
+    }
+    .manual-section-head h4 { margin: 0; font-size: 1.08rem; }
+    .manual-section-head p { margin: 3px 0 0; color: var(--muted); font-size: .81rem; }
+
+    .inline-search {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .normalize-note {
+      margin-top: 7px;
+      padding: 8px 10px;
+      border-radius: 9px;
+      color: #46645f;
+      background: #edf7f4;
+      font-size: .79rem;
+      font-weight: 780;
+    }
+
+    .customer-results { display: grid; gap: 8px; margin-top: 10px; }
+    .customer-result {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: #fbfdfc;
+    }
+    .customer-result h5 { margin: 0 0 3px; font-size: .96rem; }
+    .customer-result p { margin: 0; color: var(--muted); font-size: .79rem; }
+
+    .selected-customer {
+      margin-top: 11px;
+      padding: 13px;
+      border: 1px solid #a9d4cc;
+      border-radius: 12px;
+      background: #eef9f6;
+    }
+    .selected-customer-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 9px;
+    }
+    .selected-customer-head h5 { margin: 0; font-size: 1.02rem; }
+    .selected-customer-head p { margin: 2px 0 0; color: var(--muted); font-size: .79rem; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 11px;
+    }
+    .span-2 { grid-column: span 2; }
+
+    .slot-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 7px;
+    }
+    .slot-btn {
+      min-height: 45px;
+      padding: 8px 5px;
+      border: 1px solid #b8d5cf;
+      border-radius: 10px;
+      color: var(--green-deep);
+      background: #f1faf7;
+      font-weight: 900;
+    }
+    .slot-btn.selected {
+      color: #fff;
+      border-color: var(--green);
+      background: var(--green);
+      box-shadow: 0 6px 14px rgba(5, 104, 91, .18);
+    }
+
+    .booking-summary {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid #c8deda;
+      border-radius: 10px;
+      color: #3f5f5a;
+      background: #f4f9f8;
+      font-size: .82rem;
+      white-space: pre-wrap;
+    }
+
     .modal-backdrop {
       position: fixed;
       z-index: 90;
@@ -584,7 +725,10 @@
       .summary-grid { grid-template-columns: repeat(2,1fr); }
       .lanes { grid-template-columns: 1fr; }
       .auth-row { grid-template-columns: 1fr; }
-      .detail-grid, .status-grid, .message-grid { grid-template-columns: 1fr; }
+      .detail-grid, .status-grid, .message-grid, .form-grid { grid-template-columns: 1fr; }
+      .span-2 { grid-column: auto; }
+      .inline-search { grid-template-columns: 1fr; }
+      .slot-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
       .modal-backdrop { padding: 0; align-items: end; }
       .modal { width: 100%; max-height: 96vh; border-radius: 20px 20px 0 0; }
       .modal-foot .btn { flex: 1; }
@@ -607,6 +751,7 @@
         <p id="topMeta" class="top-meta">本日の来店受付・撮影進行・会計案内</p>
       </div>
       <div class="top-actions">
+        <button id="manualBookingTopBtn" class="btn btn-primary" type="button">＋ 電話・店頭予約</button>
         <button id="refreshTopBtn" class="btn btn-neutral" type="button">最新情報へ更新</button>
         <button id="staffOpenBtn" class="btn btn-neutral" type="button">スタッフ画面</button>
         <button id="ownerOpenBtn" class="btn btn-neutral" type="button">PC管理</button>
@@ -633,8 +778,11 @@
     <section id="ipadApp" class="app-shell" hidden>
       <section class="panel toolbar">
         <div class="field">
-          <label for="workDate">表示日</label>
-          <input id="workDate" type="date" />
+          <label for="workDateDisplay">表示日</label>
+          <div class="date-picker-wrap">
+            <button id="workDateDisplay" class="date-display-button" type="button">日付を選択</button>
+            <input id="workDate" class="native-date-input" type="date" tabindex="-1" aria-hidden="true" />
+          </div>
         </div>
         <div class="field">
           <label for="searchInput">予約をすぐ探す</label>
@@ -643,8 +791,9 @@
           <div class="field-note">表示中の日付の予約から検索します。</div>
         </div>
         <div class="toolbar-actions">
+          <button id="manualBookingToolbarBtn" class="btn btn-primary" type="button">＋ 電話・店頭予約</button>
           <button id="todayBtn" class="btn btn-secondary" type="button">今日へ戻る</button>
-          <button id="loadBtn" class="btn btn-primary" type="button">予約を表示</button>
+          <button id="loadBtn" class="btn btn-neutral" type="button">予約を表示</button>
         </div>
       </section>
 
@@ -692,6 +841,132 @@
   </main>
 
   <div id="searchResults" class="search-results" hidden></div>
+
+  <div id="manualModal" class="modal-backdrop" hidden>
+    <section class="modal manual-modal" role="dialog" aria-modal="true" aria-labelledby="manualModalTitle">
+      <header class="modal-head">
+        <div>
+          <h3 id="manualModalTitle">電話・店頭予約を登録</h3>
+          <p>既存顧客を電話番号・氏名・顧客番号・撮影対象者名で検索できます。</p>
+        </div>
+        <button id="manualCloseX" class="icon-btn" type="button" aria-label="閉じる">×</button>
+      </header>
+
+      <div class="modal-body">
+        <section class="manual-section">
+          <div class="manual-section-head">
+            <div>
+              <h4>1. 既存顧客を検索</h4>
+              <p>電話番号はハイフン・空白・全角・+81形式を同じ番号として検索します。</p>
+            </div>
+            <button id="manualNewCustomerBtn" class="btn btn-neutral btn-small" type="button">新しいお客様として登録</button>
+          </div>
+          <div class="inline-search">
+            <input id="manualCustomerSearch" type="search" placeholder="例：090-9999-1111、佐藤 美咲、PHOTO-DEMO-001、はると" />
+            <button id="manualCustomerSearchBtn" class="btn btn-secondary" type="button">既存顧客を検索</button>
+            <button id="manualSearchClearBtn" class="btn btn-neutral" type="button">検索をクリア</button>
+          </div>
+          <div id="manualNormalizeNote" class="normalize-note">検索キーワードを入力してください。</div>
+          <div id="manualCustomerResults" class="customer-results"></div>
+          <div id="manualSelectedCustomer" class="selected-customer" hidden></div>
+        </section>
+
+        <section class="manual-section">
+          <div class="manual-section-head">
+            <div>
+              <h4>2. 予約内容を入力</h4>
+              <p>撮影プランと日付を選ぶと、30分単位の空き時間を表示します。</p>
+            </div>
+            <span id="manualCustomerModeBadge" class="badge amber">新規顧客</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="manualSource">受付方法</label>
+              <select id="manualSource">
+                <option value="phone">電話予約</option>
+                <option value="store">店頭予約</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="manualParticipant">参加人数</label>
+              <input id="manualParticipant" type="number" min="1" max="100" value="1" />
+            </div>
+            <div class="field">
+              <label for="manualCustomerName">お客様名</label>
+              <input id="manualCustomerName" type="text" autocomplete="name" />
+            </div>
+            <div class="field">
+              <label for="manualPhone">電話番号</label>
+              <input id="manualPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="090-1234-5678" />
+              <div id="manualPhoneNote" class="field-note"></div>
+            </div>
+            <div class="field">
+              <label for="manualPlan">撮影プラン</label>
+              <select id="manualPlan"><option value="">選択してください</option></select>
+            </div>
+            <div class="field">
+              <label for="manualStaff">担当カメラマン</label>
+              <select id="manualStaff"><option value="">おまかせ</option></select>
+            </div>
+            <div class="field">
+              <label for="manualResource">撮影スペース</label>
+              <select id="manualResource"><option value="">プラン標準</option></select>
+            </div>
+            <div class="field">
+              <label for="manualDateDisplay">撮影日</label>
+              <div class="date-picker-wrap">
+                <button id="manualDateDisplay" class="date-display-button" type="button">日付を選択</button>
+                <input id="manualDate" class="native-date-input" type="date" tabindex="-1" aria-hidden="true" />
+              </div>
+            </div>
+            <div class="field span-2">
+              <label>空き時間</label>
+              <div id="manualSlots" class="slot-grid"><div class="empty-lane">プランと撮影日を選択してください。</div></div>
+              <div id="manualSelectedSlotMeta" class="booking-summary">空き時間を選択してください。</div>
+            </div>
+            <div id="manualRegisteredSubjectField" class="field span-2" hidden>
+              <label for="manualRegisteredSubject">登録済みの撮影対象者</label>
+              <select id="manualRegisteredSubject"><option value="">新しい撮影対象者を入力</option></select>
+            </div>
+            <div class="field">
+              <label for="manualSubjectName">主な撮影対象者</label>
+              <input id="manualSubjectName" type="text" placeholder="例：はると、家族、商品名" />
+            </div>
+            <div class="field">
+              <label for="manualSubjectType">撮影対象種別</label>
+              <select id="manualSubjectType">
+                <option value="person">人物</option>
+                <option value="child">子ども</option>
+                <option value="baby">乳幼児</option>
+                <option value="pet">ペット</option>
+                <option value="product">商品</option>
+                <option value="group">家族・団体</option>
+                <option value="other">その他</option>
+              </select>
+            </div>
+            <div class="field span-2">
+              <label for="manualPurpose">撮影目的</label>
+              <input id="manualPurpose" type="text" placeholder="例：七五三の記念撮影" />
+            </div>
+            <div class="field span-2">
+              <label for="manualShots">希望カット</label>
+              <textarea id="manualShots" placeholder="本人、家族、兄弟写真など"></textarea>
+            </div>
+            <div class="field span-2">
+              <label for="manualInternalNote">内部注意事項</label>
+              <textarea id="manualInternalNote" placeholder="お客様には表示しない受付・スタッフ用メモ"></textarea>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer class="modal-foot">
+        <button id="manualCloseBtn" class="btn btn-neutral" type="button">閉じる</button>
+        <button id="manualSubmitBtn" class="btn btn-primary" type="button">この内容で予約登録</button>
+      </footer>
+    </section>
+  </div>
 
   <div id="detailModal" class="modal-backdrop" hidden>
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -749,7 +1024,7 @@
       return;
     }
 
-    const VERSION = "STUDIO-10-OWNER-IPAD-20260715";
+    const VERSION = "STUDIO-10-R1-OWNER-IPAD-20260715";
     const $ = (id) => document.getElementById(id);
     const esc = (value) => C.escapeHtml(value ?? "");
 
@@ -760,6 +1035,11 @@
       selected: null,
       selectedVisitStatus: null,
       refreshTimer: null,
+      manualSearchRows: [],
+      manualSelectedCustomer: null,
+      manualCustomerDetail: null,
+      manualSelectedSlot: null,
+      manualAvailability: null,
     };
 
     const visitGroups = {
@@ -901,7 +1181,11 @@
     async function loadBaseData() {
       state.settings = await C.adminGet(C.ENDPOINTS.ADMIN_SETTINGS);
       renderStudioHeader();
+      populateManualOptions();
       $("workDate").value = C.todayYmd();
+      $("manualDate").min = C.todayYmd();
+      $("manualDate").value = C.todayYmd();
+      renderDateButtons();
       await loadReservations();
       startAutoRefresh();
     }
@@ -911,6 +1195,377 @@
       $("topTitle").textContent = `${studio.studio_name || C.STUDIO_NAME}｜受付iPad`;
       $("topMeta").textContent =
         `${studio.phone || "電話未登録"}｜${studio.address || "住所未登録"}｜本日の来店受付・撮影進行`;
+    }
+
+    function formatDateButton(value) {
+      if (!value) return "日付を選択";
+      return C.formatDate(value, { weekday: "short" });
+    }
+
+    function renderDateButtons() {
+      $("workDateDisplay").textContent = formatDateButton($("workDate").value);
+      $("manualDateDisplay").textContent = formatDateButton($("manualDate").value);
+    }
+
+    function openNativeDatePicker(input) {
+      try {
+        if (typeof input.showPicker === "function") input.showPicker();
+        else input.click();
+      } catch {
+        input.focus();
+        input.click();
+      }
+    }
+
+    function fillSelect(select, rows, valueKey, labelKey, blankLabel) {
+      select.innerHTML = `<option value="">${esc(blankLabel)}</option>`;
+      rows.forEach((row) => {
+        const option = document.createElement("option");
+        option.value = row[valueKey];
+        option.textContent = row[labelKey];
+        select.appendChild(option);
+      });
+    }
+
+    function populateManualOptions() {
+      const settings = state.settings || {};
+      fillSelect(
+        $("manualPlan"),
+        (settings.plans || []).filter((row) => row.is_active !== false),
+        "id",
+        "plan_name",
+        "選択してください"
+      );
+      fillSelect(
+        $("manualResource"),
+        (settings.resources || []).filter((row) => row.is_active !== false),
+        "id",
+        "resource_name",
+        "プラン標準"
+      );
+      updateManualStaffOptions();
+    }
+
+    function updateManualStaffOptions() {
+      const settings = state.settings || {};
+      const planId = $("manualPlan").value;
+      const previous = $("manualStaff").value;
+      let staffRows = (settings.staff || []).filter(
+        (row) => row.is_active !== false && row.can_be_assigned !== false
+      );
+      const planStaffIds = (settings.plan_staff || [])
+        .filter((row) => row.plan_id === planId && row.is_active !== false)
+        .map((row) => row.staff_id);
+      if (planId && planStaffIds.length) {
+        staffRows = staffRows.filter((row) => planStaffIds.includes(row.id));
+      }
+      fillSelect($("manualStaff"), staffRows, "id", "staff_name", "おまかせ");
+      if (staffRows.some((row) => row.id === previous)) $("manualStaff").value = previous;
+    }
+
+    function resetManualBookingForm() {
+      state.manualSearchRows = [];
+      state.manualSelectedCustomer = null;
+      state.manualCustomerDetail = null;
+      state.manualSelectedSlot = null;
+      state.manualAvailability = null;
+      $("manualCustomerSearch").value = "";
+      $("manualCustomerResults").innerHTML = "";
+      $("manualSelectedCustomer").hidden = true;
+      $("manualSelectedCustomer").innerHTML = "";
+      $("manualNormalizeNote").textContent = "検索キーワードを入力してください。";
+      $("manualCustomerModeBadge").textContent = "新規顧客";
+      $("manualCustomerModeBadge").className = "badge amber";
+      $("manualSource").value = "phone";
+      $("manualParticipant").value = "1";
+      $("manualCustomerName").value = "";
+      $("manualPhone").value = "";
+      $("manualPhoneNote").textContent = "";
+      $("manualPlan").value = "";
+      updateManualStaffOptions();
+      $("manualStaff").value = "";
+      $("manualResource").value = "";
+      $("manualDate").value = $("workDate").value || C.todayYmd();
+      $("manualDate").min = C.todayYmd();
+      $("manualSlots").innerHTML = '<div class="empty-lane">プランと撮影日を選択してください。</div>';
+      $("manualSelectedSlotMeta").textContent = "空き時間を選択してください。";
+      $("manualRegisteredSubjectField").hidden = true;
+      $("manualRegisteredSubject").innerHTML = '<option value="">新しい撮影対象者を入力</option>';
+      $("manualSubjectName").value = "";
+      $("manualSubjectType").value = "person";
+      $("manualPurpose").value = "";
+      $("manualShots").value = "";
+      $("manualInternalNote").value = "";
+      renderDateButtons();
+    }
+
+    function openManualBooking() {
+      resetManualBookingForm();
+      $("manualModal").hidden = false;
+      document.body.style.overflow = "hidden";
+      window.setTimeout(() => $("manualCustomerSearch").focus(), 80);
+    }
+
+    function closeManualBooking() {
+      $("manualModal").hidden = true;
+      if ($("detailModal").hidden) document.body.style.overflow = "";
+    }
+
+    function useNewCustomer(prefill = "") {
+      state.manualSelectedCustomer = null;
+      state.manualCustomerDetail = null;
+      $("manualSelectedCustomer").hidden = true;
+      $("manualRegisteredSubjectField").hidden = true;
+      $("manualRegisteredSubject").innerHTML = '<option value="">新しい撮影対象者を入力</option>';
+      $("manualCustomerModeBadge").textContent = "新規顧客";
+      $("manualCustomerModeBadge").className = "badge amber";
+      const raw = String(prefill || $("manualCustomerSearch").value || "").trim();
+      if (raw) {
+        if (C.isLikelyJapanesePhone(raw) || C.normalizePhone(raw).length >= 10) {
+          $("manualPhone").value = raw;
+          $("manualCustomerName").focus();
+        } else {
+          $("manualCustomerName").value = raw;
+          $("manualPhone").focus();
+        }
+      }
+      updateManualPhoneNote();
+      $("manualCustomerResults").innerHTML =
+        '<div class="normalize-note">新しいお客様として入力します。同じ電話番号が登録済みの場合は、既存顧客へ安全に紐付きます。</div>';
+    }
+
+    function updateManualPhoneNote() {
+      const phone = $("manualPhone").value.trim();
+      const normalized = C.normalizePhone(phone);
+      $("manualPhoneNote").textContent = phone
+        ? `正規化：${normalized || "電話番号を確認してください"}`
+        : "ハイフン・空白・全角・+81形式に対応します。";
+    }
+
+    async function searchManualCustomers() {
+      const query = $("manualCustomerSearch").value.trim();
+      if (!query) {
+        toast("電話番号・氏名・顧客番号・撮影対象者名を入力してください。", "error");
+        return;
+      }
+      const result = await runBusy("既存顧客を検索しています...", () =>
+        C.adminGet(C.ENDPOINTS.ADMIN_SEARCH, { q: query, limit: 50 })
+      );
+      state.manualSearchRows = result.customers || [];
+      $("manualNormalizeNote").textContent = result.normalized_phone
+        ? `電話番号正規化：${result.normalized_phone}｜検索結果 ${state.manualSearchRows.length}名`
+        : `検索結果 ${state.manualSearchRows.length}名`;
+      renderManualCustomerResults(query);
+    }
+
+    function renderManualCustomerResults(query) {
+      const rows = state.manualSearchRows;
+      if (!rows.length) {
+        $("manualCustomerResults").innerHTML = `
+          <div class="normalize-note">一致する顧客は見つかりませんでした。</div>
+          <button class="btn btn-primary btn-wide" type="button" data-use-new-customer="${esc(query)}">「${esc(query)}」を新しいお客様として入力</button>
+        `;
+        return;
+      }
+      $("manualCustomerResults").innerHTML = rows.map((row) => `
+        <article class="customer-result">
+          <div>
+            <h5>${esc(row.customer_name)} 様</h5>
+            <p>${esc(row.customer_no)}｜${esc(C.formatPhone(row.phone))}</p>
+            <div class="badges">
+              ${row.subject_names ? badge(`撮影対象：${row.subject_names}`, "green") : ""}
+              ${badge(`撮影 ${row.total_shoot_count || 0}回`, "blue")}
+              ${row.last_reservation_start_at ? badge(`最終 ${C.formatDate(row.last_reservation_start_at)}`, "") : badge("予約履歴なし", "")}
+            </div>
+          </div>
+          <button class="btn btn-primary btn-small" type="button" data-select-customer="${esc(row.customer_id)}">この顧客を選択</button>
+        </article>
+      `).join("");
+    }
+
+    async function selectManualCustomer(customerId) {
+      const row = state.manualSearchRows.find((item) => item.customer_id === customerId);
+      if (!row) return;
+      const detail = await runBusy("顧客情報を読み込んでいます...", () =>
+        C.adminGet(C.ENDPOINTS.ADMIN_CUSTOMER_DETAIL, { customer_id: customerId })
+      );
+      state.manualSelectedCustomer = row;
+      state.manualCustomerDetail = detail;
+      $("manualCustomerName").value = detail.customer?.customer_name || row.customer_name || "";
+      $("manualPhone").value = detail.customer?.phone || row.phone || "";
+      $("manualCustomerModeBadge").textContent = "既存顧客";
+      $("manualCustomerModeBadge").className = "badge green";
+      updateManualPhoneNote();
+      renderSelectedCustomer();
+      populateRegisteredSubjects();
+      $("manualCustomerResults").innerHTML = "";
+    }
+
+    function renderSelectedCustomer() {
+      const row = state.manualSelectedCustomer || {};
+      const detail = state.manualCustomerDetail || {};
+      const customer = detail.customer || {};
+      const reservations = detail.reservations || [];
+      const latestReservation = reservations[0] || {};
+      const record = detail.latest_shooting_record || {};
+      const latestChart = record.shooting_note || record.customer_condition_note || record.favorite_shots_note || "カルテ未登録";
+      const rows = [
+        ["顧客番号", customer.customer_no || row.customer_no || "-"],
+        ["電話番号", C.formatPhone(customer.phone || row.phone || "")],
+        ["撮影回数", `${customer.total_shoot_count ?? row.total_shoot_count ?? 0}回`],
+        ["最終撮影・予約", row.last_reservation_start_at ? C.formatDate(row.last_reservation_start_at, { weekday: "short" }) : "履歴なし"],
+        ["前回担当", row.last_staff_name || latestReservation.staff_name_snapshot || "未登録"],
+        ["予約履歴", `${reservations.length}件`],
+        ["最新撮影カルテ", latestChart],
+        ["アレルギー・配慮事項", customer.allergies_and_care || "なし"],
+        ["内部注意事項", customer.internal_note || "なし"],
+      ];
+      $("manualSelectedCustomer").hidden = false;
+      $("manualSelectedCustomer").innerHTML = `
+        <div class="selected-customer-head">
+          <div>
+            <h5>${esc(customer.customer_name || row.customer_name || "")} 様を選択中</h5>
+            <p>過去情報を確認してから予約内容を入力してください。</p>
+          </div>
+          <button class="btn btn-neutral btn-small" type="button" data-change-customer>顧客を選び直す</button>
+        </div>
+        <div class="detail-grid">${rows.map(detailBox).join("")}</div>
+      `;
+    }
+
+    function populateRegisteredSubjects() {
+      const subjects = state.manualCustomerDetail?.subjects || [];
+      const select = $("manualRegisteredSubject");
+      select.innerHTML = '<option value="">新しい撮影対象者を入力</option>';
+      subjects.filter((subject) => subject.is_active !== false).forEach((subject) => {
+        const option = document.createElement("option");
+        option.value = subject.id;
+        option.textContent = `${subject.subject_name}（${C.getLabel("subjectType", subject.subject_type)}）`;
+        option.dataset.name = subject.subject_name;
+        option.dataset.type = subject.subject_type;
+        select.appendChild(option);
+      });
+      $("manualRegisteredSubjectField").hidden = subjects.length === 0;
+      if (subjects.length === 1) {
+        select.value = subjects[0].id;
+        applyRegisteredSubject();
+      }
+    }
+
+    function applyRegisteredSubject() {
+      const option = $("manualRegisteredSubject").selectedOptions[0];
+      if (option?.value) {
+        $("manualSubjectName").value = option.dataset.name || "";
+        $("manualSubjectType").value = option.dataset.type || "person";
+      }
+    }
+
+    async function loadManualSlots() {
+      const planId = $("manualPlan").value;
+      const date = $("manualDate").value;
+      const staffId = $("manualStaff").value;
+      state.manualSelectedSlot = null;
+      state.manualAvailability = null;
+      $("manualSelectedSlotMeta").textContent = "空き時間を選択してください。";
+      if (!planId || !date) {
+        $("manualSlots").innerHTML = '<div class="empty-lane">プランと撮影日を選択してください。</div>';
+        return;
+      }
+      try {
+        const result = await runBusy("空き時間を確認しています...", () =>
+          C.apiGet(C.ENDPOINTS.PUBLIC_AVAILABILITY, {
+            plan_id: planId,
+            date,
+            staff_id: staffId || undefined,
+          })
+        );
+        state.manualAvailability = result;
+        const slots = (result.slots || []).filter((slot) => slot.available);
+        $("manualSlots").innerHTML = slots.length
+          ? slots.map((slot, index) => `
+              <button class="slot-btn" type="button" data-slot-index="${index}">
+                ${esc(slot.time)}
+              </button>
+            `).join("")
+          : `<div class="empty-lane">${esc(result.reason || "空いている時間がありません。")}</div>`;
+      } catch {
+        $("manualSlots").innerHTML = '<div class="empty-lane">空き時間を取得できませんでした。</div>';
+      }
+    }
+
+    function selectManualSlot(index) {
+      const availableSlots = (state.manualAvailability?.slots || []).filter((slot) => slot.available);
+      const slot = availableSlots[Number(index)];
+      if (!slot) return;
+      state.manualSelectedSlot = slot;
+      $("manualSlots").querySelectorAll(".slot-btn").forEach((button) => {
+        button.classList.toggle("selected", Number(button.dataset.slotIndex) === Number(index));
+      });
+      const staffText = slot.available_staff?.length
+        ? slot.available_staff.map((staff) => staff.staff_name).join("、")
+        : "担当者は登録時に確認";
+      $("manualSelectedSlotMeta").textContent =
+        `選択：${formatDateButton($("manualDate").value)} ${slot.time}｜担当可能：${staffText}`;
+    }
+
+    async function submitManualBooking() {
+      const customerNameValue = $("manualCustomerName").value.trim();
+      const phone = $("manualPhone").value.trim();
+      const normalizedPhone = C.normalizePhone(phone);
+      const planId = $("manualPlan").value;
+      if (!customerNameValue) return toast("お客様名を入力してください。", "error");
+      if (!C.isLikelyJapanesePhone(phone)) return toast("電話番号を確認してください。", "error");
+      if (!planId) return toast("撮影プランを選択してください。", "error");
+      if (!state.manualSelectedSlot) return toast("空き時間を選択してください。", "error");
+
+      const registeredSubjectId = $("manualRegisteredSubject").value;
+      const subjectName = $("manualSubjectName").value.trim();
+      const subjects = registeredSubjectId
+        ? [{ id: registeredSubjectId }]
+        : subjectName
+          ? [{ subject_name: subjectName, subject_type: $("manualSubjectType").value }]
+          : [];
+
+      const payload = {
+        customer_name: customerNameValue,
+        phone,
+        reservation_source: $("manualSource").value,
+        plan_id: planId,
+        assigned_staff_id: $("manualStaff").value || null,
+        resource_id: $("manualResource").value || null,
+        start_at: state.manualSelectedSlot.start_at,
+        participant_count: Number($("manualParticipant").value || 1),
+        reservation_status: "confirmed",
+        shooting_purpose: $("manualPurpose").value.trim(),
+        desired_shots: $("manualShots").value.trim(),
+        internal_note: $("manualInternalNote").value.trim(),
+        subjects,
+        is_demo: C.isDemoMode(),
+        metadata: { normalized_phone: normalizedPhone, screen: "owner-ipad.html", version: VERSION },
+      };
+
+      const submitButton = $("manualSubmitBtn");
+      const originalText = submitButton.textContent;
+      submitButton.disabled = true;
+      submitButton.textContent = "予約登録中...";
+      try {
+        const result = await runBusy("電話・店頭予約を登録しています...", () =>
+          C.adminPost(C.ENDPOINTS.ADMIN_MANUAL_RESERVATION, payload)
+        );
+        const reservation = result.reservation || {};
+        const reservationDate = reservation.start_at
+          ? C.toDateInputValue(reservation.start_at)
+          : $("manualDate").value;
+        $("workDate").value = reservationDate;
+        renderDateButtons();
+        closeManualBooking();
+        toast(`予約を登録しました：${reservation.reservation_no || "登録完了"}`);
+        await loadReservations({ silent: true });
+        if (reservation.id) await openDetail(reservation.id);
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
+      }
     }
 
     async function loadReservations(options = {}) {
@@ -933,6 +1588,7 @@
 
     function renderAll() {
       const date = $("workDate").value || C.todayYmd();
+      renderDateButtons();
       $("pageTitle").textContent = `${C.formatDate(date, { weekday: "short" })}の受付状況`;
       renderSummary();
       renderLanes();
@@ -1261,7 +1917,7 @@
 
     function openPage(page) {
       window.open(
-        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10" } : {}),
+        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R1" } : {}),
         "_blank",
         "noopener"
       );
@@ -1270,7 +1926,7 @@
     function startAutoRefresh() {
       stopAutoRefresh();
       state.refreshTimer = window.setInterval(() => {
-        if (!document.hidden && state.verified && $("detailModal").hidden) {
+        if (!document.hidden && state.verified && $("detailModal").hidden && $("manualModal").hidden) {
           loadReservations({ silent: true });
         }
       }, 60000);
@@ -1295,14 +1951,49 @@
       });
 
       $("clearCodeBtn").addEventListener("click", clearAdminCode);
+      $("manualBookingTopBtn").addEventListener("click", openManualBooking);
+      $("manualBookingToolbarBtn").addEventListener("click", openManualBooking);
       $("refreshTopBtn").addEventListener("click", () => loadReservations());
       $("loadBtn").addEventListener("click", () => loadReservations());
       $("todayBtn").addEventListener("click", () => {
         $("workDate").value = C.todayYmd();
+        renderDateButtons();
         loadReservations();
       });
-      $("workDate").addEventListener("change", () => loadReservations());
+      $("workDateDisplay").addEventListener("click", () => openNativeDatePicker($("workDate")));
+      $("workDate").addEventListener("change", () => {
+        renderDateButtons();
+        loadReservations();
+      });
       $("searchInput").addEventListener("input", C.debounce(renderSearch, 180));
+
+      $("manualCustomerSearchBtn").addEventListener("click", () => searchManualCustomers().catch(() => {}));
+      $("manualCustomerSearch").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") searchManualCustomers().catch(() => {});
+      });
+      $("manualSearchClearBtn").addEventListener("click", () => {
+        $("manualCustomerSearch").value = "";
+        $("manualCustomerResults").innerHTML = "";
+        $("manualNormalizeNote").textContent = "検索キーワードを入力してください。";
+      });
+      $("manualNewCustomerBtn").addEventListener("click", () => useNewCustomer());
+      $("manualPhone").addEventListener("input", updateManualPhoneNote);
+      $("manualPlan").addEventListener("change", () => {
+        const plan = (state.settings?.plans || []).find((row) => row.id === $("manualPlan").value);
+        updateManualStaffOptions();
+        if (plan?.default_resource_id) $("manualResource").value = plan.default_resource_id;
+        loadManualSlots().catch(() => {});
+      });
+      $("manualStaff").addEventListener("change", () => loadManualSlots().catch(() => {}));
+      $("manualDateDisplay").addEventListener("click", () => openNativeDatePicker($("manualDate")));
+      $("manualDate").addEventListener("change", () => {
+        renderDateButtons();
+        loadManualSlots().catch(() => {});
+      });
+      $("manualRegisteredSubject").addEventListener("change", applyRegisteredSubject);
+      $("manualSubmitBtn").addEventListener("click", () => submitManualBooking().catch(() => {}));
+      $("manualCloseX").addEventListener("click", closeManualBooking);
+      $("manualCloseBtn").addEventListener("click", closeManualBooking);
 
       $("ownerOpenBtn").addEventListener("click", () => openPage(C.PAGES.OWNER));
       $("staffOpenBtn").addEventListener("click", () => openPage(C.PAGES.STAFF));
@@ -1326,6 +2017,31 @@
         }
       });
 
+      $("manualCustomerResults").addEventListener("click", (event) => {
+        const selectButton = event.target.closest("[data-select-customer]");
+        if (selectButton) selectManualCustomer(selectButton.dataset.selectCustomer).catch(() => {});
+        const newButton = event.target.closest("[data-use-new-customer]");
+        if (newButton) useNewCustomer(newButton.dataset.useNewCustomer);
+      });
+      $("manualSelectedCustomer").addEventListener("click", (event) => {
+        if (event.target.closest("[data-change-customer]")) {
+          state.manualSelectedCustomer = null;
+          state.manualCustomerDetail = null;
+          $("manualSelectedCustomer").hidden = true;
+          $("manualRegisteredSubjectField").hidden = true;
+          $("manualCustomerModeBadge").textContent = "新規顧客";
+          $("manualCustomerModeBadge").className = "badge amber";
+          $("manualCustomerSearch").focus();
+        }
+      });
+      $("manualSlots").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-slot-index]");
+        if (button) selectManualSlot(button.dataset.slotIndex);
+      });
+      $("manualModal").addEventListener("click", (event) => {
+        if (event.target === $("manualModal")) closeManualBooking();
+      });
+
       $("statusButtons").addEventListener("click", (event) => {
         const button = event.target.closest("[data-choose-status]");
         if (!button) return;
@@ -1346,7 +2062,9 @@
       });
 
       document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && !$("detailModal").hidden) closeModal();
+        if (event.key !== "Escape") return;
+        if (!$("manualModal").hidden) closeManualBooking();
+        else if (!$("detailModal").hidden) closeModal();
       });
 
       document.addEventListener("visibilitychange", () => {
