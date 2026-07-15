@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#075f55" />
   <meta name="description" content="DPROフォトスタジオ 受付iPad画面" />
   <title>DPROフォトスタジオ｜受付iPad</title>
-  <!-- Version: STUDIO-10-R1-OWNER-IPAD-20260715 -->
+  <!-- Version: STUDIO-10-R2-OWNER-IPAD-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -469,6 +469,32 @@
       background: #edf7f4;
       font-size: .79rem;
       font-weight: 780;
+    }
+
+    .subject-compatibility {
+      margin-top: 7px;
+      padding: 9px 11px;
+      border: 1px solid #bdd8d2;
+      border-radius: 10px;
+      color: #365c56;
+      background: #edf8f5;
+      font-size: .82rem;
+      font-weight: 800;
+    }
+    .subject-compatibility.ok {
+      color: #086456;
+      border-color: #a8d9cd;
+      background: #e7f7f1;
+    }
+    .subject-compatibility.warning {
+      color: #8d5b07;
+      border-color: #e9ca83;
+      background: #fff4d9;
+    }
+    .subject-compatibility.error {
+      color: #9d3f38;
+      border-color: #edb7b1;
+      background: #fff0ed;
     }
 
     .customer-results { display: grid; gap: 8px; margin-top: 10px; }
@@ -946,6 +972,11 @@
               </select>
             </div>
             <div class="field span-2">
+              <div id="manualSubjectCompatibility" class="subject-compatibility">
+                撮影プランを選ぶと、選択できる撮影対象種別を自動で絞り込みます。
+              </div>
+            </div>
+            <div class="field span-2">
               <label for="manualPurpose">撮影目的</label>
               <input id="manualPurpose" type="text" placeholder="例：七五三の記念撮影" />
             </div>
@@ -1024,7 +1055,7 @@
       return;
     }
 
-    const VERSION = "STUDIO-10-R1-OWNER-IPAD-20260715";
+    const VERSION = "STUDIO-10-R2-OWNER-IPAD-20260715";
     const $ = (id) => document.getElementById(id);
     const esc = (value) => C.escapeHtml(value ?? "");
 
@@ -1048,6 +1079,54 @@
       shooting: ["shooting", "selecting_on_site"],
       done: ["checkout_guidance", "completed"],
     };
+
+    const SUBJECT_TYPE_OPTIONS = Object.freeze([
+      { value: "person", label: "人物" },
+      { value: "child", label: "子ども" },
+      { value: "baby", label: "乳幼児" },
+      { value: "pet", label: "ペット" },
+      { value: "product", label: "商品" },
+      { value: "group", label: "家族・団体" },
+      { value: "other", label: "その他" },
+    ]);
+
+    const PLAN_SUBJECT_RULES = Object.freeze({
+      "753": {
+        allowed: ["child", "baby"],
+        defaultType: "child",
+        description: "七五三撮影では、主な撮影対象を「子ども」または「乳幼児」から選択してください。",
+      },
+      FAMILY: {
+        allowed: ["group", "person", "child", "baby", "pet"],
+        defaultType: "group",
+        description: "家族写真では、家族・人物・子ども・乳幼児・ペットを撮影対象にできます。",
+      },
+      PROFILE: {
+        allowed: ["person"],
+        defaultType: "person",
+        description: "プロフィール写真の主な撮影対象は「人物」です。",
+      },
+      IDPHOTO: {
+        allowed: ["person"],
+        defaultType: "person",
+        description: "証明写真の主な撮影対象は「人物」です。",
+      },
+      ADULT: {
+        allowed: ["person"],
+        defaultType: "person",
+        description: "成人式前撮りの主な撮影対象は「人物」です。",
+      },
+      MATERNITY: {
+        allowed: ["person"],
+        defaultType: "person",
+        description: "マタニティフォトの主な撮影対象は「人物」です。",
+      },
+      PET: {
+        allowed: ["pet"],
+        defaultType: "pet",
+        description: "ペット撮影では、主な撮影対象を「ペット」にしてください。",
+      },
+    });
 
     const messages = {
       waiting: {
@@ -1292,8 +1371,11 @@
       $("manualRegisteredSubjectField").hidden = true;
       $("manualRegisteredSubject").innerHTML = '<option value="">新しい撮影対象者を入力</option>';
       $("manualSubjectName").value = "";
-      $("manualSubjectType").value = "person";
+      $("manualSubjectName").readOnly = false;
+      $("manualSubjectType").disabled = false;
+      setSubjectTypeOptions(null, "person");
       $("manualPurpose").value = "";
+      renderSubjectCompatibility();
       $("manualShots").value = "";
       $("manualInternalNote").value = "";
       renderDateButtons();
@@ -1317,6 +1399,9 @@
       $("manualSelectedCustomer").hidden = true;
       $("manualRegisteredSubjectField").hidden = true;
       $("manualRegisteredSubject").innerHTML = '<option value="">新しい撮影対象者を入力</option>';
+      $("manualRegisteredSubject").value = "";
+      $("manualSubjectName").readOnly = false;
+      $("manualSubjectType").disabled = false;
       $("manualCustomerModeBadge").textContent = "新規顧客";
       $("manualCustomerModeBadge").className = "badge amber";
       const raw = String(prefill || $("manualCustomerSearch").value || "").trim();
@@ -1332,6 +1417,7 @@
       updateManualPhoneNote();
       $("manualCustomerResults").innerHTML =
         '<div class="normalize-note">新しいお客様として入力します。同じ電話番号が登録済みの場合は、既存顧客へ安全に紐付きます。</div>';
+      refreshManualSubjectRules({ preserveSelection: false });
     }
 
     function updateManualPhoneNote() {
@@ -1397,7 +1483,7 @@
       $("manualCustomerModeBadge").className = "badge green";
       updateManualPhoneNote();
       renderSelectedCustomer();
-      populateRegisteredSubjects();
+      refreshManualSubjectRules({ preserveSelection: false });
       $("manualCustomerResults").innerHTML = "";
     }
 
@@ -1433,11 +1519,177 @@
       `;
     }
 
-    function populateRegisteredSubjects() {
-      const subjects = state.manualCustomerDetail?.subjects || [];
+    function selectedManualPlan() {
+      return (state.settings?.plans || []).find(
+        (plan) => plan.id === $("manualPlan").value
+      ) || null;
+    }
+
+    function inferredPlanSubjectRule(plan) {
+      if (!plan) return null;
+      const code = String(plan.plan_code || "").trim().toUpperCase();
+      if (PLAN_SUBJECT_RULES[code]) return PLAN_SUBJECT_RULES[code];
+
+      const name = String(plan.plan_name || "");
+      if (name.includes("ペット")) return PLAN_SUBJECT_RULES.PET;
+      if (name.includes("七五三")) return PLAN_SUBJECT_RULES["753"];
+      if (name.includes("マタニティ")) return PLAN_SUBJECT_RULES.MATERNITY;
+      if (name.includes("証明")) return PLAN_SUBJECT_RULES.IDPHOTO;
+      if (name.includes("プロフィール")) return PLAN_SUBJECT_RULES.PROFILE;
+      if (name.includes("成人")) return PLAN_SUBJECT_RULES.ADULT;
+      if (name.includes("家族")) return PLAN_SUBJECT_RULES.FAMILY;
+      return null;
+    }
+
+    function manualSubjectSelection() {
+      const registeredOption = $("manualRegisteredSubject").selectedOptions[0];
+      if (registeredOption?.value) {
+        return {
+          registered: true,
+          id: registeredOption.value,
+          name: registeredOption.dataset.name || "",
+          type: registeredOption.dataset.type || "",
+        };
+      }
+      return {
+        registered: false,
+        id: "",
+        name: $("manualSubjectName").value.trim(),
+        type: $("manualSubjectType").value,
+      };
+    }
+
+    function subjectTypeLabel(type) {
+      return SUBJECT_TYPE_OPTIONS.find((item) => item.value === type)?.label
+        || C.getLabel("subjectType", type)
+        || type;
+    }
+
+    function setSubjectTypeOptions(allowedTypes, preferredType = "") {
+      const select = $("manualSubjectType");
+      const current = preferredType || select.value;
+      const allowed = Array.isArray(allowedTypes) && allowedTypes.length
+        ? allowedTypes
+        : SUBJECT_TYPE_OPTIONS.map((item) => item.value);
+
+      select.innerHTML = SUBJECT_TYPE_OPTIONS
+        .filter((item) => allowed.includes(item.value))
+        .map((item) => `<option value="${esc(item.value)}">${esc(item.label)}</option>`)
+        .join("");
+
+      if (allowed.includes(current)) select.value = current;
+      else select.value = allowed[0] || "person";
+    }
+
+    function renderSubjectCompatibility() {
+      const note = $("manualSubjectCompatibility");
+      const plan = selectedManualPlan();
+      const rule = inferredPlanSubjectRule(plan);
+      const subject = manualSubjectSelection();
+
+      note.className = "subject-compatibility";
+
+      if (!plan) {
+        note.textContent = "撮影プランを選ぶと、選択できる撮影対象種別を自動で絞り込みます。";
+        return { ok: true, reason: "plan_not_selected" };
+      }
+
+      if (!rule) {
+        note.classList.add("warning");
+        note.textContent =
+          "この撮影プランには専用の対象種別制限がありません。撮影内容に合う種別を確認してください。";
+        return { ok: true, reason: "no_rule" };
+      }
+
+      if (!subject.name && !subject.id) {
+        note.classList.add("warning");
+        note.textContent = `${rule.description} 主な撮影対象者を入力または選択してください。`;
+        return { ok: false, reason: "subject_missing", rule };
+      }
+
+      if (!rule.allowed.includes(subject.type)) {
+        note.classList.add("error");
+        note.textContent =
+          `撮影プラン「${plan.plan_name}」と撮影対象「${subjectTypeLabel(subject.type)}」が一致していません。${rule.description}`;
+        return { ok: false, reason: "type_mismatch", rule, subject };
+      }
+
+      note.classList.add("ok");
+      note.textContent =
+        `整合性OK：${plan.plan_name} ／ ${subject.name || "撮影対象"}（${subjectTypeLabel(subject.type)}）`;
+      return { ok: true, reason: "matched", rule, subject };
+    }
+
+    function refreshManualSubjectRules(options = {}) {
+      const plan = selectedManualPlan();
+      const rule = inferredPlanSubjectRule(plan);
+      const currentSubject = manualSubjectSelection();
+      const allowed = rule?.allowed || SUBJECT_TYPE_OPTIONS.map((item) => item.value);
+      const compatibleCurrent = currentSubject.type && allowed.includes(currentSubject.type);
+
+      if (currentSubject.registered && !compatibleCurrent) {
+        $("manualRegisteredSubject").value = "";
+        $("manualSubjectName").value = "";
+      }
+
+      setSubjectTypeOptions(
+        allowed,
+        compatibleCurrent ? currentSubject.type : (rule?.defaultType || currentSubject.type)
+      );
+
+      populateRegisteredSubjects({
+        preserveSelection: options.preserveSelection !== false,
+        allowedTypes: allowed,
+      });
+
+      const selectedRegistered = $("manualRegisteredSubject").selectedOptions[0];
+      if (selectedRegistered?.value) {
+        applyRegisteredSubject();
+      } else if (!compatibleCurrent && rule?.defaultType) {
+        $("manualSubjectType").value = rule.defaultType;
+      }
+
+      renderSubjectCompatibility();
+    }
+
+    function validateManualSubjectCompatibility() {
+      const plan = selectedManualPlan();
+      const rule = inferredPlanSubjectRule(plan);
+      const subject = manualSubjectSelection();
+
+      if (!subject.name && !subject.id) {
+        return {
+          ok: false,
+          message: "主な撮影対象者を入力するか、登録済みの撮影対象者を選択してください。",
+        };
+      }
+
+      if (rule && !rule.allowed.includes(subject.type)) {
+        return {
+          ok: false,
+          message:
+            `撮影プラン「${plan?.plan_name || ""}」と撮影対象種別「${subjectTypeLabel(subject.type)}」が一致していません。${rule.description}`,
+        };
+      }
+
+      return { ok: true, subject, rule };
+    }
+
+    function populateRegisteredSubjects(options = {}) {
+      const allSubjects = (state.manualCustomerDetail?.subjects || [])
+        .filter((subject) => subject.is_active !== false);
+      const allowedTypes = Array.isArray(options.allowedTypes) && options.allowedTypes.length
+        ? options.allowedTypes
+        : null;
+      const subjects = allowedTypes
+        ? allSubjects.filter((subject) => allowedTypes.includes(subject.subject_type))
+        : allSubjects;
+
       const select = $("manualRegisteredSubject");
+      const previous = options.preserveSelection === false ? "" : select.value;
       select.innerHTML = '<option value="">新しい撮影対象者を入力</option>';
-      subjects.filter((subject) => subject.is_active !== false).forEach((subject) => {
+
+      subjects.forEach((subject) => {
         const option = document.createElement("option");
         option.value = subject.id;
         option.textContent = `${subject.subject_name}（${C.getLabel("subjectType", subject.subject_type)}）`;
@@ -1445,10 +1697,25 @@
         option.dataset.type = subject.subject_type;
         select.appendChild(option);
       });
-      $("manualRegisteredSubjectField").hidden = subjects.length === 0;
-      if (subjects.length === 1) {
+
+      $("manualRegisteredSubjectField").hidden = allSubjects.length === 0;
+
+      if (previous && subjects.some((subject) => subject.id === previous)) {
+        select.value = previous;
+        applyRegisteredSubject();
+      } else if (subjects.length === 1) {
         select.value = subjects[0].id;
         applyRegisteredSubject();
+      } else {
+        select.value = "";
+      }
+
+      if (allSubjects.length > 0 && subjects.length === 0 && allowedTypes) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "このプランに一致する登録済み対象者はいません";
+        option.disabled = true;
+        select.appendChild(option);
       }
     }
 
@@ -1456,8 +1723,17 @@
       const option = $("manualRegisteredSubject").selectedOptions[0];
       if (option?.value) {
         $("manualSubjectName").value = option.dataset.name || "";
-        $("manualSubjectType").value = option.dataset.type || "person";
+        const type = option.dataset.type || "person";
+        if ([...$("manualSubjectType").options].some((item) => item.value === type)) {
+          $("manualSubjectType").value = type;
+        }
+        $("manualSubjectName").readOnly = true;
+        $("manualSubjectType").disabled = true;
+      } else {
+        $("manualSubjectName").readOnly = false;
+        $("manualSubjectType").disabled = false;
       }
+      renderSubjectCompatibility();
     }
 
     async function loadManualSlots() {
@@ -1517,6 +1793,13 @@
       if (!C.isLikelyJapanesePhone(phone)) return toast("電話番号を確認してください。", "error");
       if (!planId) return toast("撮影プランを選択してください。", "error");
       if (!state.manualSelectedSlot) return toast("空き時間を選択してください。", "error");
+
+      const compatibility = validateManualSubjectCompatibility();
+      if (!compatibility.ok) {
+        renderSubjectCompatibility();
+        $("manualSubjectCompatibility").scrollIntoView({ behavior: "smooth", block: "center" });
+        return toast(compatibility.message, "error", 6200);
+      }
 
       const registeredSubjectId = $("manualRegisteredSubject").value;
       const subjectName = $("manualSubjectName").value.trim();
@@ -1917,7 +2200,7 @@
 
     function openPage(page) {
       window.open(
-        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R1" } : {}),
+        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R2" } : {}),
         "_blank",
         "noopener"
       );
@@ -1982,6 +2265,8 @@
         const plan = (state.settings?.plans || []).find((row) => row.id === $("manualPlan").value);
         updateManualStaffOptions();
         if (plan?.default_resource_id) $("manualResource").value = plan.default_resource_id;
+        state.manualSelectedSlot = null;
+        refreshManualSubjectRules({ preserveSelection: true });
         loadManualSlots().catch(() => {});
       });
       $("manualStaff").addEventListener("change", () => loadManualSlots().catch(() => {}));
@@ -1990,7 +2275,19 @@
         renderDateButtons();
         loadManualSlots().catch(() => {});
       });
-      $("manualRegisteredSubject").addEventListener("change", applyRegisteredSubject);
+      $("manualRegisteredSubject").addEventListener("change", () => {
+        applyRegisteredSubject();
+        if (!$("manualRegisteredSubject").value) {
+          $("manualSubjectName").value = "";
+          const rule = inferredPlanSubjectRule(selectedManualPlan());
+          if (rule?.defaultType && [...$("manualSubjectType").options].some((item) => item.value === rule.defaultType)) {
+            $("manualSubjectType").value = rule.defaultType;
+          }
+          renderSubjectCompatibility();
+        }
+      });
+      $("manualSubjectName").addEventListener("input", renderSubjectCompatibility);
+      $("manualSubjectType").addEventListener("change", renderSubjectCompatibility);
       $("manualSubmitBtn").addEventListener("click", () => submitManualBooking().catch(() => {}));
       $("manualCloseX").addEventListener("click", closeManualBooking);
       $("manualCloseBtn").addEventListener("click", closeManualBooking);
@@ -2029,8 +2326,13 @@
           state.manualCustomerDetail = null;
           $("manualSelectedCustomer").hidden = true;
           $("manualRegisteredSubjectField").hidden = true;
+          $("manualRegisteredSubject").value = "";
+          $("manualSubjectName").value = "";
+          $("manualSubjectName").readOnly = false;
+          $("manualSubjectType").disabled = false;
           $("manualCustomerModeBadge").textContent = "新規顧客";
           $("manualCustomerModeBadge").className = "badge amber";
+          refreshManualSubjectRules({ preserveSelection: false });
           $("manualCustomerSearch").focus();
         }
       });
