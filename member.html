@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f5d53" />
   <meta name="description" content="DPROフォトスタジオ お客様マイページ。撮影予約、事前案内、写真セレクト、納品状況、再注文相談を確認できます。" />
   <title>DPROフォトスタジオ｜お客様マイページ</title>
-  <!-- Version: STUDIO-7-MEMBER-20260715 -->
+  <!-- Version: STUDIO-7-R1-MEMBER-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -153,6 +153,14 @@
     .btn-danger { color: var(--red); border-color: #efc5c5; background: var(--red-bg); }
     .btn-small { min-height: 38px; padding: 7px 12px; border-radius: 11px; font-size: 13px; }
     .btn-wide { width: 100%; }
+
+    .access-panel.resolved { padding: 14px 18px; }
+    .access-resolved {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .access-resolved[hidden] { display: none; }
 
     .profile-card {
       display: grid;
@@ -474,7 +482,7 @@
     </div>
 
     <section id="accessSection" class="card access-panel">
-      <div class="card-title-row">
+      <div id="accessIntro" class="card-title-row">
         <div>
           <h2>マイページを開く</h2>
           <p class="subtext">LINEのメニューまたは予約完了画面から開くと、自動で予約情報を表示します。</p>
@@ -487,6 +495,9 @@
           <span class="help">通常はURLに自動設定されるため、入力は不要です。</span>
         </label>
         <button id="openMemberButton" class="btn btn-primary btn-wide" type="button">予約情報を表示する</button>
+      </div>
+      <div id="accessResolved" class="access-resolved" hidden>
+        <button id="anotherReservationButton" class="btn btn-neutral btn-small" type="button">別の予約を確認する</button>
       </div>
       <div id="demoSwitcher" class="demo-switcher">
         <strong>営業デモ表示を切り替える</strong>
@@ -606,7 +617,7 @@
     (() => {
       "use strict";
 
-      const VERSION = "STUDIO-7-MEMBER-20260715";
+      const VERSION = "STUDIO-7-R1-MEMBER-20260715";
       const C = window.DPRO_STUDIO;
       if (!C) {
         document.body.innerHTML = '<main style="padding:24px;font-family:sans-serif"><h1>共通設定を読み込めませんでした</h1><p>config.jsの配置を確認してください。</p></main>';
@@ -631,9 +642,12 @@
 
       const els = {
         accessSection: $("#accessSection"),
+        accessIntro: $("#accessIntro"),
         accessMissing: $("#accessMissing"),
+        accessResolved: $("#accessResolved"),
         publicTokenInput: $("#publicTokenInput"),
         openMemberButton: $("#openMemberButton"),
+        anotherReservationButton: $("#anotherReservationButton"),
         demoSwitcher: $("#demoSwitcher"),
         memberArea: $("#memberArea"),
         profileName: $("#profileName"),
@@ -1103,10 +1117,36 @@
         if (state.lookup.public_token) C.setStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN, state.lookup.public_token);
       }
 
+      function setAccessMode(mode) {
+        const resolved = mode === "resolved";
+        els.accessIntro.hidden = resolved;
+        els.accessMissing.hidden = resolved;
+        els.accessResolved.hidden = !resolved;
+        els.accessSection.classList.toggle("resolved", resolved);
+      }
+
+      function resetMemberLookup() {
+        state.lookup = { line_user_id: "", public_token: "" };
+        state.customer = null;
+        state.profile = null;
+        state.reservations = [];
+        state.selectedReservationId = "";
+        C.removeStoredValue(C.STORAGE_KEYS.LINE_USER_ID);
+        C.removeStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN);
+        els.publicTokenInput.value = "";
+        els.memberArea.hidden = true;
+        setAccessMode("entry");
+
+        const url = new URL(location.href);
+        ["line_user_id", "public_token", "reservation_no", "section"].forEach((key) => url.searchParams.delete(key));
+        history.replaceState(null, "", url);
+        els.accessSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
       async function loadMember(options = {}) {
         if (!state.lookup.line_user_id && !state.lookup.public_token) {
           els.memberArea.hidden = true;
-          els.accessMissing.hidden = false;
+          setAccessMode("entry");
           return;
         }
         try {
@@ -1130,13 +1170,13 @@
             if (row) state.selectedReservationId = row.id;
           }
           els.memberArea.hidden = false;
-          els.accessMissing.hidden = true;
+          setAccessMode("resolved");
           renderAll();
           const section = url.searchParams.get("section") || "reservations";
           setSection(section);
         } catch (error) {
           els.memberArea.hidden = true;
-          els.accessMissing.hidden = false;
+          setAccessMode("entry");
           showToast(errorMessage(error), "error");
         } finally {
           if (!options.silent) setLoading(false);
@@ -1162,6 +1202,7 @@
           state.lookup = { line_user_id: "", public_token: token };
           await loadMember();
         });
+        els.anotherReservationButton.addEventListener("click", resetMemberLookup);
         els.refreshButton.addEventListener("click", async () => {
           const original = els.refreshButton.textContent;
           els.refreshButton.disabled = true;
