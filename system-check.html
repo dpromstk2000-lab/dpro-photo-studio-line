@@ -635,7 +635,7 @@
           <p class="eyebrow">DPRO PHOTO STUDIO LINE</p>
           <h1>営業前システムチェック</h1>
         </div>
-        <span class="version-badge">STEP STUDIO-10-R9</span>
+        <span class="version-badge">STEP STUDIO-11</span>
       </div>
       <p class="hero-copy">
         Worker・Supabase・共通設定・管理認証・営業デモデータを一画面で確認します。
@@ -758,7 +758,7 @@
     </section>
 
     <p class="footer">
-      DPRO 写真館・フォトスタジオ LINE ／ STUDIO-10-R9-SYSTEM-CHECK-20260715<br>
+      DPRO 写真館・フォトスタジオ LINE ／ STUDIO-11-SYSTEM-CHECK-20260715<br>
       写真データ自体は保存せず、外部ギャラリーURLと業務進捗を管理する設計です。
     </p>
   </main>
@@ -770,10 +770,17 @@
     (function initializeSystemCheck() {
       "use strict";
 
-      const PAGE_VERSION = "STUDIO-10-R9-SYSTEM-CHECK-20260715";
+      const PAGE_VERSION = "STUDIO-11-SYSTEM-CHECK-20260715";
       const EXPECTED_CONFIG_VERSION = "STUDIO-4-CONFIG-20260714";
       const EXPECTED_WORKER_VERSION = "STUDIO-10-R9-WORKER-SUBJECT-DAY-DUPLICATE-GUARD-20260715";
       const MANUAL_STORAGE_KEY = "dpro_studio_system_check_manual_v2";
+      const EXPECTED_SCREEN_VERSIONS = Object.freeze({
+        "index.html": "STUDIO-11-INDEX-FINAL-INTEGRATION-20260715",
+        "member.html": "STUDIO-11-MEMBER-FINAL-INTEGRATION-20260715",
+        "owner.html": "STUDIO-11-OWNER-FINAL-INTEGRATION-20260715",
+        "staff.html": "STUDIO-11-STAFF-FINAL-INTEGRATION-20260715",
+        "owner-ipad.html": "STUDIO-11-OWNER-IPAD-FINAL-INTEGRATION-20260715",
+      });
 
       const checkDefinitions = [
         { id: "config", title: "共通設定 config.js", description: "共通URL・API・表示ラベル・通信関数の読込を確認します。" },
@@ -781,6 +788,7 @@
         { id: "publicConfig", title: "公開店舗設定", description: "30分枠・公開カメラマン2名・全体スタッフ3名・撮影スペースを確認します。" },
         { id: "plans", title: "撮影プラン", description: "営業デモに必要な撮影プランが取得できるか確認します。" },
         { id: "routes", title: "APIルート", description: "公開・管理・スタッフ・iPad用APIが公開されているか確認します。" },
+        { id: "screens", title: "全画面バージョン・配置", description: "予約・マイページ・PC管理・スタッフ・受付iPadの最新ファイルを確認します。" },
         { id: "admin", title: "管理コード認証", description: "管理APIへ安全に接続できるか確認します。" },
         { id: "phone", title: "電話番号正規化", description: "ハイフン・空白・全角・+81形式を同じ番号として判定します。" },
         { id: "guards", title: "予約・写真データ安全設計", description: "30分枠、担当者・撮影スペース・同一撮影対象者の同日重複防止、外部ギャラリー運用を確認します。" },
@@ -792,7 +800,7 @@
         { id: "auto", title: "全自動チェックを実行した", note: "赤いエラーがないことを確認" },
         { id: "demo", title: "営業デモを完全初期化した", note: "顧客4名・デモ予約4件・未完了タスク4件" },
         { id: "customer", title: "実顧客情報が表示されていない", note: "営業ではPHOTO-DEMOの顧客だけを使用" },
-        { id: "links", title: "使用する画面URLを開いた", note: "後続STEPで画面追加後に確認" },
+        { id: "links", title: "全5画面のURLを開いた", note: "予約・マイページ・PC管理・スタッフ・受付iPad" },
         { id: "display", title: "PC・タブレットの表示を確認した", note: "ブラウザ倍率100%を推奨" },
         { id: "talk", title: "営業デモの操作順を確認した", note: "予約→当日→セレクト→納品→再注文" },
       ];
@@ -1065,6 +1073,27 @@
         };
       }
 
+      async function checkScreens() {
+        const config = requireConfig();
+        const siteBase = String(config.SITE_BASE_URL || "").replace(/\/$/, "");
+        const results = await Promise.all(
+          Object.entries(EXPECTED_SCREEN_VERSIONS).map(async ([file, expected]) => {
+            const response = await fetch(`${siteBase}/${file}?screen_check=${Date.now()}`, { cache: "no-store" });
+            if (!response.ok) throw new Error(`${file}：HTTP ${response.status}`);
+            const text = await response.text();
+            return { file, expected, ok: text.includes(expected) };
+          })
+        );
+        const stale = results.filter((row) => !row.ok);
+        return {
+          state: stale.length ? "warn" : "ok",
+          detail: stale.length
+            ? `GitHub Pages反映待ちまたは旧版：${stale.map((row) => row.file).join("、")}`
+            : `全5画面のSTEP STUDIO-11版を確認しました。`,
+          payload: { results },
+        };
+      }
+
       async function checkAdmin() {
         const config = requireConfig();
         const code = String(config.getAdminCode() || "").trim();
@@ -1200,6 +1229,7 @@
           await runSingleCheck("publicConfig", checkPublicConfig);
           await runSingleCheck("plans", checkPlans);
           await runSingleCheck("routes", checkRoutes);
+          await runSingleCheck("screens", checkScreens);
           await runSingleCheck("admin", checkAdmin);
           await runSingleCheck("phone", checkPhone);
           await runSingleCheck("guards", checkGuards);
@@ -1389,16 +1419,16 @@
         const siteBase = config?.SITE_BASE_URL || "https://dpromstk2000-lab.github.io/dpro-photo-studio-line";
         const workerBase = config?.API_BASE_URL || "https://dpro-photo-studio-line-api.dpromstk2000.workers.dev";
         const links = [
-          { label: "営業前システムチェック", url: `${siteBase}/system-check.html?demo=1`, future: false },
+          { label: "営業前システムチェック", url: `${siteBase}/system-check.html?demo=1&v=STUDIO-11`, future: false },
           { label: "共通設定 config.js", url: `${siteBase}/config.js?v=STUDIO-4-CONFIG-20260714`, future: false },
           { label: "Worker Health", url: `${workerBase}/api/health`, future: false },
           { label: "Worker API一覧", url: `${workerBase}/api/routes`, future: false },
           { label: "公開店舗設定", url: `${workerBase}/api/public/config`, future: false },
-          { label: "お客様向け撮影予約", url: `${siteBase}/index.html?demo=1`, future: true },
-          { label: "お客様マイページ", url: `${siteBase}/member.html?demo=1`, future: true },
-          { label: "写真館PC管理", url: `${siteBase}/owner.html?demo=1`, future: true },
-          { label: "カメラマン・スタッフ", url: `${siteBase}/staff.html?demo=1`, future: true },
-          { label: "受付iPad", url: `${siteBase}/owner-ipad.html?demo=1&v=STUDIO-10-R9`, future: true },
+          { label: "お客様向け撮影予約", url: `${siteBase}/index.html?demo=1&v=STUDIO-11`, future: false },
+          { label: "お客様マイページ", url: `${siteBase}/member.html?demo=1&v=STUDIO-11`, future: false },
+          { label: "写真館PC管理", url: `${siteBase}/owner.html?demo=1&v=STUDIO-11`, future: false },
+          { label: "カメラマン・スタッフ", url: `${siteBase}/staff.html?demo=1&v=STUDIO-11`, future: false },
+          { label: "受付iPad", url: `${siteBase}/owner-ipad.html?demo=1&v=STUDIO-11`, future: false },
         ];
         elements.linkGrid.innerHTML = links.map((item, index) => `
           <article class="link-card">

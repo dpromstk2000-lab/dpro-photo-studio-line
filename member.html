@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f5d53" />
   <meta name="description" content="DPROフォトスタジオ お客様マイページ。撮影予約、事前案内、写真セレクト、納品状況、再注文相談を確認できます。" />
   <title>DPROフォトスタジオ｜お客様マイページ</title>
-  <!-- Version: STUDIO-7-R2-MEMBER-20260715 -->
+  <!-- Version: STUDIO-11-MEMBER-FINAL-INTEGRATION-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -618,7 +618,7 @@
     (() => {
       "use strict";
 
-      const VERSION = "STUDIO-7-R1-MEMBER-20260715";
+      const VERSION = "STUDIO-11-MEMBER-FINAL-INTEGRATION-20260715";
       const C = window.DPRO_STUDIO;
       if (!C) {
         document.body.innerHTML = '<main style="padding:24px;font-family:sans-serif"><h1>共通設定を読み込めませんでした</h1><p>config.jsの配置を確認してください。</p></main>';
@@ -704,11 +704,11 @@
       }
 
       function canRequestChange(reservation) {
-        return isUpcoming(reservation) && ["reserved", "confirmed", "change_requested"].includes(reservation.reservation_status);
+        return isUpcoming(reservation) && ["reserved", "confirmed"].includes(reservation.reservation_status);
       }
 
       function canRequestCancel(reservation) {
-        return isUpcoming(reservation) && ["reserved", "confirmed", "change_requested"].includes(reservation.reservation_status);
+        return isUpcoming(reservation) && ["reserved", "confirmed", "change_requested"].includes(reservation.reservation_status) && reservation.reservation_status !== "cancel_requested";
       }
 
       function reservationStatusClass(status) {
@@ -1068,6 +1068,15 @@
 
       async function submitRequest() {
         if (state.busy || !state.modalReservation) return;
+        const currentStatus = state.modalReservation.reservation_status;
+        if (state.modalMode === "change" && currentStatus === "change_requested") {
+          showToast("予約変更希望はすでに送信済みです。写真館からの連絡をお待ちください。", "error");
+          return;
+        }
+        if (state.modalMode === "cancel" && currentStatus === "cancel_requested") {
+          showToast("キャンセル希望はすでに送信済みです。写真館からの連絡をお待ちください。", "error");
+          return;
+        }
         const note = C.normalizeWhitespace(els.requestNote.value);
         if (!note) { showToast("内容を入力してください。", "error"); return; }
         const reservation = state.modalReservation;

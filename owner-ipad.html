@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#075f55" />
   <meta name="description" content="DPROフォトスタジオ 受付iPad画面" />
   <title>DPROフォトスタジオ｜受付iPad</title>
-  <!-- Version: STUDIO-10-R9-OWNER-IPAD-20260715 -->
+  <!-- Version: STUDIO-11-OWNER-IPAD-FINAL-INTEGRATION-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -1170,7 +1170,7 @@
       return;
     }
 
-    const VERSION = "STUDIO-10-R9-OWNER-IPAD-20260715";
+    const VERSION = "STUDIO-11-OWNER-IPAD-FINAL-INTEGRATION-20260715";
     const $ = (id) => document.getElementById(id);
     const esc = (value) => C.escapeHtml(value ?? "");
 
@@ -2945,7 +2945,7 @@
 
     function openPage(page) {
       window.open(
-        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-10-R9" } : {}),
+        C.buildPageUrl(page, C.isDemoMode() ? { demo: 1, v: "STUDIO-11" } : {}),
         "_blank",
         "noopener"
       );

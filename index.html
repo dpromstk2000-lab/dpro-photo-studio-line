@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- DPRO Photo Studio LINE / STEP STUDIO-6-R1 / STUDIO-6-R1-INDEX-20260715 -->
+<!-- DPRO Photo Studio LINE / STEP STUDIO-11 / STUDIO-11-INDEX-FINAL-INTEGRATION-20260715 -->
 <html lang="ja">
 <head>
   <meta charset="utf-8">
@@ -114,6 +114,22 @@
     .status-banner.success { background: #eaf8f1; border-color: #c9e8d8; color: #25634b; }
     .status-banner.warning { background: var(--accent-soft); border-color: #efd8ac; color: #775522; }
     .status-banner.error { background: var(--danger-soft); border-color: #f0c8c8; color: #8a3030; }
+
+    .duplicate-conflict {
+      display: none;
+      margin: 0 0 16px;
+      padding: 16px;
+      border: 1px solid #e5aea8;
+      border-radius: var(--radius-md);
+      background: #fff0ed;
+      color: #743731;
+    }
+    .duplicate-conflict.show { display: block; }
+    .duplicate-conflict h3 { margin: 0 0 7px; font-size: 17px; }
+    .duplicate-conflict p { margin: 0; white-space: pre-wrap; font-size: 14px; line-height: 1.65; }
+    .duplicate-conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
+    .duplicate-conflict-actions .button { width: auto; min-height: 43px; padding-inline: 15px; }
+
 
     .panel {
       display: none;
@@ -363,6 +379,16 @@
 
     <div class="status-banner" id="statusBanner" role="status"><span id="statusIcon">i</span><div id="statusText"></div></div>
 
+    <section class="duplicate-conflict" id="duplicateConflict" aria-live="assertive">
+      <h3 id="duplicateConflictTitle">同じ日の予約をご確認ください</h3>
+      <p id="duplicateConflictMessage"></p>
+      <div class="duplicate-conflict-actions">
+        <a class="button button-primary" id="duplicateMemberLink" href="#">マイページで既存予約を見る</a>
+        <button class="button button-secondary" id="duplicateAnotherDateButton" type="button">別の日を選ぶ</button>
+        <button class="button button-secondary" id="duplicateCloseButton" type="button">閉じる</button>
+      </div>
+    </section>
+
     <section class="panel is-active" data-step="1" aria-labelledby="step1Title">
       <span class="section-number">STEP 1</span>
       <h2 id="step1Title">撮影プランを選ぶ</h2>
@@ -542,7 +568,7 @@
 
     <footer>
       <div id="studioContact">DPROフォトスタジオ</div>
-      <!-- Internal version: STUDIO-6-R1-INDEX-20260715 -->
+      <!-- Internal version: STUDIO-11-INDEX-FINAL-INTEGRATION-20260715 -->
     </footer>
   </main>
 
@@ -562,7 +588,7 @@
     "use strict";
 
     const C = window.DPRO_STUDIO;
-    const VERSION = "STUDIO-6-R1-INDEX-20260715";
+    const VERSION = "STUDIO-11-INDEX-FINAL-INTEGRATION-20260715";
     const TOTAL_FORM_STEPS = 7;
     const STEP_TITLES = ["撮影プラン", "オプション・担当", "撮影日時", "お客様情報", "撮影対象者", "事前ヒアリング", "内容確認"];
 
@@ -586,6 +612,7 @@
       submitting: false,
       completed: false,
       reservationResult: null,
+      duplicateConflict: null,
     };
 
     const $ = (id) => document.getElementById(id);
@@ -593,6 +620,7 @@
       studioName: $("studioName"), studioSubtitle: $("studioSubtitle"), publicNotice: $("publicNotice"), studioContact: $("studioContact"),
       progressWrap: $("progressWrap"), progressTitle: $("progressTitle"), progressCount: $("progressCount"), progressBar: $("progressBar"), stepDots: $("stepDots"),
       statusBanner: $("statusBanner"), statusIcon: $("statusIcon"), statusText: $("statusText"),
+      duplicateConflict: $("duplicateConflict"), duplicateConflictTitle: $("duplicateConflictTitle"), duplicateConflictMessage: $("duplicateConflictMessage"), duplicateMemberLink: $("duplicateMemberLink"), duplicateAnotherDateButton: $("duplicateAnotherDateButton"), duplicateCloseButton: $("duplicateCloseButton"),
       categoryTabs: $("categoryTabs"), planGrid: $("planGrid"), optionGrid: $("optionGrid"), staffGrid: $("staffGrid"),
       reservationDate: $("reservationDate"), dateRangeHelp: $("dateRangeHelp"), availabilityState: $("availabilityState"),
       profileBanner: $("profileBanner"), customerName: $("customerName"), customerKana: $("customerKana"), customerPhone: $("customerPhone"), customerEmail: $("customerEmail"), customerAddress: $("customerAddress"), customerCare: $("customerCare"),
@@ -1143,10 +1171,49 @@
           },
           plan_answers: answers,
           summary: [text(els.shootingPurpose.value), text(els.desiredMood.value), text(els.desiredShots.value)].filter(Boolean).join(" / "),
-          answer_version: "STUDIO-6-R1",
+          answer_version: "STUDIO-11",
           confirmed: true,
         },
       };
+    }
+
+    function duplicateDetailsFromError(error) {
+      const details = error?.details || error?.payload?.details || null;
+      return details?.code === "SAME_SUBJECT_SAME_DAY" ? details : null;
+    }
+
+    function clearDuplicateConflict() {
+      state.duplicateConflict = null;
+      els.duplicateConflict.classList.remove("show");
+      els.duplicateConflictMessage.textContent = "";
+    }
+
+    function memberUrlForDuplicate() {
+      const query = {};
+      if (state.lineUserId) query.line_user_id = state.lineUserId;
+      const storedToken = C.getStoredValue?.(C.STORAGE_KEYS.PUBLIC_TOKEN) || "";
+      if (!query.line_user_id && storedToken) query.public_token = storedToken;
+      if (!query.line_user_id && !query.public_token) return "";
+      if (C.isDemoMode()) query.demo = 1;
+      query.section = "reservations";
+      query.v = "STUDIO-11";
+      return C.buildPageUrl("MEMBER", query);
+    }
+
+    function renderDuplicateConflict(details, fallbackMessage = "") {
+      const subject = details?.subject || {};
+      const existing = details?.existing_reservation || {};
+      state.duplicateConflict = details || {};
+      const dateLabel = details?.local_date ? C.formatDate(`${details.local_date}T00:00:00+09:00`, { weekday: "short" }) : "選択した日";
+      const startLabel = existing.start_at ? C.formatTime(existing.start_at) : "時刻未確認";
+      const endLabel = existing.end_at ? C.formatTime(existing.end_at) : "";
+      els.duplicateConflictTitle.textContent = `「${subject.subject_name || "撮影対象者"}」は同日に予約済みです`;
+      els.duplicateConflictMessage.textContent = fallbackMessage || `${subject.subject_name || "この撮影対象者"}は${dateLabel} ${startLabel}${endLabel ? `〜${endLabel}` : ""}に予約済みです。\n同じ撮影対象者は、同じ日に複数予約できません。既存予約の変更またはキャンセルをご確認ください。`;
+      const memberUrl = memberUrlForDuplicate();
+      els.duplicateMemberLink.hidden = !memberUrl;
+      if (memberUrl) els.duplicateMemberLink.href = memberUrl;
+      els.duplicateConflict.classList.add("show");
+      els.duplicateConflict.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 
     async function submitReservation() {
@@ -1169,6 +1236,12 @@
         showStep(8);
       } catch (error) {
         console.error(error);
+        const duplicateDetails = duplicateDetailsFromError(error);
+        if (duplicateDetails) {
+          renderDuplicateConflict(duplicateDetails, error.message || "");
+          showStatus("同じ撮影対象者の同日予約があるため、登録を停止しました。", "error");
+          return;
+        }
         showStatus(error.message || "予約を送信できませんでした。もう一度お試しください。", "error");
         if (error.status === 409) {
           state.selectedSlot = null;
@@ -1259,7 +1332,7 @@
         state.selectedSlot = null;
         if (state.selectedDate) loadAvailability();
       });
-      els.reservationDate.addEventListener("change", loadAvailability);
+      els.reservationDate.addEventListener("change", () => { clearDuplicateConflict(); loadAvailability(); });
       els.availabilityState.addEventListener("click", (event) => {
         const button = event.target.closest("[data-slot-time]"); if (!button || button.disabled) return;
         state.selectedSlot = state.availability.slots.find((slot) => slot.start_at === button.dataset.slotTime) || null;
@@ -1272,6 +1345,7 @@
         remove.closest(".subject-card").remove(); refreshSubjectHeaders();
       });
       els.subjectsList.addEventListener("change", (event) => {
+        clearDuplicateConflict();
         if (event.target.dataset.field !== "subject_type") return;
         const card = event.target.closest(".subject-card"); card.querySelector(".pet-field").hidden = event.target.value !== "pet";
       });
@@ -1281,8 +1355,15 @@
         if (state.currentStep === 7) { await submitReservation(); return; }
         if (validateStep(state.currentStep)) showStep(state.currentStep + 1);
       });
-      els.newReservationButton.addEventListener("click", resetFormForNewReservation);
+      els.newReservationButton.addEventListener("click", () => { clearDuplicateConflict(); resetFormForNewReservation(); });
       els.demoFillButton.addEventListener("click", demoFill);
+      els.duplicateAnotherDateButton.addEventListener("click", () => {
+        clearDuplicateConflict();
+        state.selectedSlot = null;
+        showStep(3);
+        window.setTimeout(() => els.reservationDate.focus(), 250);
+      });
+      els.duplicateCloseButton.addEventListener("click", clearDuplicateConflict);
       els.retryButton.addEventListener("click", () => window.location.reload());
       els.customerPhone.addEventListener("blur", () => { if (C.isLikelyJapanesePhone(els.customerPhone.value)) els.customerPhone.value = C.formatPhone(els.customerPhone.value); });
     }

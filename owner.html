@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b5048" />
   <meta name="description" content="DPROフォトスタジオ 写真館PC管理画面。予約、顧客、撮影当日、写真セレクト、納品、再注文、店舗設定を管理します。" />
   <title>DPROフォトスタジオ｜写真館PC管理</title>
-  <!-- Version: STUDIO-8-R1-OWNER-20260715 -->
+  <!-- Version: STUDIO-11-OWNER-FINAL-INTEGRATION-20260715 -->
   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
   <style>
     :root {
@@ -399,6 +399,12 @@
 
     .inline-search { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
     .mini-results { display: grid; gap: 6px; margin-top: 8px; max-height: 180px; overflow: auto; }
+    .manual-locked { background: #eef7f4 !important; color: #274e47 !important; font-weight: 850; }
+    .manual-note { padding: 10px 12px; border: 1px solid #bdd8d2; border-radius: 10px; background: #edf8f5; color: #315c55; font-size: 12px; font-weight: 800; }
+    .manual-conflict { padding: 13px; border: 1px solid #e6afa9; border-radius: 12px; background: #fff0ed; color: #75352f; }
+    .manual-conflict h4 { margin: 0 0 6px; }
+    .manual-conflict p { margin: 0; white-space: pre-wrap; font-size: 13px; line-height: 1.6; }
+
     .mini-result { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 9px; border: 1px solid var(--line); border-radius: 10px; background: #fafcfc; }
 
     .toast-region { position: fixed; right: 18px; bottom: 18px; z-index: 200; display: grid; gap: 9px; width: min(390px, calc(100% - 36px)); }
@@ -688,6 +694,7 @@
           </div>
           <div class="field"><label for="manualCustomerName">お客様名</label><input id="manualCustomerName" class="input" type="text" /></div>
           <div class="field"><label for="manualPhone">電話番号</label><input id="manualPhone" class="input" type="tel" /></div>
+          <div class="field span-2"><div id="manualIdentityNote" class="manual-note" hidden>既存顧客を選択中です。お客様名と電話番号は固定され、撮影対象者名とは別に保存されます。</div></div>
           <div class="field"><label for="manualSource">受付方法</label><select id="manualSource"><option value="phone">電話予約</option><option value="store">店頭予約</option><option value="admin">管理画面登録</option></select></div>
           <div class="field"><label for="manualParticipant">参加人数</label><input id="manualParticipant" class="input" type="number" min="1" max="100" value="1" /></div>
           <div class="field"><label for="manualPlan">撮影プラン</label><select id="manualPlan"><option value="">選択してください</option></select></div>
@@ -695,11 +702,13 @@
           <div class="field"><label for="manualResource">撮影スペース</label><select id="manualResource"><option value="">プラン標準</option></select></div>
           <div class="field"><label for="manualDate">撮影日</label><input id="manualDate" class="input" type="date" /></div>
           <div class="field span-2"><label>空き時間</label><div id="manualSlots" class="slot-grid"><div class="empty span-2">プランと日付を選択してください。</div></div></div>
-          <div class="field"><label for="manualSubjectName">主な撮影対象者</label><input id="manualSubjectName" class="input" type="text" placeholder="例：はると、家族、商品名" /></div>
+          <div class="field span-2" id="manualRegisteredSubjectField" hidden><label for="manualRegisteredSubject">登録済みの撮影対象者</label><select id="manualRegisteredSubject"><option value="">＋ 新しい撮影対象者を入力</option></select></div>
+          <div class="field"><label for="manualSubjectName">主な撮影対象者</label><input id="manualSubjectName" class="input" type="text" placeholder="例：はると、ポチ、家族、商品名" /></div>
           <div class="field"><label for="manualSubjectType">撮影対象種別</label><select id="manualSubjectType"><option value="person">人物</option><option value="child">子ども</option><option value="baby">乳幼児</option><option value="pet">ペット</option><option value="product">商品</option><option value="group">家族・団体</option><option value="other">その他</option></select></div>
           <div class="field span-2"><label for="manualPurpose">撮影目的</label><input id="manualPurpose" class="input" type="text" placeholder="例：七五三の記念撮影" /></div>
           <div class="field span-2"><label for="manualShots">希望カット</label><textarea id="manualShots" placeholder="本人、家族、兄弟写真など"></textarea></div>
           <div class="field span-2"><label for="manualInternalNote">内部注意事項</label><textarea id="manualInternalNote" placeholder="お客様には表示しないスタッフ用メモ"></textarea></div>
+          <div class="field span-2"><div id="manualConflictPanel" class="manual-conflict" hidden><h4 id="manualConflictTitle">同日の予約をご確認ください</h4><p id="manualConflictMessage"></p><div class="page-actions" style="margin-top:10px;"><button id="manualConflictOpenBtn" class="btn btn-primary btn-small" type="button">既存予約を開く</button><button id="manualConflictDateBtn" class="btn btn-secondary btn-small" type="button">別の日を選ぶ</button><button id="manualConflictCloseBtn" class="btn btn-neutral btn-small" type="button">閉じる</button></div></div></div>
         </div>
       </div>
       <footer class="modal-foot"><button class="btn btn-neutral" data-close-modal="manualModal" type="button">閉じる</button><button id="manualSubmitBtn" class="btn btn-primary" type="button">この内容で予約登録</button></footer>
@@ -805,7 +814,7 @@
       return;
     }
 
-    const VERSION = "STUDIO-8-R1-OWNER-20260715";
+    const VERSION = "STUDIO-11-OWNER-FINAL-INTEGRATION-20260715";
     const $ = (id) => document.getElementById(id);
     const esc = (value) => C.escapeHtml(value ?? "");
     const state = {
@@ -820,6 +829,8 @@
       selectedCustomer: null,
       manualSelectedSlot: null,
       manualSelectedCustomer: null,
+      manualCustomerDetail: null,
+      manualSubjectDayConflict: null,
       shootingStartedAt: null,
       shootingCompletedAt: null,
     };
@@ -859,10 +870,13 @@
       return error?.message || "処理中にエラーが発生しました。";
     }
 
-    async function runBusy(message, task) {
+    async function runBusy(message, task, options = {}) {
       showLoading(message);
       try { return await task(); }
-      catch (error) { toast(errorMessage(error), "error", 5200); throw error; }
+      catch (error) {
+        if (options.suppressErrorToast !== true) toast(errorMessage(error), "error", 5200);
+        throw error;
+      }
       finally { hideLoading(); }
     }
 
@@ -944,7 +958,7 @@
       $("sideStudioName").textContent = studio.studio_name || C.STUDIO_NAME;
       $("topStudioMeta").textContent = `${studio.phone || "電話未登録"}｜${studio.address || "住所未登録"}`;
       $("sideStudioInfo").textContent = `${studio.phone || "電話未登録"}｜${studio.address || "住所未登録"}`;
-      $("systemCheckLink").href = C.buildPageUrl(C.PAGES.SYSTEM_CHECK, C.isDemoMode() ? { demo: 1, v: "STUDIO-8-R1" } : { v: "STUDIO-8-R1" });
+      $("systemCheckLink").href = C.buildPageUrl(C.PAGES.SYSTEM_CHECK, C.isDemoMode() ? { demo: 1, v: "STUDIO-11" } : { v: "STUDIO-11" });
     }
 
     function updateNavBadges() {
@@ -1215,19 +1229,117 @@
       toast("最新情報へ更新しました。");
     }
 
+    function setManualIdentityMode(locked) {
+      $("manualCustomerName").readOnly = locked;
+      $("manualPhone").readOnly = locked;
+      $("manualCustomerName").classList.toggle("manual-locked", locked);
+      $("manualPhone").classList.toggle("manual-locked", locked);
+      $("manualIdentityNote").hidden = !locked;
+    }
+
+    function clearManualConflict() {
+      state.manualSubjectDayConflict = null;
+      $("manualConflictPanel").hidden = true;
+      $("manualConflictMessage").textContent = "";
+    }
+
+    function ownerDuplicateDetails(error) {
+      const details = error?.details || error?.payload?.details || null;
+      return details?.code === "SAME_SUBJECT_SAME_DAY" ? details : null;
+    }
+
+    function renderManualConflict(details, fallback = "") {
+      const subject = details?.subject || {};
+      const existing = details?.existing_reservation || {};
+      state.manualSubjectDayConflict = details || {};
+      $("manualConflictTitle").textContent = `「${subject.subject_name || "撮影対象者"}」は同日に予約済みです`;
+      $("manualConflictMessage").textContent = fallback || `${subject.subject_name || "この撮影対象者"}は${existing.start_at ? fmtDateTime(existing.start_at) : "選択日"}${existing.end_at ? `〜${fmtTime(existing.end_at)}` : ""}に予約済みです。\n同じ撮影対象者は同じ日に複数予約できません。`;
+      $("manualConflictOpenBtn").hidden = !existing.id;
+      $("manualConflictPanel").hidden = false;
+      $("manualConflictPanel").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function allowedSubjectTypesForManualPlan() {
+      const plan = (state.settings?.plans || []).find((row) => row.id === $("manualPlan").value);
+      const code = String(plan?.plan_code || "").toUpperCase();
+      if (code === "753") return ["child", "baby"];
+      if (code === "FAMILY") return ["group", "person", "child", "baby", "pet"];
+      if (["PROFILE", "IDPHOTO", "ADULT", "MATERNITY"].includes(code)) return ["person"];
+      if (code === "PET") return ["pet"];
+      return ["person", "child", "baby", "pet", "product", "group", "other"];
+    }
+
+    function populateOwnerRegisteredSubjects() {
+      const all = (state.manualCustomerDetail?.subjects || []).filter((s) => s.is_active !== false);
+      const allowed = allowedSubjectTypesForManualPlan();
+      const rows = all.filter((s) => allowed.includes(s.subject_type));
+      const select = $("manualRegisteredSubject");
+      select.innerHTML = '<option value="">＋ 新しい撮影対象者を入力</option>' + rows.map((s) => `<option value="${esc(s.id)}" data-name="${esc(s.subject_name)}" data-type="${esc(s.subject_type)}">${esc(s.subject_name)}（${esc(getLabel("subjectType", s.subject_type))}）</option>`).join("");
+      $("manualRegisteredSubjectField").hidden = all.length === 0;
+      select.value = "";
+      $("manualSubjectName").readOnly = false;
+      $("manualSubjectType").disabled = false;
+      if (allowed.length === 1) $("manualSubjectType").value = allowed[0];
+    }
+
+    function applyOwnerRegisteredSubject() {
+      clearManualConflict();
+      const option = $("manualRegisteredSubject").selectedOptions[0];
+      if (option?.value) {
+        $("manualSubjectName").value = option.dataset.name || "";
+        $("manualSubjectType").value = option.dataset.type || "person";
+        $("manualSubjectName").readOnly = true;
+        $("manualSubjectType").disabled = true;
+      } else {
+        $("manualSubjectName").value = "";
+        $("manualSubjectName").readOnly = false;
+        $("manualSubjectType").disabled = false;
+        const allowed = allowedSubjectTypesForManualPlan();
+        if (allowed.length === 1) $("manualSubjectType").value = allowed[0];
+      }
+    }
+
+    async function applyManualCustomer(row) {
+      state.manualSelectedCustomer = row || null;
+      state.manualCustomerDetail = null;
+      if (!row) {
+        setManualIdentityMode(false);
+        $("manualRegisteredSubjectField").hidden = true;
+        return;
+      }
+      const id = row.customer_id || row.id;
+      const detail = id ? await runBusy("顧客情報を読み込んでいます...", () => C.adminGet(C.ENDPOINTS.ADMIN_CUSTOMER_DETAIL, { customer_id: id })) : null;
+      state.manualCustomerDetail = detail;
+      const customer = detail?.customer || row;
+      state.manualSelectedCustomer = { ...row, customer_id: customer.id || id, customer_name: customer.customer_name, phone: customer.phone };
+      $("manualCustomerName").value = customer.customer_name || "";
+      $("manualPhone").value = customer.phone || "";
+      setManualIdentityMode(true);
+      populateOwnerRegisteredSubjects();
+      $("manualCustomerResults").innerHTML = `<div class="auth-note" style="margin:0;">${esc(customer.customer_name)} 様（${esc(customer.customer_no || row.customer_no || "") }）を選択しました。お客様名と電話番号は固定されます。</div>`;
+    }
+
     function openManualModal(prefill = null) {
       state.manualSelectedSlot = null;
-      state.manualSelectedCustomer = prefill || null;
+      state.manualSelectedCustomer = null;
+      state.manualCustomerDetail = null;
+      clearManualConflict();
       $("manualCustomerResults").innerHTML = "";
       $("manualSlots").innerHTML = '<div class="empty span-2">プランと日付を選択してください。</div>';
-      $("manualCustomerName").value = prefill?.customer_name || "";
-      $("manualPhone").value = prefill?.phone || "";
+      $("manualCustomerName").value = "";
+      $("manualPhone").value = "";
+      setManualIdentityMode(false);
+      $("manualRegisteredSubjectField").hidden = true;
+      $("manualRegisteredSubject").innerHTML = '<option value="">＋ 新しい撮影対象者を入力</option>';
       $("manualParticipant").value = 1;
       $("manualSubjectName").value = "";
+      $("manualSubjectName").readOnly = false;
+      $("manualSubjectType").disabled = false;
       $("manualPurpose").value = "";
       $("manualShots").value = "";
       $("manualInternalNote").value = "";
       openModal("manualModal");
+      if (prefill?.id || prefill?.customer_id) applyManualCustomer(prefill).catch(() => {});
     }
 
     async function searchManualCustomer() {
@@ -1239,35 +1351,37 @@
       state.customerRows = rows;
     }
 
-    function selectManualCustomer(id) {
+    async function selectManualCustomer(id) {
       const row = state.customerRows.find((r) => r.customer_id === id);
       if (!row) return;
-      state.manualSelectedCustomer = row;
-      $("manualCustomerName").value = row.customer_name || "";
-      $("manualPhone").value = row.phone || "";
-      $("manualCustomerResults").innerHTML = `<div class="auth-note" style="margin:0;">${esc(row.customer_name)} 様（${esc(row.customer_no)}）を選択しました。</div>`;
+      await applyManualCustomer(row);
     }
 
     async function loadManualSlots() {
+      clearManualConflict();
       const planId = $("manualPlan").value;
       const date = $("manualDate").value;
       const staffId = $("manualStaff").value;
       state.manualSelectedSlot = null;
+      populateOwnerRegisteredSubjects();
       if (!planId || !date) { $("manualSlots").innerHTML = '<div class="empty span-2">プランと日付を選択してください。</div>'; return; }
       try {
         const result = await runBusy("空き時間を確認しています...", () => C.apiGet(C.ENDPOINTS.PUBLIC_AVAILABILITY, { plan_id: planId, date, staff_id: staffId }));
         const slots = (result.slots || []).filter((s) => s.available);
         $("manualSlots").innerHTML = slots.length ? slots.map((s) => `<button class="slot-btn" data-manual-slot="${esc(s.start_at)}" type="button">${esc(s.time)}</button>`).join("") : `<div class="empty span-2">${esc(result.reason || "空いている時間がありません。")}</div>`;
-      } catch (_) { $("manualSlots").innerHTML = '<div class="empty span-2">空き時間を取得できませんでした。</div>'; }
+      } catch (error) { $("manualSlots").innerHTML = `<div class="empty span-2">${esc(errorMessage(error))}</div>`; }
     }
 
     async function submitManualBooking() {
-      const name = $("manualCustomerName").value.trim();
-      const phone = $("manualPhone").value.trim();
+      const name = state.manualSelectedCustomer?.customer_name || $("manualCustomerName").value.trim();
+      const phone = state.manualSelectedCustomer?.phone || $("manualPhone").value.trim();
       const planId = $("manualPlan").value;
       if (!name || !phone || !planId || !state.manualSelectedSlot) { toast("お客様名、電話番号、プラン、空き時間を確認してください。", "error"); return; }
+      const selectedSubjectId = $("manualRegisteredSubject").value;
       const subjectName = $("manualSubjectName").value.trim();
+      if (!selectedSubjectId && !subjectName) { toast("主な撮影対象者を入力または選択してください。", "error"); return; }
       const payload = {
+        selected_customer_id: state.manualSelectedCustomer?.customer_id || null,
         customer_name: name,
         phone,
         reservation_source: $("manualSource").value,
@@ -1280,13 +1394,25 @@
         shooting_purpose: $("manualPurpose").value.trim(),
         desired_shots: $("manualShots").value.trim(),
         internal_note: $("manualInternalNote").value.trim(),
-        subjects: subjectName ? [{ subject_name: subjectName, subject_type: $("manualSubjectType").value }] : [],
+        subjects: selectedSubjectId ? [{ id: selectedSubjectId, is_main_subject: true }] : [{ subject_name: subjectName, subject_type: $("manualSubjectType").value, is_main_subject: true }],
       };
-      const result = await runBusy("電話・店頭予約を登録しています...", () => C.adminPost(C.ENDPOINTS.ADMIN_MANUAL_RESERVATION, payload));
-      closeModal("manualModal");
-      toast(`予約を登録しました：${result.reservation?.reservation_no || ""}`);
-      await refreshDashboard();
-      if (result.reservation?.id) await openReservation(result.reservation.id);
+      try {
+        clearManualConflict();
+        const result = await runBusy("電話・店頭予約を登録しています...", () => C.adminPost(C.ENDPOINTS.ADMIN_MANUAL_RESERVATION, payload), { suppressErrorToast: true });
+        closeModal("manualModal");
+        toast(`予約を登録しました：${result.reservation?.reservation_no || ""}`);
+        await refreshDashboard();
+        if (result.reservation?.id) await openReservation(result.reservation.id);
+      } catch (error) {
+        const details = ownerDuplicateDetails(error);
+        if (details) {
+          renderManualConflict(details, errorMessage(error));
+          toast("同じ撮影対象者の同日予約があるため、登録を停止しました。", "error", 5200);
+          return;
+        }
+        toast(errorMessage(error), "error", 5200);
+        throw error;
+      }
     }
 
     async function openReservation(id) {
@@ -1500,7 +1626,7 @@
       const d = state.selectedReservation || {};
       const lineUserId = d.customer?.line_user_id;
       const token = d.reservation?.public_token;
-      const query = C.isDemoMode() ? { demo: 1, line_user_id: lineUserId || undefined, public_token: token || undefined, v: "STUDIO-8-R1" } : { line_user_id: lineUserId || undefined, public_token: token || undefined, v: "STUDIO-8-R1" };
+      const query = C.isDemoMode() ? { demo: 1, line_user_id: lineUserId || undefined, public_token: token || undefined, v: "STUDIO-11" } : { line_user_id: lineUserId || undefined, public_token: token || undefined, v: "STUDIO-11" };
       window.open(C.buildPageUrl(C.PAGES.MEMBER, query), "_blank", "noopener");
     }
 
@@ -1520,9 +1646,19 @@
       $("customerSearchInput").addEventListener("input", (e) => { const n = C.normalizePhone(e.target.value); $("customerNormalizedPreview").textContent = n.length >= 7 ? `正規化：${n}` : "入力すると正規化結果を表示"; });
       $("openManualBookingBtn").addEventListener("click", () => openManualModal());
       $("manualCustomerSearchBtn").addEventListener("click", () => searchManualCustomer().catch(() => {}));
-      $("manualPlan").addEventListener("change", () => loadManualSlots().catch(() => {}));
+      $("manualPlan").addEventListener("change", () => { populateOwnerRegisteredSubjects(); loadManualSlots().catch(() => {}); });
       $("manualStaff").addEventListener("change", () => loadManualSlots().catch(() => {}));
-      $("manualDate").addEventListener("change", () => loadManualSlots().catch(() => {}));
+      $("manualDate").addEventListener("change", () => { clearManualConflict(); loadManualSlots().catch(() => {}); });
+      $("manualRegisteredSubject").addEventListener("change", applyOwnerRegisteredSubject);
+      $("manualSubjectName").addEventListener("input", clearManualConflict);
+      $("manualConflictOpenBtn").addEventListener("click", () => {
+        const id = state.manualSubjectDayConflict?.existing_reservation?.id;
+        if (!id) return;
+        closeModal("manualModal");
+        openReservation(id).catch(() => {});
+      });
+      $("manualConflictDateBtn").addEventListener("click", () => { clearManualConflict(); $("manualDate").focus(); });
+      $("manualConflictCloseBtn").addEventListener("click", clearManualConflict);
       $("manualSubmitBtn").addEventListener("click", () => submitManualBooking().catch(() => {}));
       $("postRefreshBtn").addEventListener("click", () => refreshDashboard().catch(() => {}));
       $("taskRefreshBtn").addEventListener("click", () => refreshDashboard().catch(() => {}));
@@ -1555,7 +1691,7 @@
         const rr = event.target.closest("[data-reorder-status]"); if (rr) updateReorder(rr.dataset.reorderStatus, rr.dataset.nextStatus).catch(() => {});
         const vn = event.target.closest("[data-visit-next]"); if (vn) updateVisitNext(vn.dataset.visitNext, vn.dataset.nextStatus).catch(() => {});
         const slot = event.target.closest("[data-manual-slot]"); if (slot) { document.querySelectorAll("[data-manual-slot]").forEach((b) => b.classList.remove("selected")); slot.classList.add("selected"); state.manualSelectedSlot = slot.dataset.manualSlot; }
-        const mc = event.target.closest("[data-select-manual-customer]"); if (mc) selectManualCustomer(mc.dataset.selectManualCustomer);
+        const mc = event.target.closest("[data-select-manual-customer]"); if (mc) selectManualCustomer(mc.dataset.selectManualCustomer).catch(() => {});
         const dt = event.target.closest("[data-detail-tab]"); if (dt) activateDetailTab(dt.dataset.detailTab);
       });
 
