@@ -1,0 +1,236 @@
+<!doctype html>
+<!-- DPRO LIVE DEMO COMMON TEMPLATE V1.0 LOCK / CONFIGURABLE TEMPLATE -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title id="pageTitle">DPRO 公開操作デモ・画面一覧</title>
+<style>
+:root{
+  --bg:#f3f7f6;--card:#fff;--ink:#282522;--muted:#746d68;--line:#dce8e5;
+  --brand:#176257;--deep:#123f3a;--brand2:#2c8175;--soft:#e8f5f1;
+  --shadow:0 16px 46px rgba(44,37,32,.10)
+}
+*{box-sizing:border-box}
+html{background:var(--bg);scroll-behavior:smooth}
+body{margin:0;min-height:100vh;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;line-height:1.65;background:linear-gradient(180deg,#fff 0%,var(--bg) 100%)}
+a{color:inherit}.page{width:min(1140px,calc(100% - 24px));margin:0 auto;padding:20px 0 48px}
+.hero{position:relative;overflow:hidden;padding:34px;border-radius:28px;color:#fff;background:linear-gradient(135deg,var(--deep),var(--brand) 63%,var(--brand2));box-shadow:0 23px 58px rgba(35,30,27,.20)}
+.hero:after{content:"";position:absolute;right:-95px;bottom:-150px;width:290px;height:290px;border-radius:50%;background:rgba(255,255,255,.07)}
+.kicker{position:relative;z-index:1;font-size:11px;font-weight:1000;letter-spacing:.14em;opacity:.9}
+.hero h1{position:relative;z-index:1;margin:10px 0 0;font-size:clamp(28px,5vw,49px);line-height:1.24}
+.hero p{position:relative;z-index:1;max-width:830px;margin:13px 0 0;font-size:14px;opacity:.93}
+.hero-actions{position:relative;z-index:1;display:flex;gap:9px;flex-wrap:wrap;margin-top:20px}
+.button{min-height:45px;display:inline-flex;align-items:center;justify-content:center;padding:9px 15px;border-radius:999px;text-decoration:none;font-size:12px;font-weight:950}
+.button-light{color:var(--deep);background:#fff}.button-ghost{color:#fff;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.09)}
+.notice{margin-top:15px;padding:15px 17px;border:1px solid #e5cda3;border-radius:15px;background:#fff5e5;color:#725013;font-size:12px;font-weight:760}
+.demo-info{margin-top:16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.demo-info>div{padding:14px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.96);box-shadow:var(--shadow)}
+.demo-info small{display:block;color:var(--brand);font-size:9px;font-weight:1000;letter-spacing:.08em}.demo-info strong{display:block;margin-top:4px;font-size:14px}
+.section-head{margin:32px 0 15px}.section-head small{color:var(--brand);font-size:10px;font-weight:1000;letter-spacing:.12em}.section-head h2{margin:5px 0 0;font-size:clamp(23px,4vw,34px)}.section-head p{max-width:840px;margin:7px 0 0;color:var(--muted);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.card{min-width:0;padding:20px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.98);box-shadow:var(--shadow)}
+.card-number{color:var(--brand);font-size:10px;font-weight:1000;letter-spacing:.1em}.card h3{margin:7px 0 0;font-size:21px;line-height:1.4}.card p{margin:8px 0 0;color:var(--muted);font-size:12px}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.pills span{padding:5px 8px;border-radius:999px;background:var(--soft);color:var(--deep);font-size:9px;font-weight:900}
+.card-note{margin-top:13px;padding:11px;border-radius:12px;background:var(--soft);color:#675a54;font-size:11px}.card-note b{color:var(--deep)}
+.card-actions{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:15px}
+.open,.official{min-height:44px;display:flex;align-items:center;justify-content:center;padding:9px 13px;border-radius:12px;text-decoration:none;font-size:10px;font-weight:950}
+.open{color:#fff;background:linear-gradient(135deg,var(--deep),var(--brand2))}.official{color:var(--deep);border:1px solid var(--line);background:var(--soft)}
+.flow{margin-top:14px;padding:19px;border:1px solid var(--line);border-radius:19px;background:#fff;box-shadow:var(--shadow)}
+.flow-grid{display:grid;grid-template-columns:repeat(var(--flow-cols,5),minmax(0,1fr));gap:8px}
+.flow-step{padding:12px;border-radius:12px;background:var(--soft)}.flow-step b{display:block;color:var(--brand);font-size:10px}.flow-step strong{display:block;margin-top:4px;font-size:11px}.flow-step.same{border:1px dashed #cdbfb6}
+.footer{margin-top:26px;color:#82736c;font-size:10px;text-align:center}
+@media(max-width:900px){.flow-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.hero{padding:25px 20px}.demo-info,.grid,.flow-grid{grid-template-columns:1fr}}
+@media(max-width:420px){.page{width:min(100% - 16px,1140px)}.card-actions{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="page">
+<section class="hero">
+  <div class="kicker">PUBLIC OPERATION DEMO / V1.0</div>
+  <h1 id="heroTitle"></h1>
+  <p id="heroCopy"></p>
+  <div class="hero-actions">
+    <a class="button button-light" id="officialLink">公式の機能・料金説明を見る</a>
+    <a class="button button-ghost" id="primaryDemoLink">まず体験する</a>
+  </div>
+</section>
+
+<div class="notice" id="notice"></div>
+
+<section class="demo-info" id="quickInfo" aria-label="デモ利用情報"></section>
+
+<div class="section-head">
+  <small>CHOOSE A SCREEN</small>
+  <h2>確認する画面を選択</h2>
+  <p id="screenIntro"></p>
+</div>
+
+<section class="grid" id="screenGrid"></section>
+
+<div class="section-head">
+  <small>RECOMMENDED JOURNEY</small>
+  <h2>おすすめの確認順</h2>
+  <p id="journeyIntro"></p>
+</div>
+<section class="flow"><div class="flow-grid" id="flowGrid"></div></section>
+
+<div class="footer" id="footer"></div>
+</main>
+
+<script>
+/*
+  DPRO LIVE DEMO COMMON TEMPLATE V1.0
+  ------------------------------------------------------------
+  変更してよいのは CONFIG の値とCSS変数のブランド色のみ。
+  DOM骨格・セクション順・公開注意・CHOOSE A SCREEN・
+  RECOMMENDED JOURNEYはCOMMON TEMPLATE V1.0 LOCK対象。
+*/
+const CONFIG = {
+  "systemName": "DPRO PHOTO STUDIO LINE",
+  "pageTitle": "DPRO PHOTO STUDIO LINE｜公開操作デモ・画面一覧",
+  "heroCopy": "撮影予約・事前希望から当日撮影、写真セレクト、納品、再注文相談まで。写真館の前後工程を実画面で一続きに確認できます。",
+  "officialUrl": "https://dpromstk2000-lab.github.io/dpro-line-systems-site/lp-photo.html",
+  "primaryDemoUrl": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html",
+  "notice": "公開デモでは実在する氏名・連絡先・住所・お子さま／ペット情報・体調・撮影希望を入力せず、必ず架空の内容を使用してください。実在する写真や個人データは使用しないでください。",
+  "screenIntro": "最初に01の撮影予約・事前希望を確認し、受付iPad→お客様マイページ→オーナーPCの順に進むと、撮影前から納品・再注文まで確認できます。",
+  "journeyIntro": "撮影前の予約・ヒアリングから、当日進行、撮影後のセレクト・納品・再注文までを確認します。",
+  "adminCode": "",
+  "quickInfo": [
+    {
+      "label": "CUSTOMER FLOW",
+      "text": "01 予約・事前希望 → 02 当日受付 → 03 セレクト・納品 → 04/05 管理・再注文"
+    },
+    {
+      "label": "DEMO INFO",
+      "text": "管理系は営業デモ用コード1234。実在写真・個人情報は使用しない。"
+    },
+    {
+      "label": "SCREEN STRUCTURE",
+      "text": "既存の実画面4つで、撮影前〜撮影後の5工程を確認"
+    }
+  ],
+  "screens": [
+    {
+      "step": "01 / お客様 / PRIMARY EXPERIENCE",
+      "title": "撮影予約・事前希望",
+      "description": "撮影プラン、オプション、カメラマン、日時、お客様情報、撮影対象者、目的・雰囲気・希望カットまでを予約前に確認できます。",
+      "tags": [
+        "撮影予約",
+        "撮影対象者",
+        "事前ヒアリング"
+      ],
+      "note": "最初にここを確認。氏名・住所・お子さま／ペット情報・体調等は必ず架空の内容を使用してください。",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html",
+      "cta": "撮影予約を開く",
+      "officialUrl": "https://dpromstk2000-lab.github.io/dpro-line-systems-site/lp-photo.html"
+    },
+    {
+      "step": "02 / 受付iPad / OPERATIONS",
+      "title": "当日受付・撮影進行",
+      "description": "来店待ち、受付・撮影準備、撮影・店頭確認、会計案内・完了までを大きな操作で進める当日画面を確認できます。",
+      "tags": [
+        "来店受付",
+        "撮影進行",
+        "会計案内"
+      ],
+      "note": "営業デモ用管理コード1234。電話・店頭予約を試す場合も架空情報だけを使用してください。",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/owner-ipad.html?demo=1",
+      "cta": "受付iPadを開く",
+      "officialUrl": "https://dpromstk2000-lab.github.io/dpro-line-systems-site/lp-photo.html"
+    },
+    {
+      "step": "03 / お客様 / AFTER SHOOT",
+      "title": "写真セレクト・納品",
+      "description": "予約確認、撮影前案内、写真セレクト、納品状況、追加プリント・アルバムなどの再注文相談をお客様側で確認できます。",
+      "tags": [
+        "写真セレクト",
+        "納品確認",
+        "再注文相談"
+      ],
+      "note": "公開デモでは営業デモ用の架空予約だけを確認し、実在する写真やトークンを使用しないでください。",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/member.html?demo=1",
+      "cta": "お客様マイページを開く",
+      "officialUrl": "https://dpromstk2000-lab.github.io/dpro-line-systems-site/lp-photo.html"
+    },
+    {
+      "step": "04–05 / オーナーPC / OWNER",
+      "title": "撮影カルテ・再注文管理（同一PC画面）",
+      "description": "予約・事前ヒアリング、当日進行・撮影カルテ、写真セレクト、納品、タスク、再注文・アルバム相談を同じPC管理画面で確認できます。",
+      "tags": [
+        "撮影カルテ",
+        "納品管理",
+        "再注文・アルバム"
+      ],
+      "note": "04と05は同一のオーナーPC画面内で確認します。営業デモ用管理コード1234、架空情報のみ使用してください。",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/owner.html?demo=1",
+      "cta": "オーナーPCを開く",
+      "officialUrl": "https://dpromstk2000-lab.github.io/dpro-line-systems-site/lp-photo.html"
+    }
+  ],
+  "journey": [
+    {
+      "step": "01",
+      "text": "撮影予約・事前希望"
+    },
+    {
+      "step": "02",
+      "text": "当日受付・撮影進行"
+    },
+    {
+      "step": "03",
+      "text": "写真セレクト・納品"
+    },
+    {
+      "step": "04",
+      "text": "撮影カルテ",
+      "sameScreen": true
+    },
+    {
+      "step": "05",
+      "text": "再注文・アルバム相談",
+      "sameScreen": true
+    }
+  ]
+};
+
+document.documentElement.style.setProperty("--flow-cols", String(Math.min(CONFIG.journey.length, 7)));
+document.title = CONFIG.pageTitle;
+document.getElementById("heroTitle").innerHTML = `${CONFIG.systemName}<br>公開操作デモ・画面一覧`;
+document.getElementById("heroCopy").textContent = CONFIG.heroCopy;
+document.getElementById("officialLink").href = CONFIG.officialUrl;
+document.getElementById("primaryDemoLink").href = CONFIG.primaryDemoUrl;
+document.getElementById("notice").textContent = CONFIG.notice;
+document.getElementById("screenIntro").textContent = CONFIG.screenIntro;
+document.getElementById("journeyIntro").textContent = CONFIG.journeyIntro;
+document.getElementById("footer").textContent = `${CONFIG.systemName}｜PUBLIC OPERATION DEMO V1.0`;
+
+document.getElementById("quickInfo").innerHTML = CONFIG.quickInfo.map(x =>
+  `<div><small>${x.label}</small><strong>${x.text}</strong></div>`
+).join("");
+
+document.getElementById("screenGrid").innerHTML = CONFIG.screens.map(x => `
+  <article class="card">
+    <div class="card-number">${x.step}</div>
+    <h3>${x.title}</h3>
+    <p>${x.description}</p>
+    <div class="pills">${x.tags.map(t => `<span>${t}</span>`).join("")}</div>
+    <div class="card-note">${x.note}</div>
+    <div class="card-actions">
+      <a class="open" href="${x.url}">${x.cta}</a>
+      <a class="official" href="${x.officialUrl}">説明</a>
+    </div>
+  </article>
+`).join("");
+
+document.getElementById("flowGrid").innerHTML = CONFIG.journey.map(x => `
+  <div class="flow-step${x.sameScreen ? " same" : ""}">
+    <b>${x.step}${x.sameScreen ? " / SAME SCREEN" : ""}</b>
+    <strong>${x.text}</strong>
+  </div>
+`).join("");
+</script>
+</body>
+</html>
