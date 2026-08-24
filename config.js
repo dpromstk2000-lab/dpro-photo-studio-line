@@ -1,8 +1,8 @@
 /**
  * =====================================================================
  * DPRO 写真館・フォトスタジオ LINE
- * STEP STUDIO-4 共通設定・共通ユーティリティ
- * Version: STUDIO-4-CONFIG-20260714
+ * STEP STUDIO-12 共通設定・共通ユーティリティ
+ * Version: DPRO-PHOTO-FRONT-R2-20260824
  * =====================================================================
  *
  * GitHub配置ファイル名:
@@ -22,7 +22,7 @@
  *   - 各HTMLでは画面固有スクリプトより先に本ファイルを読み込む。
  *
  * 読み込み例:
- *   <script src="./config.js?v=STUDIO-4-CONFIG-20260714"></script>
+ *   <script src="./config.js?v=DPRO-PHOTO-FRONT-R2-20260824"></script>
  * =====================================================================
  */
 
@@ -30,9 +30,12 @@
   "use strict";
 
   const VERSION = "STUDIO-4-CONFIG-20260714";
-  const WORKER_VERSION = "STUDIO-3-WORKER-API-20260714";
+  const FRONTEND_VERSION = "DPRO-PHOTO-FRONT-R2-20260824";
+  const ADAPTER_VERSION = "DPRO-PHOTO-ADAPTER-R2-20260824";
+  const DATABASE_VERSION = "DPRO-PHOTO-DB-R2-20260824";
+  const WORKER_VERSION = "STUDIO-10-R9-WORKER-SUBJECT-DAY-DUPLICATE-GUARD-20260715";
   const API_BASE_URL =
-    "https://dpro-photo-studio-line-api.dpromstk2000.workers.dev";
+    "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v3";
   const SITE_BASE_URL =
     "https://dpromstk2000-lab.github.io/dpro-photo-studio-line";
   const REPOSITORY_URL =
@@ -52,8 +55,10 @@
     serviceName: APP_NAME,
     studioName: STUDIO_NAME,
     subtitle: SUBTITLE,
-    appVersion: VERSION,
+    appVersion: FRONTEND_VERSION,
     workerVersion: WORKER_VERSION,
+    adapterVersion: ADAPTER_VERSION,
+    databaseVersion: DATABASE_VERSION,
     studioCode: STUDIO_CODE,
     timezone: DEFAULT_TIMEZONE,
     locale: LOCALE,
@@ -104,6 +109,14 @@
     ROOT: "/",
     ROUTES: "/api/routes",
     HEALTH: "/api/health",
+    PRODUCT_READY_CHECK: "/api/product-ready/check",
+    OWNER_SESSION: "/api/owner/session",
+    OWNER_SESSION_REVOKE: "/api/owner/session/revoke",
+    STAFF_SESSION: "/api/staff/session",
+    STAFF_SESSION_REVOKE: "/api/staff/session/revoke",
+    MEMBER_SESSION: "/api/member/session",
+    MEMBER_SESSION_REVOKE: "/api/member/session/revoke",
+    LINE_CAPABILITY: "/api/line/capability",
 
     PUBLIC_CONFIG: "/api/public/config",
     PUBLIC_PLANS: "/api/public/plans",
@@ -154,6 +167,10 @@
 
   const STORAGE_KEYS = Object.freeze({
     ADMIN_CODE: "dpro_studio_admin_code",
+    OWNER_SESSION: "dpro_photo_owner_session_r2",
+    STAFF_SESSION: "dpro_photo_staff_session_r2",
+    MEMBER_SESSION: "dpro_photo_member_session_r2",
+    STAFF_CODE: "dpro_photo_staff_code_r2",
     LINE_USER_ID: "dpro_studio_line_user_id",
     MEMBER_PHONE: "dpro_studio_member_phone",
     CUSTOMER_NO: "dpro_studio_customer_no",
@@ -571,6 +588,13 @@
       throw new Error("管理コードを入力してください。");
     }
 
+    if (!isDemoMode()) {
+      removeStoredValue(STORAGE_KEYS.ADMIN_CODE, "local");
+      removeStoredValue(STORAGE_KEYS.ADMIN_CODE, "session");
+      dispatchEvent("dpro-studio:admin-code-changed", { saved: false, production: true });
+      return normalized;
+    }
+
     const storageType = options.sessionOnly === true ? "session" : "local";
     const otherType = storageType === "session" ? "local" : "session";
 
@@ -588,6 +612,9 @@
   function clearAdminCode() {
     removeStoredValue(STORAGE_KEYS.ADMIN_CODE, "local");
     removeStoredValue(STORAGE_KEYS.ADMIN_CODE, "session");
+    const page = getCurrentPageName();
+    if (page === PAGES.STAFF || page === PAGES.OWNER_IPAD) clearSessionToken("staff");
+    else clearSessionToken("owner");
     dispatchEvent("dpro-studio:admin-code-changed", { saved: false });
   }
 
@@ -893,6 +920,43 @@
     };
   }
 
+  function getSessionToken(type) {
+    const key = type === "owner" ? STORAGE_KEYS.OWNER_SESSION : type === "staff" ? STORAGE_KEYS.STAFF_SESSION : STORAGE_KEYS.MEMBER_SESSION;
+    return String(getStoredValue(key, "", "session") || "").trim();
+  }
+
+  function saveSessionToken(type, token) {
+    const key = type === "owner" ? STORAGE_KEYS.OWNER_SESSION : type === "staff" ? STORAGE_KEYS.STAFF_SESSION : STORAGE_KEYS.MEMBER_SESSION;
+    const value = String(token || "").trim();
+    if (!value) throw new Error("セッショントークンがありません。");
+    setStoredValue(key, value, "session");
+    return value;
+  }
+
+  function clearSessionToken(type) {
+    const key = type === "owner" ? STORAGE_KEYS.OWNER_SESSION : type === "staff" ? STORAGE_KEYS.STAFF_SESSION : STORAGE_KEYS.MEMBER_SESSION;
+    removeStoredValue(key, "session");
+  }
+
+  function authTypeForEndpoint(endpointOrPath, options = {}) {
+    const path = normalizePath(resolveEndpoint(endpointOrPath));
+    if (Object.prototype.hasOwnProperty.call(options, "authType")) return options.authType;
+    const currentPage = getCurrentPageName();
+    const staffAdminRead = [
+      ENDPOINTS.ADMIN_SETTINGS,
+      ENDPOINTS.ADMIN_RESERVATION_DETAIL,
+      ENDPOINTS.ADMIN_SEARCH,
+      ENDPOINTS.ADMIN_CUSTOMER_DETAIL,
+      ENDPOINTS.ADMIN_MANUAL_RESERVATION,
+    ].includes(path);
+    if (staffAdminRead && [PAGES.STAFF, PAGES.OWNER_IPAD].includes(currentPage)) return "staff";
+    if (path.startsWith("/api/admin/")) return "owner";
+    if (path.startsWith("/api/staff/") || path.startsWith("/api/ipad/")) return "staff";
+    if (path.startsWith("/api/member/")) return "member";
+    if ([ENDPOINTS.PUBLIC_CHANGE_REQUEST, ENDPOINTS.PUBLIC_CANCEL_REQUEST, ENDPOINTS.PUBLIC_CONTACT, ENDPOINTS.PUBLIC_REORDER_REQUEST].includes(path) && currentPage === PAGES.MEMBER) return "member";
+    return null;
+  }
+
   async function apiFetch(endpointOrPath, options = {}) {
     const {
       method = "GET",
@@ -915,15 +979,29 @@
       requestHeaders.set("Content-Type", "application/json");
     }
 
-    if (admin) {
-      const code = String(adminCode || getAdminCode()).trim();
-      if (!code) {
+    const authType = authTypeForEndpoint(endpointOrPath, options);
+    if (authType) {
+      let token = getSessionToken(authType);
+      if (!token && authType === "member") {
+        if (isDemoMode()) {
+          const demoLineId = String(query?.line_user_id || getCurrentUrl().searchParams.get("line_user_id") || "demo_photo_line_001").trim();
+          await openMemberSession({ line_user_id: demoLineId });
+          token = getSessionToken("member");
+        } else if (typeof global.liff?.getIDToken === "function") {
+          const idToken = String(global.liff.getIDToken() || "").trim();
+          if (idToken) {
+            await openMemberSession({ line_id_token: idToken });
+            token = getSessionToken("member");
+          }
+        }
+      }
+      if (!token) {
         throw new DproStudioApiError(
-          "管理コードが保存されていません。管理コードを入力してください。",
-          { status: 401, code: "ADMIN_CODE_REQUIRED" },
+          authType === "member" ? "お客様認証が必要です。マイページを開き直してください。" : authType === "staff" ? "スタッフ認証が必要です。" : "管理者認証が必要です。",
+          { status: 401, code: `${authType.toUpperCase()}_SESSION_REQUIRED` },
         );
       }
-      requestHeaders.set("X-Admin-Code", code);
+      requestHeaders.set(authType === "owner" ? "X-Owner-Session" : authType === "staff" ? "X-Staff-Session" : "X-Member-Session", token);
     }
 
     const timeoutController = new AbortController();
@@ -983,6 +1061,10 @@
       payload = rawText ? { rawText } : null;
     }
 
+    if (payload && normalizePath(resolveEndpoint(endpointOrPath)) === ENDPOINTS.HEALTH && !payload.version && payload.versions?.observed?.legacy_worker) {
+      payload.version = payload.versions.observed.legacy_worker;
+    }
+
     if (!response.ok || payload?.ok === false) {
       const message =
         payload?.error ||
@@ -1023,12 +1105,42 @@
     return apiPost(endpointOrPath, body, { ...options, admin: true });
   }
 
-  function verifyAdminCode(adminCode) {
-    return apiPost(
-      ENDPOINTS.ADMIN_VERIFY,
-      {},
-      { admin: true, adminCode: String(adminCode || "").trim() },
-    );
+  async function verifyAdminCode(adminCode) {
+    const inputCode = String(adminCode || "").trim();
+    if (!inputCode) throw new DproStudioApiError("認証コードを入力してください。", { status: 400, code: "AUTH_CODE_REQUIRED" });
+    const page = getCurrentPageName();
+    if (page === PAGES.STAFF || page === PAGES.OWNER_IPAD) {
+      const urlStaffCode = String(getCurrentUrl().searchParams.get("staff_code") || "").trim();
+      const storedStaffCode = String(getStoredValue(STORAGE_KEYS.STAFF_CODE, "", "session") || "").trim();
+      const demoMap = { "2468": "CAM-TANAKA", "3579": "CAM-YAMAMOTO", "4680": "REC-SASAKI", "1234": page === PAGES.OWNER_IPAD ? "REC-SASAKI" : "CAM-TANAKA" };
+      const staffCode = urlStaffCode || storedStaffCode || (isDemoMode() ? demoMap[inputCode] : "");
+      const pin = isDemoMode() && inputCode === "1234" ? (page === PAGES.OWNER_IPAD ? "4680" : "2468") : inputCode;
+      if (!staffCode) throw new DproStudioApiError("スタッフ専用URLから開くか、スタッフコードを設定してください。", { status: 400, code: "STAFF_CODE_REQUIRED" });
+      const result = await verifyStaffCredentials(staffCode, pin);
+      return { ...result, verified: true };
+    }
+    const result = await apiPost(ENDPOINTS.OWNER_SESSION, { code: inputCode }, { authType: null });
+    saveSessionToken("owner", result.session_token);
+    return result;
+  }
+
+  async function verifyStaffCredentials(staffCode, pin) {
+    const code = String(staffCode || "").trim();
+    const secret = String(pin || "").trim();
+    if (!code || !secret) throw new DproStudioApiError("スタッフコードとPINを入力してください。", { status: 400, code: "STAFF_CREDENTIAL_REQUIRED" });
+    const result = await apiPost(ENDPOINTS.STAFF_SESSION, { staff_code: code, pin: secret }, { authType: null });
+    saveSessionToken("staff", result.session_token);
+    setStoredValue(STORAGE_KEYS.STAFF_CODE, code, "session");
+    return result;
+  }
+
+  async function openMemberSession(options = {}) {
+    const body = isDemoMode()
+      ? { demo: true, demo_line_user_id: String(options.line_user_id || "").trim() }
+      : { line_id_token: String(options.line_id_token || "").trim() };
+    const result = await apiPost(ENDPOINTS.MEMBER_SESSION, body, { authType: null });
+    saveSessionToken("member", result.session_token);
+    return result;
   }
 
   function getMemberLookupFromUrl() {
@@ -1053,6 +1165,9 @@
 
   const CONFIG = Object.freeze({
     VERSION,
+    FRONTEND_VERSION,
+    ADAPTER_VERSION,
+    DATABASE_VERSION,
     WORKER_VERSION,
     API_BASE_URL,
     SITE_BASE_URL,
@@ -1138,6 +1253,11 @@
     adminGet,
     adminPost,
     verifyAdminCode,
+    verifyStaffCredentials,
+    openMemberSession,
+    getSessionToken,
+    saveSessionToken,
+    clearSessionToken,
     getMemberLookupFromUrl,
   });
 
@@ -1146,6 +1266,7 @@
 
   dispatchEvent("dpro-studio:config-ready", {
     version: VERSION,
+    frontendVersion: FRONTEND_VERSION,
     studioCode: STUDIO_CODE,
     demoMode: CONFIG.RUNTIME.demoMode,
     currentPage: CONFIG.RUNTIME.currentPage,
