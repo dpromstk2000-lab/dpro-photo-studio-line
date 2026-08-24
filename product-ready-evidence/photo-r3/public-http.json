@@ -1,0 +1,62 @@
+{
+  "ok": true,
+  "checkedAt": "2026-08-24T02:57:23Z",
+  "results": [
+    {
+      "key": "index",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html?demo=1",
+      "httpStatus": 200,
+      "bytes": 82326,
+      "ok": true
+    },
+    {
+      "key": "member",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/member.html?demo=1",
+      "httpStatus": 200,
+      "bytes": 60163,
+      "ok": true
+    },
+    {
+      "key": "owner",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/owner.html?demo=1",
+      "httpStatus": 200,
+      "bytes": 117449,
+      "ok": true
+    },
+    {
+      "key": "staff",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/staff.html?demo=1",
+      "httpStatus": 200,
+      "bytes": 58285,
+      "ok": true
+    },
+    {
+      "key": "owner_ipad",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/owner-ipad.html?demo=1",
+      "httpStatus": 200,
+      "bytes": 118634,
+      "ok": true
+    },
+    {
+      "key": "system_check",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/system-check.html?demo=1",
+      "httpStatus": 200,
+      "bytes": 61747,
+      "ok": true
+    },
+    {
+      "key": "product_site",
+      "url": "https://dpromstk2000-lab.github.io/dpro-line-systems-site/systems/photo-studio.html",
+      "httpStatus": 200,
+      "bytes": 33988,
+      "ok": true
+    },
+    {
+      "key": "official_site",
+      "url": "https://dpro-shop.com/systems/photo-studio",
+      "httpStatus": 200,
+      "bytes": 53242,
+      "ok": true
+    }
+  ]
+}

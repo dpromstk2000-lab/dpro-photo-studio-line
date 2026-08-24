@@ -1,0 +1,28 @@
+{
+  "ok": true,
+  "service": "DPRO Photo Studio LINE API",
+  "version": "STUDIO-10-R9-WORKER-SUBJECT-DAY-DUPLICATE-GUARD-20260715",
+  "time": "2026-08-24T02:57:21.986Z",
+  "database": {
+    "ok": true,
+    "studio_code": "dpro_photo_demo",
+    "studio_name": "DPROフォトスタジオ",
+    "is_demo": true,
+    "staff_count": 3,
+    "resource_count": 3,
+    "plan_count": 7,
+    "customer_count": 4,
+    "demo_reservation_count": 4,
+    "open_task_count": 4
+  },
+  "production_guard": true,
+  "slot_minutes": 30,
+  "phone_normalization": true,
+  "staff_overlap_guard": true,
+  "resource_overlap_guard": true,
+  "same_subject_same_day_guard": true,
+  "duplicate_subject_master_guard": true,
+  "external_gallery_only": true,
+  "photo_storage_created": false,
+  "cors_error_handling": true
+}

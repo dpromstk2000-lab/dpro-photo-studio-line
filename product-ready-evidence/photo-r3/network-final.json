@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "checkedAt": "2026-08-24T02:58:18.789937+00:00",
+  "runtimeOk": true,
+  "publicHttpOk": true,
+  "flyerOk": true,
+  "browserOk": true,
+  "closesReadyItems": [
+    "READY-006",
+    "READY-007",
+    "READY-023",
+    "READY-024",
+    "READY-028"
+  ],
+  "nonblockingAlsoRefreshed": [
+    "READY-032"
+  ],
+  "centralFinalLockSelfConfirmed": false
+}
