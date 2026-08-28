@@ -1,0 +1,327 @@
+name: DPRO PHOTO Tutorial R5 Print Manuals V1.0
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/STEP-PHOTO-TUTORIAL-R5-PRINT-MANUALS-V1.0.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: dpro-photo-tutorial-r5-print-manuals
+  cancel-in-progress: false
+
+env:
+  ACCEPTED_R4_HEAD: 6633f4a619a1510ca83c99e22eb8f8b28ac05829
+  ACCEPTED_R4_TREE: d0ee85a1b6b616be48c21f94cdd47e0259fbe31b
+  BASE_URL: https://dpromstk2000-lab.github.io/dpro-photo-studio-line/
+  GUIDE_URL: https://dpromstk2000-lab.github.io/dpro-photo-studio-line/demo-guide.html?demo=1
+  START_URL: https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html?demo=1&tutorial=1
+  QUICK_PDF: DPRO_TUTORIAL_PHOTO_QUICK_START_V1.0.pdf
+  QUICK_PNG: DPRO_TUTORIAL_PHOTO_QUICK_START_V1.0.png
+  DETAIL_PDF: DPRO_TUTORIAL_PHOTO_DETAILED_MANUAL_V1.0.pdf
+  DETAIL_PNG: DPRO_TUTORIAL_PHOTO_DETAILED_MANUAL_V1.0.png
+
+jobs:
+  r5-print-manuals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout newest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: R5 source gate and protected boundary lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          git merge-base --is-ancestor "$ACCEPTED_R4_HEAD" HEAD
+          test "$(git rev-parse "$ACCEPTED_R4_HEAD^{tree}")" = "$ACCEPTED_R4_TREE"
+          test "$(git rev-parse "$ACCEPTED_R4_HEAD:staff.html")" = "$(git rev-parse HEAD:staff.html)"
+          test "$(git rev-parse "$ACCEPTED_R4_HEAD:system-check.html")" = "$(git rev-parse HEAD:system-check.html)"
+          grep -q 'FIRST10 TUTORIAL / STANDARD V1.1' demo-guide.html
+          grep -q './index.html?demo=1&tutorial=1' demo-guide.html
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess, os
+          d=Path('tutorial-data.js').read_text(encoding='utf-8')
+          j=Path('tutorial.js').read_text(encoding='utf-8')
+          assert d.count('step: ') == 10
+          assert 'first10Count: 10' in d
+          assert 'dpro_tutorial_photo_v1_1' in d
+          for forbidden in ['fetch(', 'apiPost(', 'adminPost(', '.submit(', 'agreementCheck.checked', '.click()']:
+              assert forbidden not in j, forbidden
+          changed=subprocess.check_output(['git','diff','--name-only',f"{os.environ['ACCEPTED_R4_HEAD']}..HEAD"],text=True).splitlines()
+          unexpected=[x for x in changed if x != '.github/workflows/STEP-PHOTO-TUTORIAL-R5-PRINT-MANUALS-V1.0.yml']
+          if unexpected: raise SystemExit('Unexpected post-R4 files before R5: '+','.join(unexpected))
+          print('R5_SOURCE_GATE=PASS')
+          PY
+          mkdir -p r5-work/screens r5-work/qrs r5-work/renders r5-work/qa tutorial-evidence/photo-r5
+          printf 'ENTRY_HEAD=%s\nENTRY_TREE=%s\nACCEPTED_R4_HEAD=%s\nFORWARD_ONLY=PASS\nPROTECTED_STAFF=UNCHANGED\nPROTECTED_SYSTEM_CHECK=UNCHANGED\n' \
+            "$(git rev-parse HEAD)" "$(git rev-parse HEAD^{tree})" "$ACCEPTED_R4_HEAD" > r5-work/qa/source-gate.txt
+          echo "ENTRY_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Install Japanese PDF and browser QA dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra poppler-utils zbar-tools
+          fc-cache -f
+          fc-match 'Noto Sans CJK JP'
+          python -m pip install --disable-pip-version-check --no-cache-dir qrcode[pil]==8.2 pillow==11.3.0 pypdf==6.0.0
+          mkdir -p /tmp/photo-r5-playwright && cd /tmp/photo-r5-playwright
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Capture current LIVE tutorial screenshots with mutation audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/photo-r5-playwright/capture.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          import path from 'path';
+          const BASE=process.env.BASE_URL;
+          const OUT=path.join(process.env.GITHUB_WORKSPACE,'r5-work','screens');
+          const NS='dpro_tutorial_photo_v1_1';
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1000},deviceScaleFactor:1});
+          const p=await ctx.newPage();
+          const mutations=[]; const errors=[]; const meta=[];
+          p.on('request',r=>{ if(['POST','PUT','PATCH','DELETE'].includes(r.method())) mutations.push({method:r.method(),url:r.url()}); });
+          p.on('pageerror',e=>errors.push('pageerror:'+String(e)));
+          p.on('console',m=>{ if(m.type()==='error') errors.push('console:'+m.text()); });
+          async function nav(url){ const r=await p.goto(url,{waitUntil:'domcontentloaded',timeout:45000}); await p.waitForTimeout(1000); if(!r || r.status()!==200) throw new Error('HTTP '+(r?.status()||0)+' '+url); return r; }
+          async function setStep(n){
+            await p.evaluate(([ns,n])=>localStorage.setItem(ns,JSON.stringify({active:true,completed:false,step:n,updatedAt:new Date().toISOString()})),[NS,n]);
+          }
+          async function cardShot(n,pageName,file){
+            await setStep(n);
+            await nav(BASE+pageName+'?demo=1&tutorial=1');
+            const card=p.locator('#dproTutorialCard');
+            await card.waitFor({state:'visible',timeout:15000});
+            await card.screenshot({path:path.join(OUT,file)});
+            const txt=(await card.innerText()).replace(/\s+/g,' ').trim();
+            meta.push({file,step:n,url:p.url(),text:txt.slice(0,500)});
+          }
+          await nav(BASE+'demo-guide.html?demo=1');
+          const guide=p.locator('#tutorialFirst10');
+          await guide.waitFor({state:'visible',timeout:15000});
+          await guide.screenshot({path:path.join(OUT,'01_guide_first10.png')});
+          meta.push({file:'01_guide_first10.png',url:p.url(),count:await guide.locator('.flow-step').count()});
+          await cardShot(1,'index.html','02_step01_card.png');
+          await cardShot(8,'owner-ipad.html','03_step08_card.png');
+          await cardShot(9,'member.html','04_step09_card.png');
+          await cardShot(10,'owner.html','05_step10_card.png');
+          await browser.close();
+          const out={checkedAt:new Date().toISOString(),meta,mutations,errors,businessMutation:mutations.length,ok:mutations.length===0&&errors.length===0&&meta[0].count===10};
+          fs.writeFileSync(path.join(process.env.GITHUB_WORKSPACE,'r5-work','qa','live-capture.json'),JSON.stringify(out,null,2));
+          if(!out.ok){ console.error(JSON.stringify(out,null,2)); process.exit(1); }
+          JS
+          cd /tmp/photo-r5-playwright
+          node capture.mjs
+          cat "$GITHUB_WORKSPACE/r5-work/qa/live-capture.json"
+
+      - name: Generate exact QR codes and A4 manuals from LIVE screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import qrcode, html, re, json, os
+          root=Path('r5-work'); qrs=root/'qrs'; qrs.mkdir(exist_ok=True)
+          guide=os.environ['GUIDE_URL']; start=os.environ['START_URL']
+          for name,url in [('guide.png',guide),('start.png',start)]:
+              qr=qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M,box_size=8,border=4)
+              qr.add_data(url); qr.make(fit=True); qr.make_image(fill_color='black',back_color='white').save(qrs/name)
+          src=Path('tutorial-data.js').read_text(encoding='utf-8')
+          pat=re.compile(r'\{ step: (\d+), page: "([^"]+)", title: "([^"]+)", body: "([^"]+)"')
+          steps=[{'step':int(n),'page':p,'title':t,'body':b} for n,p,t,b in pat.findall(src)]
+          assert len(steps)==10
+          (root/'qa'/'first10.json').write_text(json.dumps(steps,ensure_ascii=False,indent=2),encoding='utf-8')
+          css='''@page { size:A4 portrait; margin:0; }
+          *{box-sizing:border-box} body{margin:0;font-family:"Noto Sans CJK JP","Noto Sans JP",sans-serif;color:#172033;background:#fff}
+          .page{width:210mm;height:297mm;padding:12mm 13mm 11mm;position:relative;overflow:hidden;page-break-after:always;background:white}
+          .page:last-child{page-break-after:auto}.kicker{font-size:9pt;letter-spacing:.08em;color:#53657d;font-weight:700}.title{font-size:22pt;line-height:1.25;margin:3mm 0 2mm;font-weight:800}.sub{font-size:9.8pt;line-height:1.65;color:#4a596e;margin:0 0 4mm}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:5mm}.card{border:1px solid #d7dee8;border-radius:4mm;padding:4mm;background:#fbfcfe}.steps{display:grid;grid-template-columns:1fr 1fr;gap:2.2mm 4mm}.step{display:grid;grid-template-columns:8mm 1fr;gap:2mm;align-items:start;font-size:8.8pt;line-height:1.45}.num{font-weight:800;color:#364d6b}.shot{width:100%;max-height:72mm;object-fit:contain;border:1px solid #dbe2eb;border-radius:3mm;background:#f6f8fb}.shot.tall{max-height:88mm}.qrrow{display:flex;align-items:center;gap:4mm;border:1px solid #d7dee8;border-radius:4mm;padding:3.5mm;margin-top:4mm}.qr{width:28mm;height:28mm}.url{font-family:monospace;font-size:7.5pt;word-break:break-all;color:#34465e}.h2{font-size:15pt;margin:0 0 3mm;font-weight:800}.h3{font-size:11pt;margin:0 0 1mm}.p{font-size:9pt;line-height:1.6;margin:0 0 2.5mm}.bul{font-size:8.8pt;line-height:1.55;margin:1mm 0 0;padding-left:5mm}.footer{position:absolute;left:13mm;right:13mm;bottom:6mm;display:flex;justify-content:space-between;font-size:7.5pt;color:#718096}.safe{border-left:3px solid #586f8e;padding:2.5mm 3mm;background:#f5f7fa;font-size:8.5pt;line-height:1.5}.dense .p{font-size:8.4pt;line-height:1.5}.dense .h3{font-size:10.2pt}'''
+          def step_html(seq, onecol=False):
+              body=''.join(f'<div class="step"><div class="num">{s["step"]:02d}</div><div><b>{html.escape(s["title"])}</b><br>{html.escape(s["body"])}</div></div>' for s in seq)
+              return body
+          steps_html=step_html(steps)
+          quick=f'''<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>{css}</style></head><body><section class="page"><div class="kicker">DPRO TUTORIAL / PHOTO / STANDARD V1.1</div><div class="title">PHOTO Quick Start</div><p class="sub">公開デモのFirst10を、予約から撮影進行・写真セレクト・再注文管理まで10ステップで確認します。チュートリアルは予約送信や業務データ変更を自動実行しません。</p><div class="grid2"><div class="card"><div class="h2">First10 - exactly 10</div><div class="steps">{steps_html}</div></div><div><img class="shot" src="screens/01_guide_first10.png"><div style="height:3mm"></div><img class="shot" src="screens/02_step01_card.png"></div></div><div class="qrrow"><img class="qr" src="qrs/start.png"><div><div class="h3">First10を開始</div><div class="p">スマートフォンでもPCでも同じ公開デモから開始できます。</div><div class="url">{html.escape(start)}</div></div></div><div class="footer"><span>DPRO PHOTO Tutorial Quick Start V1.0</span><span>1 / 1</span></div></section></body></html>'''
+          (root/'quick.html').write_text(quick,encoding='utf-8')
+          s1=step_html(steps[:3]); s2=step_html(steps[:7]); s34=step_html(steps[7:9]); s10=steps[9]
+          detail=f'''<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>{css}</style></head><body>
+          <section class="page"><div class="kicker">DPRO TUTORIAL / PHOTO / DETAILED MANUAL V1.0</div><div class="title">PHOTO 操作チュートリアル 詳細マニュアル</div><p class="sub">STANDARD V1.1のFirst10とR4 Guide Centerを基準にした印刷版です。公開デモを見ながら、最初に確認する導線を安全にたどれます。</p><div class="grid2"><div class="card"><div class="h2">全体の流れ</div>{s1}<p class="p" style="margin-top:4mm">STEP 01-07は予約側、STEP 08は受付iPad、STEP 09はお客様マイページ、STEP 10はオーナーPCへ進みます。</p><div class="safe">実在する氏名・電話番号・住所などは公開デモへ入力しないでください。チュートリアルは同意チェックや予約送信を自動では行いません。</div></div><div><img class="shot tall" src="screens/01_guide_first10.png"><div class="qrrow"><img class="qr" src="qrs/guide.png"><div><div class="h3">Guide Center</div><div class="url">{html.escape(guide)}</div></div></div></div></div><div class="footer"><span>DPRO PHOTO Detailed Manual</span><span>1 / 4</span></div></section>
+          <section class="page dense"><div class="kicker">STEP 01 - 07 / 予約</div><div class="title">撮影予約を7ステップで確認</div><div class="grid2"><div class="card"><div class="steps" style="grid-template-columns:1fr">{s2}</div></div><div><img class="shot tall" src="screens/02_step01_card.png"><h3 class="h3" style="margin-top:4mm">操作のポイント</h3><ul class="bul"><li>カード上部のDRAGハンドルはマウス・タッチ・矢印キーで移動できます。</li><li>「次へ」「戻る」でFirst10内を移動できます。</li><li>Close / Escで閉じても「操作ガイドを再開」から続行できます。</li><li>STEP 07では予約内容を確認しますが、チュートリアル自身は送信を実行しません。</li></ul></div></div><div class="footer"><span>DPRO PHOTO Detailed Manual</span><span>2 / 4</span></div></section>
+          <section class="page"><div class="kicker">STEP 08 - 09 / 当日受付・納品</div><div class="title">受付iPadから写真セレクトへ</div><div class="grid2"><div><div class="card">{s34}</div><h3 class="h3" style="margin-top:4mm">STEP 08 当日受付・撮影進行</h3><p class="p">来店待ち、受付・撮影準備、撮影、会計・案内、完了までのレーンを確認します。</p><h3 class="h3">STEP 09 写真セレクト・納品</h3><p class="p">予約、撮影前案内、写真セレクト、納品、再注文相談をマイページで確認します。</p></div><div><img class="shot" src="screens/03_step08_card.png"><div style="height:4mm"></div><img class="shot" src="screens/04_step09_card.png"></div></div><div class="footer"><span>DPRO PHOTO Detailed Manual</span><span>3 / 4</span></div></section>
+          <section class="page"><div class="kicker">STEP 10 / オーナー管理 + 操作ヘルプ</div><div class="title">撮影カルテ・再注文管理で完了</div><div class="grid2"><div><div class="card"><div class="step"><div class="num">10</div><div><b>{html.escape(s10['title'])}</b><br>{html.escape(s10['body'])}</div></div></div><h3 class="h3" style="margin-top:4mm">カード操作</h3><ul class="bul"><li>DRAG: カード上部の専用ハンドルをドラッグ。</li><li>Keyboard: ハンドルにフォーカスして矢印キー。Shift + 矢印で大きく移動。</li><li>Close / Esc: 途中で閉じても再開可能。</li><li>Skip: チュートリアルを完了扱いにして閉じる。</li><li>Replay: STEP 10完了後にもう一度STEP 01から確認。</li></ul><div class="safe" style="margin-top:4mm">Business mutation = 0。TutorialはDB / Worker / API / Auth / Role / Permission / Feature Flagを変更しません。</div></div><div><img class="shot tall" src="screens/05_step10_card.png"><div class="qrrow"><img class="qr" src="qrs/start.png"><div><div class="h3">First10をもう一度開始</div><div class="url">{html.escape(start)}</div></div></div></div></div><div class="footer"><span>DPRO PHOTO Detailed Manual</span><span>4 / 4</span></div></section>
+          </body></html>'''
+          (root/'detail.html').write_text(detail,encoding='utf-8')
+          PY
+          cat > /tmp/photo-r5-playwright/print.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import path from 'path'; import { pathToFileURL } from 'url';
+          const root=process.env.GITHUB_WORKSPACE;
+          const browser=await chromium.launch({headless:true});
+          for (const [html,pdf] of [['quick.html',process.env.QUICK_PDF],['detail.html',process.env.DETAIL_PDF]]) {
+            const p=await browser.newPage();
+            await p.goto(pathToFileURL(path.join(root,'r5-work',html)).href,{waitUntil:'load'});
+            await p.emulateMedia({media:'print'});
+            await p.pdf({path:path.join(root,pdf),format:'A4',printBackground:true,preferCSSPageSize:true,margin:{top:'0',right:'0',bottom:'0',left:'0'}});
+            await p.close();
+          }
+          await browser.close();
+          JS
+          cd /tmp/photo-r5-playwright
+          node print.mjs
+          test -s "$GITHUB_WORKSPACE/$QUICK_PDF"
+          test -s "$GITHUB_WORKSPACE/$DETAIL_PDF"
+
+      - name: Render every PDF page and run page structure QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          pdfinfo "$QUICK_PDF" > r5-work/qa/quick-pdfinfo.txt
+          pdfinfo "$DETAIL_PDF" > r5-work/qa/detail-pdfinfo.txt
+          test "$(awk '/^Pages:/{print $2}' r5-work/qa/quick-pdfinfo.txt)" = "1"
+          test "$(awk '/^Pages:/{print $2}' r5-work/qa/detail-pdfinfo.txt)" = "4"
+          pdftoppm -png -r 160 "$QUICK_PDF" r5-work/renders/quick >/dev/null 2>&1
+          pdftoppm -png -r 160 "$DETAIL_PDF" r5-work/renders/detail >/dev/null 2>&1
+          cp r5-work/renders/quick-1.png "$QUICK_PNG"
+          cp r5-work/renders/detail-1.png "$DETAIL_PNG"
+          pdftotext "$QUICK_PDF" r5-work/qa/quick.txt
+          pdftotext -f 1 -l 1 "$DETAIL_PDF" r5-work/qa/detail-p1.txt
+          pdftotext -f 2 -l 2 "$DETAIL_PDF" r5-work/qa/detail-p2.txt
+          pdftotext -f 3 -l 3 "$DETAIL_PDF" r5-work/qa/detail-p3.txt
+          pdftotext -f 4 -l 4 "$DETAIL_PDF" r5-work/qa/detail-p4.txt
+          grep -q 'PHOTO Quick Start' r5-work/qa/quick.txt
+          grep -q '詳細マニュアル' r5-work/qa/detail-p1.txt
+          grep -q '撮影予約を7ステップ' r5-work/qa/detail-p2.txt
+          grep -q '受付iPadから写真セレクト' r5-work/qa/detail-p3.txt
+          grep -q '撮影カルテ・再注文管理' r5-work/qa/detail-p4.txt
+          python - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          import json
+          files=sorted(Path('r5-work/renders').glob('*.png'))
+          assert len(files)==5, files
+          results=[]
+          for p in files:
+              im=Image.open(p).convert('L')
+              assert im.width>1000 and im.height>1500, (p,im.size)
+              hist=im.histogram(); total=sum(hist); white=sum(hist[248:]) / total; black=sum(hist[:8]) / total
+              if not (white<0.97 and black<0.45): raise SystemExit(f'Visual raster sanity failed {p}: white={white:.4f} black={black:.4f}')
+              results.append({'file':p.name,'width':im.width,'height':im.height,'whiteRatio':round(white,4),'blackRatio':round(black,4),'ok':True})
+          Path('r5-work/qa/page-raster-qa.json').write_text(json.dumps({'pages':results,'count':len(results),'ok':True},indent=2),encoding='utf-8')
+          PY
+
+      - name: Decode every QR from final rendered pages and verify exact URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          QUICK_DECODE="$(zbarimg --quiet --raw r5-work/renders/quick-1.png | tr -d '\r' | sed '/^$/d')"
+          D1_DECODE="$(zbarimg --quiet --raw r5-work/renders/detail-1.png | tr -d '\r' | sed '/^$/d')"
+          D4_DECODE="$(zbarimg --quiet --raw r5-work/renders/detail-4.png | tr -d '\r' | sed '/^$/d')"
+          test "$QUICK_DECODE" = "$START_URL"
+          test "$D1_DECODE" = "$GUIDE_URL"
+          test "$D4_DECODE" = "$START_URL"
+          curl -fsS -o /dev/null "$GUIDE_URL&r5qa=$ENTRY_HEAD"
+          curl -fsS -o /dev/null "$START_URL&r5qa=$ENTRY_HEAD"
+          printf 'QUICK_PAGE_1=%s\nDETAIL_PAGE_1=%s\nDETAIL_PAGE_4=%s\nEXACT_DECODE=PASS\nDESTINATION_HTTP=PASS\n' "$QUICK_DECODE" "$D1_DECODE" "$D4_DECODE" > r5-work/qa/qr-qa.txt
+
+      - name: Build R5 evidence and commit manuals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,shutil
+          assets=[os.environ['QUICK_PDF'],os.environ['QUICK_PNG'],os.environ['DETAIL_PDF'],os.environ['DETAIL_PNG']]
+          hashes={x:hashlib.sha256(Path(x).read_bytes()).hexdigest() for x in assets}
+          evidence=Path('tutorial-evidence/photo-r5'); evidence.mkdir(parents=True,exist_ok=True)
+          shutil.copy('r5-work/qa/live-capture.json',evidence/'LIVE_SCREENSHOT_QA.json')
+          shutil.copy('r5-work/qa/page-raster-qa.json',evidence/'PDF_PAGE_RENDER_QA.json')
+          shutil.copy('r5-work/qa/qr-qa.txt',evidence/'QR_QA.txt')
+          shutil.copy('r5-work/qa/source-gate.txt',evidence/'SOURCE_GATE.txt')
+          summary={'system':'PHOTO','stage':'R5','standard':'V1.1','first10':10,'quickStart':os.environ['QUICK_PDF'],'detailedManual':os.environ['DETAIL_PDF'],'pdfPages':{'quick':1,'detailed':4},'finalRenderCount':5,'currentLiveScreenshots':5,'qrFinalRenderDecode':'PASS','businessMutation':0,'protectedBoundaryChange':0,'dbWorkerApiAuthRolePermissionFeatureFlagChange':0,'assetSha256':hashes,'automatedGate':'PASS','manualVisualReview':'PENDING_ASSISTANT_ARTIFACT_REVIEW'}
+          (evidence/'R5_QA_SUMMARY.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
+          (evidence/'ASSET_SHA256.txt').write_text('\n'.join(f'{v}  {k}' for k,v in hashes.items())+'\n',encoding='utf-8')
+          PY
+          git config user.name 'dpro-tutorial-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add "$QUICK_PDF" "$QUICK_PNG" "$DETAIL_PDF" "$DETAIL_PNG" tutorial-evidence/photo-r5
+          git commit -m 'Build PHOTO Tutorial R5 print manuals'
+          git push origin HEAD:main
+          echo "R5_ASSET_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Wait exact R5 asset commit Pages and verify public files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,time,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; sha=os.environ['R5_ASSET_COMMIT']; token=os.environ['GH_TOKEN']
+          headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,'User-Agent':'DPRO-PHOTO-R5'}
+          deadline=time.time()+300; ok=False; run_url=''
+          while time.time()<deadline:
+              req=urllib.request.Request(f'https://api.github.com/repos/{repo}/actions/runs?head_sha={sha}&per_page=20',headers=headers)
+              with urllib.request.urlopen(req,timeout=30) as r:data=json.load(r)
+              for x in data.get('workflow_runs',[]):
+                  if x.get('name')=='pages build and deployment' and x.get('head_sha')==sha:
+                      run_url=x.get('html_url','')
+                      if x.get('status')=='completed':
+                          if x.get('conclusion')!='success': raise SystemExit('Pages failed: '+run_url)
+                          ok=True; break
+              if ok: break
+              time.sleep(8)
+          if not ok: raise SystemExit('Exact R5 Pages success not proven')
+          open('r5-work/qa/r5-pages.txt','w').write(f'R5_ASSET_COMMIT={sha}\nPAGES_RUN={run_url}\nPAGES=SUCCESS\n')
+          PY
+          for f in "$QUICK_PDF" "$QUICK_PNG" "$DETAIL_PDF" "$DETAIL_PNG"; do curl -fsS -o /dev/null "$BASE_URL$f?r5=$R5_ASSET_COMMIT"; done
+          printf 'PUBLIC_QUICK_PDF=%s%s\nPUBLIC_QUICK_PNG=%s%s\nPUBLIC_DETAIL_PDF=%s%s\nPUBLIC_DETAIL_PNG=%s%s\nPUBLIC_HTTP=PASS\n' "$BASE_URL" "$QUICK_PDF" "$BASE_URL" "$QUICK_PNG" "$BASE_URL" "$DETAIL_PDF" "$BASE_URL" "$DETAIL_PNG" > r5-work/qa/public-links.txt
+
+      - name: Finalize R5 evidence commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp r5-work/qa/r5-pages.txt tutorial-evidence/photo-r5/PAGES_QA.txt
+          cp r5-work/qa/public-links.txt tutorial-evidence/photo-r5/PUBLIC_LINKS.txt
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          p=Path('tutorial-evidence/photo-r5/R5_QA_SUMMARY.json'); d=json.loads(p.read_text(encoding='utf-8'))
+          d['r5AssetCommit']=os.environ['R5_ASSET_COMMIT']; d['publicHttp']='PASS'; d['pagesExactAssetCommit']='PASS'; d['r5AutomatedQa']='PASS'
+          p.write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')
+          PY
+          git add tutorial-evidence/photo-r5
+          git commit -m 'Finalize PHOTO Tutorial R5 automated QA evidence'
+          git push origin HEAD:main
+          echo "R5_FINAL_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "R5_FINAL_TREE=$(git rev-parse HEAD^{tree})" >> "$GITHUB_ENV"
+
+      - name: Upload R5 visual-review artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO-PHOTO-R5-VISUAL-QA
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            DPRO_TUTORIAL_PHOTO_QUICK_START_V1.0.pdf
+            DPRO_TUTORIAL_PHOTO_QUICK_START_V1.0.png
+            DPRO_TUTORIAL_PHOTO_DETAILED_MANUAL_V1.0.pdf
+            DPRO_TUTORIAL_PHOTO_DETAILED_MANUAL_V1.0.png
+            r5-work/screens/*.png
+            r5-work/renders/*.png
+            r5-work/qa/*
+            tutorial-evidence/photo-r5/*
