@@ -70,7 +70,7 @@
   function bindDrag(handle) {
     handle.addEventListener("pointerdown", (e) => {
       if (e.button !== undefined && e.button !== 0) return;
-      const r = card.getBoundingClientRect(); drag = { id:e.pointerId, dx:e.clientX-r.left, dy:e.clientY-r.top }; handle.setPointerCapture?.(e.pointerId); e.preventDefault();
+      const r = card.getBoundingClientRect(); drag = { id:e.pointerId, dx:e.clientX-r.left, dy:e.clientY-r.top }; try { handle.setPointerCapture?.(e.pointerId); } catch {} e.preventDefault();
     });
     handle.addEventListener("pointermove", (e) => { if (!drag || drag.id !== e.pointerId) return; setPosition(e.clientX-drag.dx, e.clientY-drag.dy); });
     const finish = (e) => { if (!drag || (e.pointerId !== undefined && drag.id !== e.pointerId)) return; drag=null; savePosition(); };
