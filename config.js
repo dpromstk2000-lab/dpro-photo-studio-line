@@ -1271,4 +1271,23 @@
     demoMode: CONFIG.RUNTIME.demoMode,
     currentPage: CONFIG.RUNTIME.currentPage,
   });
+
+  /* DPRO TUTORIAL V1.1 LOADER / DEMO ONLY / BUSINESS MUTATION 0 */
+  if (CONFIG.RUNTIME.demoMode && global.document) {
+    const tutorialVersion = "DPRO-TUTORIAL-PHOTO-V1.1-R4-20260828";
+    const tutorialCss = global.document.createElement("link");
+    tutorialCss.rel = "stylesheet";
+    tutorialCss.href = `./tutorial.css?v=${tutorialVersion}`;
+    global.document.head.appendChild(tutorialCss);
+
+    const tutorialData = global.document.createElement("script");
+    tutorialData.src = `./tutorial-data.js?v=${tutorialVersion}`;
+    tutorialData.onload = () => {
+      const tutorialRuntime = global.document.createElement("script");
+      tutorialRuntime.src = `./tutorial.js?v=${tutorialVersion}`;
+      global.document.head.appendChild(tutorialRuntime);
+    };
+    global.document.head.appendChild(tutorialData);
+  }
+
 })(window);

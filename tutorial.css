@@ -1,0 +1,41 @@
+:root { --dpro-tutorial-z: 2147483000; }
+[data-dpro-tutorial-highlight="1"] {
+  outline: 4px solid #e7a83b !important;
+  outline-offset: 5px !important;
+  box-shadow: 0 0 0 8px rgba(231,168,59,.20) !important;
+  scroll-margin: 110px !important;
+  position: relative;
+  z-index: 2;
+}
+#dproTutorialCard {
+  position: fixed; right: 16px; bottom: 16px; z-index: var(--dpro-tutorial-z);
+  width: min(390px, calc(100vw - 24px)); max-height: min(650px, calc(100vh - 24px)); overflow: auto;
+  border: 1px solid #cdded9; border-radius: 18px; background: #fff; color: #17302d;
+  box-shadow: 0 24px 70px rgba(15,55,50,.28); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",Meiryo,sans-serif;
+}
+#dproTutorialCard * { box-sizing: border-box; }
+.dpro-tutorial-handle {
+  display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;padding:10px 13px;
+  color:#fff;background:linear-gradient(135deg,#123f3a,#176257);cursor:grab;touch-action:none;user-select:none;border-radius:17px 17px 0 0;
+}
+.dpro-tutorial-handle:active { cursor:grabbing; }
+.dpro-tutorial-handle:focus-visible,.dpro-tutorial-btn:focus-visible,#dproTutorialLauncher:focus-visible { outline:3px solid #efb750; outline-offset:3px; }
+.dpro-tutorial-grip { font-size:12px;font-weight:900;letter-spacing:.08em; }
+.dpro-tutorial-close { border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:9px;min-width:34px;min-height:34px;font-size:20px;cursor:pointer; }
+.dpro-tutorial-body { padding:16px; }
+.dpro-tutorial-step { margin:0;color:#176257;font-size:11px;font-weight:950;letter-spacing:.10em; }
+.dpro-tutorial-title { margin:5px 0 0;font-size:21px;line-height:1.35; }
+.dpro-tutorial-copy { margin:9px 0 0;color:#596d69;font-size:13px;line-height:1.7; }
+.dpro-tutorial-note { margin-top:11px;padding:10px;border-radius:11px;background:#fff6e6;color:#77561d;font-size:11px;font-weight:750; }
+.dpro-tutorial-actions { display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;margin-top:15px; }
+.dpro-tutorial-btn { min-height:42px;border:1px solid #cdded9;border-radius:11px;background:#fff;color:#17302d;font-weight:900;cursor:pointer;padding:8px 10px; }
+.dpro-tutorial-btn.primary { border-color:#176257;background:#176257;color:#fff; }
+.dpro-tutorial-btn.skip { color:#72635d;background:#f8faf9; }
+#dproTutorialLauncher { position:fixed;right:14px;bottom:14px;z-index:var(--dpro-tutorial-z);min-height:48px;padding:10px 15px;border:0;border-radius:999px;background:#176257;color:#fff;box-shadow:0 12px 30px rgba(15,55,50,.25);font-weight:950;cursor:pointer; }
+@media (max-width: 420px) {
+  #dproTutorialCard { right:8px;bottom:8px;width:calc(100vw - 16px);max-height:calc(100vh - 16px); }
+  .dpro-tutorial-body { padding:14px; }
+  .dpro-tutorial-actions { grid-template-columns:1fr 1fr; }
+  .dpro-tutorial-btn.skip { grid-column:1/-1;order:3; }
+}
+@media (max-width: 340px) { .dpro-tutorial-actions { grid-template-columns:1fr; } .dpro-tutorial-btn.skip { grid-column:auto; } }
