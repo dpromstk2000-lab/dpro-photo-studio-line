@@ -1,0 +1,5 @@
+PUBLIC_QUICK_PDF=https://dpromstk2000-lab.github.io/dpro-photo-studio-line/DPRO_TUTORIAL_PHOTO_QUICK_START_V1.0.pdf
+PUBLIC_QUICK_PNG=https://dpromstk2000-lab.github.io/dpro-photo-studio-line/DPRO_TUTORIAL_PHOTO_QUICK_START_V1.0.png
+PUBLIC_DETAIL_PDF=https://dpromstk2000-lab.github.io/dpro-photo-studio-line/DPRO_TUTORIAL_PHOTO_DETAILED_MANUAL_V1.0.pdf
+PUBLIC_DETAIL_PNG=https://dpromstk2000-lab.github.io/dpro-photo-studio-line/DPRO_TUTORIAL_PHOTO_DETAILED_MANUAL_V1.0.png
+PUBLIC_HTTP=PASS
