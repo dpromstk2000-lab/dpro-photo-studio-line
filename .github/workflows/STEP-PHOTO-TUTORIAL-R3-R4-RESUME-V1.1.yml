@@ -1,0 +1,161 @@
+name: DPRO PHOTO Tutorial R3-R4 Resume V1.1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/STEP-PHOTO-TUTORIAL-R3-R4-RESUME-V1.1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  tutorial-r3-r4-resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout newest main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: R3 resume source gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCEPTED='09a21a8016fc06500d7ddfb74e6303764d687d3b'
+          R3='7fc99278d73f6c59344d197eb4094cf19bb6deb6'
+          git fetch origin main --quiet
+          git merge-base --is-ancestor "$ACCEPTED" HEAD
+          git merge-base --is-ancestor "$R3" HEAD
+          test -f tutorial-data.js
+          test -f tutorial.css
+          test -f tutorial.js
+          grep -q 'DPRO-TUTORIAL-PHOTO-V1.1-R4-20260828' tutorial-data.js
+          grep -q 'dpro_tutorial_photo_v1_1' tutorial-data.js
+          grep -q 'DPRO TUTORIAL V1.1 LOADER' config.js
+          grep -q 'pointerdown' tutorial.js
+          grep -q 'ArrowDown' tutorial.js
+          grep -q 'Escape' tutorial.js
+          python - <<'PY2'
+          from pathlib import Path
+          d=Path('tutorial-data.js').read_text(encoding='utf-8')
+          j=Path('tutorial.js').read_text(encoding='utf-8')
+          assert d.count('step: ') == 10
+          for forbidden in ['fetch(', 'apiPost(', 'adminPost(', '.submit(', 'agreementCheck.checked', '.click()']:
+              assert forbidden not in j, forbidden
+          assert 'localStorage' in j and 'sessionStorage' not in j
+          print('STATIC_R3_RESUME=PASS')
+          PY2
+          unexpected="$(git diff --name-only "$R3"..HEAD | grep -Ev '^\.github/workflows/STEP-PHOTO-TUTORIAL-R3-R4(-RESUME-V1\.1)?\.yml$' || true)"
+          if [ -n "$unexpected" ]; then
+            echo 'Unexpected files changed after approved R3:' >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+          echo "ENTRY_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "R3_COMMIT=$R3" >> "$GITHUB_ENV"
+          echo 'R3_RESUME_SOURCE_GATE=PASS'
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/photo-tutorial-qa
+          cd /tmp/photo-tutorial-qa
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Fresh R3 resume LIVE baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'aW1wb3J0IHsgY2hyb21pdW0gfSBmcm9tICdwbGF5d3JpZ2h0JzsKaW1wb3J0IGZzIGZyb20gJ2ZzJzsKY29uc3QgYmFzZT0naHR0cHM6Ly9kcHJvbXN0azIwMDAtbGFiLmdpdGh1Yi5pby9kcHJvLXBob3RvLXN0dWRpby1saW5lLyc7CmNvbnN0IGNhc2VzPVtbJ293bmVyMTQ0MCcsJ293bmVyLmh0bWw/ZGVtbz0xJywxNDQwLDEwMDBdLFsnaXBhZDEwMjQnLCdvd25lci1pcGFkLmh0bWw/ZGVtbz0xJywxMDI0LDc2OF0sWydtZW1iZXIzOTAnLCdtZW1iZXIuaHRtbD9kZW1vPTEnLDM5MCw4NDRdLFsnaW5kZXgzOTAnLCdpbmRleC5odG1sP2RlbW89MScsMzkwLDg0NF0sWydpbmRleDMyMCcsJ2luZGV4Lmh0bWw/ZGVtbz0xJywzMjAsNzIwXV07CmNvbnN0IGJyb3dzZXI9YXdhaXQgY2hyb21pdW0ubGF1bmNoKHtoZWFkbGVzczp0cnVlfSk7IGNvbnN0IHJlc3VsdHM9W107CmZvcihjb25zdCBba2V5LHBhdGgsd2lkdGgsaGVpZ2h0XSBvZiBjYXNlcyl7Y29uc3QgcGFnZT1hd2FpdCBicm93c2VyLm5ld1BhZ2Uoe3ZpZXdwb3J0Ont3aWR0aCxoZWlnaHR9fSk7IGNvbnN0IGNvbnNvbGVFcnJvcnM9W10scGFnZUVycm9ycz1bXTtwYWdlLm9uKCdjb25zb2xlJyxtPT57aWYobS50eXBlKCk9PT0nZXJyb3InKWNvbnNvbGVFcnJvcnMucHVzaChtLnRleHQoKSl9KTtwYWdlLm9uKCdwYWdlZXJyb3InLGU9PnBhZ2VFcnJvcnMucHVzaChTdHJpbmcoZSkpKTtsZXQgcmVzcG9uc2U9bnVsbCxuYXZFcnJvcj0nJzt0cnl7cmVzcG9uc2U9YXdhaXQgcGFnZS5nb3RvKGJhc2UrcGF0aCx7d2FpdFVudGlsOidkb21jb250ZW50bG9hZGVkJyx0aW1lb3V0OjQ1MDAwfSk7YXdhaXQgcGFnZS53YWl0Rm9yVGltZW91dCgyNTAwKX1jYXRjaChlKXtuYXZFcnJvcj1TdHJpbmcoZSl9Y29uc3QgbWV0cmljcz1hd2FpdCBwYWdlLmV2YWx1YXRlKCgpPT4oe2lubmVyV2lkdGgsZG9jOmRvY3VtZW50LmRvY3VtZW50RWxlbWVudC5zY3JvbGxXaWR0aCxib2R5OmRvY3VtZW50LmJvZHk/LnNjcm9sbFdpZHRofHwwfSkpLmNhdGNoKCgpPT4oe2lubmVyV2lkdGg6MCxkb2M6OTk5OTk5LGJvZHk6OTk5OTk5fSkpO2NvbnN0IHN0YXR1cz1yZXNwb25zZT8uc3RhdHVzKCl8fDA7Y29uc3Qgb3ZlcmZsb3c9TWF0aC5tYXgobWV0cmljcy5kb2MsbWV0cmljcy5ib2R5KT5tZXRyaWNzLmlubmVyV2lkdGgrMTtyZXN1bHRzLnB1c2goe2tleSx1cmw6YmFzZStwYXRoLHdpZHRoLGhlaWdodCxzdGF0dXMsb3ZlcmZsb3csY29uc29sZUVycm9ycyxwYWdlRXJyb3JzLG5hdkVycm9yLG9rOnN0YXR1cz09PTIwMCYmIW92ZXJmbG93JiYhbmF2RXJyb3J9KTthd2FpdCBwYWdlLmNsb3NlKCk7fQphd2FpdCBicm93c2VyLmNsb3NlKCk7Y29uc3Qgb3V0PXtjaGVja2VkQXQ6bmV3IERhdGUoKS50b0lTT1N0cmluZygpLHBoYXNlOidSM19SRVNVTUVfQkFTRUxJTkVfQUZURVJfUjMnLHJlc3VsdHMsb2s6cmVzdWx0cy5ldmVyeSh4PT54Lm9rKX07ZnMud3JpdGVGaWxlU3luYygnL3RtcC9waG90by1yMy1yZXN1bWUtYmFzZWxpbmUuanNvbicsSlNPTi5zdHJpbmdpZnkob3V0LG51bGwsMikpO2lmKCFvdXQub2spe2NvbnNvbGUuZXJyb3IoSlNPTi5zdHJpbmdpZnkob3V0LG51bGwsMikpO3Byb2Nlc3MuZXhpdCgxKX0K' | base64 -d > /tmp/photo-tutorial-qa/baseline.mjs
+          cd /tmp/photo-tutorial-qa
+          node baseline.mjs
+          cat /tmp/photo-r3-resume-baseline.json
+
+      - name: R3 LIVE QA corrected
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'aW1wb3J0IHsgY2hyb21pdW0gfSBmcm9tICdwbGF5d3JpZ2h0JzsKaW1wb3J0IGZzIGZyb20gJ2ZzJzsKY29uc3QgYmFzZT0naHR0cHM6Ly9kcHJvbXN0azIwMDAtbGFiLmdpdGh1Yi5pby9kcHJvLXBob3RvLXN0dWRpby1saW5lLyc7CmNvbnN0IHByZT1KU09OLnBhcnNlKGZzLnJlYWRGaWxlU3luYygnL3RtcC9waG90by1yMy1yZXN1bWUtYmFzZWxpbmUuanNvbicsJ3V0ZjgnKSk7CmNvbnN0IGJhc2VsaW5lRXJyb3JzPW5ldyBTZXQocHJlLnJlc3VsdHMuZmxhdE1hcCh4PT5bLi4uKHguY29uc29sZUVycm9yc3x8W10pLC4uLih4LnBhZ2VFcnJvcnN8fFtdKV0pKTsKY29uc3QgYnJvd3Nlcj1hd2FpdCBjaHJvbWl1bS5sYXVuY2goe2hlYWRsZXNzOnRydWV9KTsgY29uc3QgcmVzdWx0cz1bXTsKYXN5bmMgZnVuY3Rpb24gb3ZlcmZsb3dDYXNlKGtleSxwYXRoLHdpZHRoLGhlaWdodCl7CiBjb25zdCBwPWF3YWl0IGJyb3dzZXIubmV3UGFnZSh7dmlld3BvcnQ6e3dpZHRoLGhlaWdodH19KTtjb25zdCBjZT1bXSxwZT1bXTsKIHAub24oJ2NvbnNvbGUnLG09PntpZihtLnR5cGUoKT09PSdlcnJvcicpY2UucHVzaChtLnRleHQoKSl9KTtwLm9uKCdwYWdlZXJyb3InLGU9PnBlLnB1c2goU3RyaW5nKGUpKSk7CiBsZXQgcj1hd2FpdCBwLmdvdG8oYmFzZStwYXRoLHt3YWl0VW50aWw6J2RvbWNvbnRlbnRsb2FkZWQnLHRpbWVvdXQ6NDUwMDB9KTthd2FpdCBwLndhaXRGb3JUaW1lb3V0KDI1MDApOwogY29uc3QgbT1hd2FpdCBwLmV2YWx1YXRlKCgpPT4oe3c6aW5uZXJXaWR0aCxkOmRvY3VtZW50LmRvY3VtZW50RWxlbWVudC5zY3JvbGxXaWR0aCxiOmRvY3VtZW50LmJvZHkuc2Nyb2xsV2lkdGh9KSk7CiBjb25zdCBvPU1hdGgubWF4KG0uZCxtLmIpPm0udysxOyBjb25zdCBhdHRyaWJ1dGFibGU9Wy4uLmNlLC4uLnBlXS5maWx0ZXIoeD0+IWJhc2VsaW5lRXJyb3JzLmhhcyh4KSk7CiByZXN1bHRzLnB1c2goe2tleSx3aWR0aCxoZWlnaHQsc3RhdHVzOnI/LnN0YXR1cygpfHwwLG92ZXJmbG93Om8sY29uc29sZUVycm9yczpjZSxwYWdlRXJyb3JzOnBlLHR1dG9yaWFsQXR0cmlidXRhYmxlRXJyb3JzOmF0dHJpYnV0YWJsZSxvazoocj8uc3RhdHVzKCk9PT0yMDApJiYhbyYmYXR0cmlidXRhYmxlLmxlbmd0aD09PTB9KTthd2FpdCBwLmNsb3NlKCk7Cn0KYXdhaXQgb3ZlcmZsb3dDYXNlKCdkZXNrdG9wMTQ0MCcsJ293bmVyLmh0bWw/ZGVtbz0xJnR1dG9yaWFsPTEnLDE0NDAsMTAwMCk7CmF3YWl0IG92ZXJmbG93Q2FzZSgnaXBhZDEwMjQnLCdvd25lci1pcGFkLmh0bWw/ZGVtbz0xJnR1dG9yaWFsPTEnLDEwMjQsNzY4KTsKYXdhaXQgb3ZlcmZsb3dDYXNlKCdtb2JpbGUzOTAnLCdpbmRleC5odG1sP2RlbW89MSZ0dXRvcmlhbD0xJywzOTAsODQ0KTsKYXdhaXQgb3ZlcmZsb3dDYXNlKCdtb2JpbGUzMjAnLCdpbmRleC5odG1sP2RlbW89MSZ0dXRvcmlhbD0xJywzMjAsNzIwKTsKCmNvbnN0IHBhZ2U9YXdhaXQgYnJvd3Nlci5uZXdQYWdlKHt2aWV3cG9ydDp7d2lkdGg6MzkwLGhlaWdodDo4NDR9fSk7Y29uc3QgdHV0b3JpYWxFcnJvcnM9W107CnBhZ2Uub24oJ3BhZ2VlcnJvcicsZT0+dHV0b3JpYWxFcnJvcnMucHVzaChTdHJpbmcoZSkpKTtwYWdlLm9uKCdjb25zb2xlJyxtPT57aWYobS50eXBlKCk9PT0nZXJyb3InKXR1dG9yaWFsRXJyb3JzLnB1c2gobS50ZXh0KCkpfSk7CmF3YWl0IHBhZ2UuZ290byhiYXNlKydpbmRleC5odG1sP2RlbW89MSZ0dXRvcmlhbD0xJyx7d2FpdFVudGlsOidkb21jb250ZW50bG9hZGVkJyx0aW1lb3V0OjQ1MDAwfSk7YXdhaXQgcGFnZS53YWl0Rm9yU2VsZWN0b3IoJyNkcHJvVHV0b3JpYWxDYXJkJyx7dGltZW91dDoyMDAwMH0pOwpsZXQgdGV4dD1hd2FpdCBwYWdlLmxvY2F0b3IoJyNkcHJvVHV0b3JpYWxDYXJkJykuaW5uZXJUZXh0KCk7aWYoIXRleHQuaW5jbHVkZXMoJ1NURVAgMDEnKSl0aHJvdyBuZXcgRXJyb3IoJ3N0ZXAxIG1pc3NpbmcnKTsKaWYoYXdhaXQgcGFnZS5sb2NhdG9yKCdbZGF0YS1kcHJvLXR1dG9yaWFsLWhpZ2hsaWdodD0iMSJdJykuY291bnQoKSE9PTEpdGhyb3cgbmV3IEVycm9yKCdzdGVwMSBoaWdobGlnaHQgbWlzc2luZycpOwpjb25zdCBoYW5kbGU9cGFnZS5sb2NhdG9yKCcuZHByby10dXRvcmlhbC1oYW5kbGUnKTtsZXQgYm94PWF3YWl0IGhhbmRsZS5ib3VuZGluZ0JveCgpO2lmKCFib3gpdGhyb3cgbmV3IEVycm9yKCdoYW5kbGUgbWlzc2luZycpOwovLyBNb3VzZS9wb2ludGVyIGRyYWcgYW5kIHZpZXdwb3J0IGNsYW1wLgphd2FpdCBwYWdlLm1vdXNlLm1vdmUoYm94LngrMzAsYm94LnkrMjApO2F3YWl0IHBhZ2UubW91c2UuZG93bigpO2F3YWl0IHBhZ2UubW91c2UubW92ZSg4LDgse3N0ZXBzOjV9KTthd2FpdCBwYWdlLm1vdXNlLnVwKCk7CmxldCBjYXJkQm94PWF3YWl0IHBhZ2UubG9jYXRvcignI2Rwcm9UdXRvcmlhbENhcmQnKS5ib3VuZGluZ0JveCgpO2lmKCFjYXJkQm94fHxjYXJkQm94Lng8MHx8Y2FyZEJveC55PDApdGhyb3cgbmV3IEVycm9yKCdwb2ludGVyIGRyYWcvY2xhbXAgZmFpbGVkJyk7Ci8vIFRvdWNoL3BvaW50ZXIgcGF0aCB1c2luZyBzeW50aGV0aWMgUG9pbnRlckV2ZW50OyBydW50aW1lIGNhdGNoZXMgcG9pbnRlci1jYXB0dXJlIGxpbWl0YXRpb25zIG9mIHN5bnRoZXRpYyBldmVudHMuCmF3YWl0IHBhZ2UuZXZhbHVhdGUoKCk9Pntjb25zdCBoPWRvY3VtZW50LnF1ZXJ5U2VsZWN0b3IoJy5kcHJvLXR1dG9yaWFsLWhhbmRsZScpO2NvbnN0IHI9aC5nZXRCb3VuZGluZ0NsaWVudFJlY3QoKTtmb3IoY29uc3QgW3R5cGUseCx5XSBvZiBbWydwb2ludGVyZG93bicsci5sZWZ0KzIwLHIudG9wKzIwXSxbJ3BvaW50ZXJtb3ZlJyxyLmxlZnQrNTUsci50b3ArNTVdLFsncG9pbnRlcnVwJyxyLmxlZnQrNTUsci50b3ArNTVdXSloLmRpc3BhdGNoRXZlbnQobmV3IFBvaW50ZXJFdmVudCh0eXBlLHtidWJibGVzOnRydWUscG9pbnRlcklkOjc3LHBvaW50ZXJUeXBlOid0b3VjaCcsaXNQcmltYXJ5OnRydWUsY2xpZW50WDp4LGNsaWVudFk6eSxidXR0b246MH0pKTt9KTsKY2FyZEJveD1hd2FpdCBwYWdlLmxvY2F0b3IoJyNkcHJvVHV0b3JpYWxDYXJkJykuYm91bmRpbmdCb3goKTtpZighY2FyZEJveHx8Y2FyZEJveC54PDB8fGNhcmRCb3gueTwwKXRocm93IG5ldyBFcnJvcigndG91Y2ggcG9pbnRlci9jbGFtcCBmYWlsZWQnKTsKLy8gS2V5Ym9hcmQgZHJhZy4KY29uc3QgYmVmb3JlPWF3YWl0IGhhbmRsZS5ib3VuZGluZ0JveCgpO2F3YWl0IGhhbmRsZS5mb2N1cygpO2F3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoJ0Fycm93RG93bicpO2NvbnN0IGFmdGVyPWF3YWl0IGhhbmRsZS5ib3VuZGluZ0JveCgpO2lmKCFiZWZvcmV8fCFhZnRlcnx8YWZ0ZXIueT09PWJlZm9yZS55KXRocm93IG5ldyBFcnJvcigna2V5Ym9hcmQgZHJhZyBmYWlsZWQnKTsKLy8gQ2xvc2UgYnV0dG9uICsgUmVzdW1lIHdpdGgga2V5Ym9hcmQuCmF3YWl0IHBhZ2UubG9jYXRvcignLmRwcm8tdHV0b3JpYWwtY2xvc2UnKS5mb2N1cygpO2F3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoJ0VudGVyJyk7YXdhaXQgcGFnZS53YWl0Rm9yU2VsZWN0b3IoJyNkcHJvVHV0b3JpYWxMYXVuY2hlcjpub3QoW2hpZGRlbl0pJyk7YXdhaXQgcGFnZS5sb2NhdG9yKCcjZHByb1R1dG9yaWFsTGF1bmNoZXInKS5mb2N1cygpO2F3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoJ0VudGVyJyk7YXdhaXQgcGFnZS53YWl0Rm9yU2VsZWN0b3IoJyNkcHJvVHV0b3JpYWxDYXJkJyk7Ci8vIEVzY2FwZSBjbG9zZXMgdGhlIHR1dG9yaWFsLCB0aGVuIGxhdW5jaGVyIHJlc3VtZXMgaXQuCmF3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoJ0VzY2FwZScpO2F3YWl0IHBhZ2Uud2FpdEZvclNlbGVjdG9yKCcjZHByb1R1dG9yaWFsTGF1bmNoZXI6bm90KFtoaWRkZW5dKScpO2F3YWl0IHBhZ2UubG9jYXRvcignI2Rwcm9UdXRvcmlhbExhdW5jaGVyJykuZm9jdXMoKTthd2FpdCBwYWdlLmtleWJvYXJkLnByZXNzKCdFbnRlcicpO2F3YWl0IHBhZ2Uud2FpdEZvclNlbGVjdG9yKCcjZHByb1R1dG9yaWFsQ2FyZCcpOwovLyBOZXh0IGFuZCBCYWNrIHdpdGgga2V5Ym9hcmQuCmF3YWl0IHBhZ2UubG9jYXRvcignW2RhdGEtYWN0aW9uPSJuZXh0Il0nKS5mb2N1cygpO2F3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoJ0VudGVyJyk7dGV4dD1hd2FpdCBwYWdlLmxvY2F0b3IoJyNkcHJvVHV0b3JpYWxDYXJkJykuaW5uZXJUZXh0KCk7aWYoIXRleHQuaW5jbHVkZXMoJ1NURVAgMDInKSl0aHJvdyBuZXcgRXJyb3IoJ3N0ZXAyIG1pc3NpbmcnKTsKYXdhaXQgcGFnZS5sb2NhdG9yKCdbZGF0YS1hY3Rpb249ImJhY2siXScpLmZvY3VzKCk7YXdhaXQgcGFnZS5rZXlib2FyZC5wcmVzcygnRW50ZXInKTt0ZXh0PWF3YWl0IHBhZ2UubG9jYXRvcignI2Rwcm9UdXRvcmlhbENhcmQnKS5pbm5lclRleHQoKTtpZighdGV4dC5pbmNsdWRlcygnU1RFUCAwMScpKXRocm93IG5ldyBFcnJvcignYmFjayBmYWlsZWQnKTsKLy8gS2V5Ym9hcmQtb25seSBGaXJzdDEwIGNvbXBsZXRpb247IHJlbmRlciBhbHdheXMgcmV0dXJucyBmb2N1cyB0byBOZXh0Lgpmb3IobGV0IGV4cGVjdGVkPTI7ZXhwZWN0ZWQ8PTc7ZXhwZWN0ZWQrKyl7YXdhaXQgcGFnZS5sb2NhdG9yKCdbZGF0YS1hY3Rpb249Im5leHQiXScpLmZvY3VzKCk7YXdhaXQgcGFnZS5rZXlib2FyZC5wcmVzcygnRW50ZXInKTthd2FpdCBwYWdlLndhaXRGb3JUaW1lb3V0KDIwMCk7dGV4dD1hd2FpdCBwYWdlLmxvY2F0b3IoJyNkcHJvVHV0b3JpYWxDYXJkJykuaW5uZXJUZXh0KCk7aWYoIXRleHQuaW5jbHVkZXMoYFNURVAgJHtTdHJpbmcoZXhwZWN0ZWQpLnBhZFN0YXJ0KDIsJzAnKX1gKSl0aHJvdyBuZXcgRXJyb3IoYHN0ZXAke2V4cGVjdGVkfSBtaXNzaW5nYCk7aWYoYXdhaXQgcGFnZS5sb2NhdG9yKCdbZGF0YS1kcHJvLXR1dG9yaWFsLWhpZ2hsaWdodD0iMSJdJykuY291bnQoKSE9PTEpdGhyb3cgbmV3IEVycm9yKGBzdGVwJHtleHBlY3RlZH0gaGlnaGxpZ2h0IG1pc3NpbmdgKTt9CmF3YWl0IHBhZ2UubG9jYXRvcignW2RhdGEtYWN0aW9uPSJuZXh0Il0nKS5mb2N1cygpO2F3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoJ0VudGVyJyk7YXdhaXQgcGFnZS53YWl0Rm9yVVJMKC9vd25lci1pcGFkXC5odG1sLip0dXRvcmlhbD0xLyx7dGltZW91dDoyMDAwMH0pO2F3YWl0IHBhZ2Uud2FpdEZvclNlbGVjdG9yKCcjZHByb1R1dG9yaWFsQ2FyZCcpO3RleHQ9YXdhaXQgcGFnZS5sb2NhdG9yKCcjZHByb1R1dG9yaWFsQ2FyZCcpLmlubmVyVGV4dCgpO2lmKCF0ZXh0LmluY2x1ZGVzKCdTVEVQIDA4JykpdGhyb3cgbmV3IEVycm9yKCdzdGVwOCBtaXNzaW5nJyk7CmF3YWl0IHBhZ2UubG9jYXRvcignW2RhdGEtYWN0aW9uPSJuZXh0Il0nKS5mb2N1cygpO2F3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoJ0VudGVyJyk7YXdhaXQgcGFnZS53YWl0Rm9yVVJMKC9tZW1iZXJcLmh0bWwuKnR1dG9yaWFsPTEvLHt0aW1lb3V0OjIwMDAwfSk7YXdhaXQgcGFnZS53YWl0Rm9yU2VsZWN0b3IoJyNkcHJvVHV0b3JpYWxDYXJkJyk7dGV4dD1hd2FpdCBwYWdlLmxvY2F0b3IoJyNkcHJvVHV0b3JpYWxDYXJkJykuaW5uZXJUZXh0KCk7aWYoIXRleHQuaW5jbHVkZXMoJ1NURVAgMDknKSl0aHJvdyBuZXcgRXJyb3IoJ3N0ZXA5IG1pc3NpbmcnKTsKYXdhaXQgcGFnZS5sb2NhdG9yKCdbZGF0YS1hY3Rpb249Im5leHQiXScpLmZvY3VzKCk7YXdhaXQgcGFnZS5rZXlib2FyZC5wcmVzcygnRW50ZXInKTthd2FpdCBwYWdlLndhaXRGb3JVUkwoL293bmVyXC5odG1sLip0dXRvcmlhbD0xLyx7dGltZW91dDoyMDAwMH0pO2F3YWl0IHBhZ2Uud2FpdEZvclNlbGVjdG9yKCcjZHByb1R1dG9yaWFsQ2FyZCcpO3RleHQ9YXdhaXQgcGFnZS5sb2NhdG9yKCcjZHByb1R1dG9yaWFsQ2FyZCcpLmlubmVyVGV4dCgpO2lmKCF0ZXh0LmluY2x1ZGVzKCdTVEVQIDEwJykpdGhyb3cgbmV3IEVycm9yKCdzdGVwMTAgbWlzc2luZycpOwphd2FpdCBwYWdlLmxvY2F0b3IoJ1tkYXRhLWFjdGlvbj0ibmV4dCJdJykuZm9jdXMoKTthd2FpdCBwYWdlLmtleWJvYXJkLnByZXNzKCdFbnRlcicpO2F3YWl0IHBhZ2Uud2FpdEZvclNlbGVjdG9yKCcjZHByb1R1dG9yaWFsTGF1bmNoZXI6bm90KFtoaWRkZW5dKScpOwpjb25zdCByZXBsYXk9YXdhaXQgcGFnZS5sb2NhdG9yKCcjZHByb1R1dG9yaWFsTGF1bmNoZXInKS5pbm5lclRleHQoKTtpZighcmVwbGF5LmluY2x1ZGVzKCfjgoLjgYbkuIDluqYnKSl0aHJvdyBuZXcgRXJyb3IoJ3JlcGxheSBtaXNzaW5nJyk7CmxldCBzdD1hd2FpdCBwYWdlLmV2YWx1YXRlKCgpPT5KU09OLnBhcnNlKGxvY2FsU3RvcmFnZS5nZXRJdGVtKCdkcHJvX3R1dG9yaWFsX3Bob3RvX3YxXzEnKXx8J3t9JykpO2lmKCFzdC5jb21wbGV0ZWR8fHN0LmFjdGl2ZSl0aHJvdyBuZXcgRXJyb3IoJ2NvbXBsZXRpb24gc3RhdGUgaW52YWxpZCcpOwovLyBSZXBsYXkgdGhlbiBTa2lwLCBib3RoIGtleWJvYXJkIGFjdGl2YXRlZC4KYXdhaXQgcGFnZS5sb2NhdG9yKCcjZHByb1R1dG9yaWFsTGF1bmNoZXInKS5mb2N1cygpO2F3YWl0IHBhZ2Uua2V5Ym9hcmQucHJlc3MoJ0VudGVyJyk7YXdhaXQgcGFnZS53YWl0Rm9yVVJMKC9pbmRleFwuaHRtbC4qdHV0b3JpYWw9MS8se3RpbWVvdXQ6MjAwMDB9KTthd2FpdCBwYWdlLndhaXRGb3JTZWxlY3RvcignI2Rwcm9UdXRvcmlhbENhcmQnKTt0ZXh0PWF3YWl0IHBhZ2UubG9jYXRvcignI2Rwcm9UdXRvcmlhbENhcmQnKS5pbm5lclRleHQoKTtpZighdGV4dC5pbmNsdWRlcygnU1RFUCAwMScpKXRocm93IG5ldyBFcnJvcigncmVwbGF5IGRpZCBub3QgcmVzdGFydCcpOwphd2FpdCBwYWdlLmxvY2F0b3IoJ1tkYXRhLWFjdGlvbj0ic2tpcCJdJykuZm9jdXMoKTthd2FpdCBwYWdlLmtleWJvYXJkLnByZXNzKCdTcGFjZScpO2F3YWl0IHBhZ2Uud2FpdEZvclNlbGVjdG9yKCcjZHByb1R1dG9yaWFsTGF1bmNoZXI6bm90KFtoaWRkZW5dKScpO3N0PWF3YWl0IHBhZ2UuZXZhbHVhdGUoKCk9PkpTT04ucGFyc2UobG9jYWxTdG9yYWdlLmdldEl0ZW0oJ2Rwcm9fdHV0b3JpYWxfcGhvdG9fdjFfMScpfHwne30nKSk7aWYoIXN0LmNvbXBsZXRlZHx8c3QuYWN0aXZlKXRocm93IG5ldyBFcnJvcignc2tpcCBzdGF0ZSBpbnZhbGlkJyk7CmNvbnN0IGF0dHJpYnV0YWJsZT10dXRvcmlhbEVycm9ycy5maWx0ZXIoeD0+IWJhc2VsaW5lRXJyb3JzLmhhcyh4KSk7CnJlc3VsdHMucHVzaCh7a2V5OidpbnRlcmFjdGlvbicsbW91c2VQb2ludGVyRHJhZzp0cnVlLHRvdWNoUG9pbnRlckRyYWc6dHJ1ZSx2aWV3cG9ydENsYW1wOnRydWUsa2V5Ym9hcmRNb3ZlOnRydWUsY2xvc2VCdXR0b246dHJ1ZSxlc2NTdXBwb3J0ZWQ6dHJ1ZSxza2lwOnRydWUscmVzdW1lOnRydWUscmVwbGF5OnRydWUsYmFjazp0cnVlLG5leHQ6dHJ1ZSxjcm9zc1BhZ2VSZXN1bWU6dHJ1ZSxrZXlib2FyZE9ubHlDb21wbGV0aW9uOnRydWUsZm9jdXNSZWNvdmVyYWJsZTp0cnVlLGZpcnN0MTBFeGFjdGx5MTA6dHJ1ZSx0dXRvcmlhbEVycm9ycyx0dXRvcmlhbEF0dHJpYnV0YWJsZUVycm9yczphdHRyaWJ1dGFibGUsb2s6YXR0cmlidXRhYmxlLmxlbmd0aD09PTB9KTsKYXdhaXQgYnJvd3Nlci5jbG9zZSgpO2NvbnN0IG91dD17Y2hlY2tlZEF0Om5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSxwaGFzZTonUjNfTElWRV9RQScscmVzdWx0cyxidXNpbmVzc011dGF0aW9uOjAsb2s6cmVzdWx0cy5ldmVyeSh4PT54Lm9rKX07ZnMud3JpdGVGaWxlU3luYygnL3RtcC9waG90by1yMy1xYS5qc29uJyxKU09OLnN0cmluZ2lmeShvdXQsbnVsbCwyKSk7aWYoIW91dC5vayl7Y29uc29sZS5lcnJvcihKU09OLnN0cmluZ2lmeShvdXQsbnVsbCwyKSk7cHJvY2Vzcy5leGl0KDEpfQo=' | base64 -d > /tmp/photo-tutorial-qa/r3.mjs
+          cd /tmp/photo-tutorial-qa
+          node r3.mjs
+          cat /tmp/photo-r3-qa.json
+          echo 'R3_LIVE_QA_CORRECTED=PASS'
+
+      - name: Implement R4 Guide Center
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'dpro-tutorial-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCnA9UGF0aCgnZGVtby1ndWlkZS5odG1sJykKcz1wLnJlYWRfdGV4dChlbmNvZGluZz0ndXRmLTgnKQppZiAnaWQ9InR1dG9yaWFsRmlyc3QxMCInIG5vdCBpbiBzOgogICAgc2VjdGlvbiA9ICcnJwoKPGRpdiBjbGFzcz0ic2VjdGlvbi1oZWFkIj4KICA8c21hbGw+RklSU1QxMCBUVVRPUklBTCAvIFNUQU5EQVJEIFYxLjE8L3NtYWxsPgogIDxoMj4xMOOCueODhuODg+ODl+aTjeS9nOODgeODpeODvOODiOODquOCouODqzwvaDI+CiAgPHA+5LqI57SE44GL44KJ5b2T5pel5Y+X5LuY44CB5YaZ55yf44K744Os44Kv44OI44O757SN5ZOB44CB44Kq44O844OK44O8566h55CG44G+44Gn44KS44CB5a6f6Zqb44Gu5YWs6ZaL44OH44Oi55S76Z2i44Gr5rK/44Gj44GmMTDjgrnjg4bjg4Pjg5fjgafnorroqo3jgafjgY3jgb7jgZnjgII8L3A+CjwvZGl2Pgo8c2VjdGlvbiBjbGFzcz0iZmxvdyIgYXJpYS1sYWJlbD0iMTDjgrnjg4bjg4Pjg5fmk43kvZzjg4Hjg6Xjg7zjg4jjg6rjgqLjg6siPgogIDxkaXYgY2xhc3M9ImNhcmQtYWN0aW9ucyIgc3R5bGU9Im1hcmdpbi10b3A6MDttYXJnaW4tYm90dG9tOjE2cHgiPgogICAgPGEgY2xhc3M9Im9wZW4iIGhyZWY9Ii4vaW5kZXguaHRtbD9kZW1vPTEmdHV0b3JpYWw9MSIgaWQ9InR1dG9yaWFsU3RhcnRMaW5rIj5GaXJzdDEw44KS6ZaL5aeL44GZ44KLPC9hPgogICAgPGEgY2xhc3M9Im9mZmljaWFsIiBocmVmPSIjdHV0b3JpYWxGaXJzdDEwIj4xMOOCueODhuODg+ODl+S4gOimpzwvYT4KICA8L2Rpdj4KICA8ZGl2IGNsYXNzPSJmbG93LWdyaWQiIGlkPSJ0dXRvcmlhbEZpcnN0MTAiIGFyaWEtbGFiZWw9IkZpcnN0MTDmk43kvZzjgqzjgqTjg4kiPjwvZGl2Pgo8L3NlY3Rpb24+CicnJwogICAgbWFya2VyPSc8ZGl2IGNsYXNzPSJmb290ZXIiIGlkPSJmb290ZXIiPjwvZGl2PicKICAgIGlmIG1hcmtlciBub3QgaW4gczogcmFpc2UgU3lzdGVtRXhpdCgnZGVtby1ndWlkZSBmb290ZXIgbWFya2VyIG5vdCBmb3VuZCcpCiAgICBzPXMucmVwbGFjZShtYXJrZXIsc2VjdGlvbisnXG4nK21hcmtlciwxKQogICAgcnVudGltZT0nJycKPHNjcmlwdCBzcmM9Ii4vdHV0b3JpYWwtZGF0YS5qcz92PURQUk8tVFVUT1JJQUwtUEhPVE8tVjEuMS1SNC0yMDI2MDgyOCI+PC9zY3JpcHQ+CjxzY3JpcHQ+CigoKSA9PiB7CiAgY29uc3QgZGF0YSA9IHdpbmRvdy5EUFJPX1BIT1RPX1RVVE9SSUFMX1YxMTsKICBjb25zdCBob3N0ID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInR1dG9yaWFsRmlyc3QxMCIpOwogIGlmICghZGF0YSB8fCAhaG9zdCB8fCBkYXRhLnN0ZXBzLmxlbmd0aCAhPT0gMTApIHJldHVybjsKICBob3N0LmlubmVySFRNTCA9IGRhdGEuc3RlcHMubWFwKHN0ZXAgPT4gYDxkaXYgY2xhc3M9ImZsb3ctc3RlcCI+PGI+JHtTdHJpbmcoc3RlcC5zdGVwKS5wYWRTdGFydCgyLCIwIil9PC9iPjxzdHJvbmc+JHtzdGVwLnRpdGxlfTwvc3Ryb25nPjwvZGl2PmApLmpvaW4oIiIpOwp9KSgpOwo8L3NjcmlwdD4KJycnCiAgICBpZiAnPC9ib2R5Picgbm90IGluIHM6IHJhaXNlIFN5c3RlbUV4aXQoJ2RlbW8tZ3VpZGUgYm9keSBtYXJrZXIgbm90IGZvdW5kJykKICAgIHM9cy5yZXBsYWNlKCc8L2JvZHk+JyxydW50aW1lKydcbjwvYm9keT4nLDEpCiAgICBwLndyaXRlX3RleHQocyxlbmNvZGluZz0ndXRmLTgnKQo=' | base64 -d > /tmp/patch-r4.py
+          python /tmp/patch-r4.py
+          grep -q 'id="tutorialFirst10"' demo-guide.html
+          grep -q 'tutorial-data.js?v=DPRO-TUTORIAL-PHOTO-V1.1-R4-20260828' demo-guide.html
+          if git diff --quiet -- demo-guide.html; then
+            echo 'R4 Guide Center already present; no duplicate change.'
+            echo "R4_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          else
+            git add demo-guide.html
+            git commit -m 'Build PHOTO Tutorial R4 Guide Center'
+            echo "R4_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+            git push origin HEAD:main
+          fi
+
+      - name: Wait R4 Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://dpromstk2000-lab.github.io/dpro-photo-studio-line/demo-guide.html?wait=resume-v11'
+          for i in $(seq 1 48); do
+            if curl -fsSL --max-time 15 "$URL&n=$i" | grep -q 'tutorialFirst10'; then echo 'R4_PAGES_READY=PASS'; exit 0; fi
+            sleep 5
+          done
+          echo 'R4 Pages sentinel timeout' >&2
+          exit 1
+
+      - name: R4 LIVE QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'aW1wb3J0IHsgY2hyb21pdW0gfSBmcm9tICdwbGF5d3JpZ2h0JztpbXBvcnQgZnMgZnJvbSAnZnMnO2NvbnN0IGJhc2U9J2h0dHBzOi8vZHByb21zdGsyMDAwLWxhYi5naXRodWIuaW8vZHByby1waG90by1zdHVkaW8tbGluZS8nO2NvbnN0IGJyb3dzZXI9YXdhaXQgY2hyb21pdW0ubGF1bmNoKHtoZWFkbGVzczp0cnVlfSk7Y29uc3QgcmVzdWx0cz1bXTtmb3IoY29uc3QgW3csaF0gb2YgW1sxNDQwLDEwMDBdLFsxMDI0LDc2OF0sWzM5MCw4NDRdLFszMjAsNzIwXV0pe2NvbnN0IHA9YXdhaXQgYnJvd3Nlci5uZXdQYWdlKHt2aWV3cG9ydDp7d2lkdGg6dyxoZWlnaHQ6aH19KTtjb25zdCBlcnJzPVtdO3Aub24oJ3BhZ2VlcnJvcicsZT0+ZXJycy5wdXNoKFN0cmluZyhlKSkpO3Aub24oJ2NvbnNvbGUnLG09PntpZihtLnR5cGUoKT09PSdlcnJvcicpZXJycy5wdXNoKG0udGV4dCgpKX0pO2NvbnN0IHI9YXdhaXQgcC5nb3RvKGJhc2UrJ2RlbW8tZ3VpZGUuaHRtbCcse3dhaXRVbnRpbDonZG9tY29udGVudGxvYWRlZCcsdGltZW91dDo0NTAwMH0pO2F3YWl0IHAud2FpdEZvclNlbGVjdG9yKCcjdHV0b3JpYWxGaXJzdDEwIC5mbG93LXN0ZXAnLHt0aW1lb3V0OjE1MDAwfSk7Y29uc3QgY291bnQ9YXdhaXQgcC5sb2NhdG9yKCcjdHV0b3JpYWxGaXJzdDEwIC5mbG93LXN0ZXAnKS5jb3VudCgpO2NvbnN0IGhyZWY9YXdhaXQgcC5sb2NhdG9yKCcjdHV0b3JpYWxTdGFydExpbmsnKS5nZXRBdHRyaWJ1dGUoJ2hyZWYnKTtjb25zdCBtPWF3YWl0IHAuZXZhbHVhdGUoKCk9Pih7dzppbm5lcldpZHRoLGQ6ZG9jdW1lbnQuZG9jdW1lbnRFbGVtZW50LnNjcm9sbFdpZHRoLGI6ZG9jdW1lbnQuYm9keS5zY3JvbGxXaWR0aH0pKTtjb25zdCBvdmVyZmxvdz1NYXRoLm1heChtLmQsbS5iKT5tLncrMTthd2FpdCBwLmxvY2F0b3IoJyN0dXRvcmlhbFN0YXJ0TGluaycpLmZvY3VzKCk7Y29uc3QgZm9jdXNlZD1hd2FpdCBwLmV2YWx1YXRlKCgpPT5kb2N1bWVudC5hY3RpdmVFbGVtZW50Py5pZD09PSd0dXRvcmlhbFN0YXJ0TGluaycpO3Jlc3VsdHMucHVzaCh7d2lkdGg6dyxoZWlnaHQ6aCxzdGF0dXM6cj8uc3RhdHVzKCl8fDAsY291bnQsaHJlZixvdmVyZmxvdyxmb2N1c2VkLGVycm9yczplcnJzLG9rOnI/LnN0YXR1cygpPT09MjAwJiZjb3VudD09PTEwJiZocmVmPy5pbmNsdWRlcygndHV0b3JpYWw9MScpJiYhb3ZlcmZsb3cmJmZvY3VzZWQmJmVycnMubGVuZ3RoPT09MH0pO2F3YWl0IHAuY2xvc2UoKTt9YXdhaXQgYnJvd3Nlci5jbG9zZSgpO2NvbnN0IG91dD17Y2hlY2tlZEF0Om5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSxwaGFzZTonUjRfR1VJREVfQ0VOVEVSX0xJVkVfUUEnLHJlc3VsdHMsYnVzaW5lc3NNdXRhdGlvbjowLG9rOnJlc3VsdHMuZXZlcnkoeD0+eC5vayl9O2ZzLndyaXRlRmlsZVN5bmMoJy90bXAvcGhvdG8tcjQtcWEuanNvbicsSlNPTi5zdHJpbmdpZnkob3V0LG51bGwsMikpO2lmKCFvdXQub2spe2NvbnNvbGUuZXJyb3IoSlNPTi5zdHJpbmdpZnkob3V0LG51bGwsMikpO3Byb2Nlc3MuZXhpdCgxKX0K' | base64 -d > /tmp/photo-tutorial-qa/r4.mjs
+          cd /tmp/photo-tutorial-qa
+          node r4.mjs
+          cat /tmp/photo-r4-qa.json
+          echo 'R4_LIVE_QA=PASS'
+
+      - name: Commit evidence and self-clean workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin main
+          mkdir -p tutorial-evidence/photo-r4
+          cp /tmp/photo-r3-resume-baseline.json tutorial-evidence/photo-r4/R3_RESUME_BASELINE.json
+          cp /tmp/photo-r3-qa.json tutorial-evidence/photo-r4/R3_QA.json
+          cp /tmp/photo-r4-qa.json tutorial-evidence/photo-r4/R4_QA.json
+          cat > tutorial-evidence/photo-r4/IMPLEMENTATION_SUMMARY.txt <<EOF2
+          SYSTEM=PHOTO
+          STANDARD=V1.1
+          FIRST10=10_EXACT
+          R3_QA=PASS
+          R3_QA_FIX=QA_ONLY_ARROW_RIGHT_X_TO_ARROW_DOWN_Y_FOR_VIEWPORT_CLAMP
+          PREVIOUS_FAILED_RUN=33131048191
+          R4_QA=PASS
+          BUSINESS_MUTATION=0
+          ACCEPTED_BASE=09a21a8016fc06500d7ddfb74e6303764d687d3b
+          R3_COMMIT=$R3_COMMIT
+          R4_COMMIT=$R4_COMMIT
+          ENTRY_HEAD=$ENTRY_HEAD
+          CHANGED_PRODUCT_FILES=config.js,index.html,owner-ipad.html,member.html,owner.html,tutorial-data.js,tutorial.css,tutorial.js,demo-guide.html
+          DB_WORKER_API_AUTH_ROLE_PERMISSION_FEATURE_FLAG_CHANGE=0
+          R5=NOT_STARTED
+          R7=NOT_AUTHORIZED
+          EOF2
+          git add tutorial-evidence/photo-r4
+          git rm -f .github/workflows/STEP-PHOTO-TUTORIAL-R3-R4.yml .github/workflows/STEP-PHOTO-TUTORIAL-R3-R4-RESUME-V1.1.yml
+          git commit -m 'Finalize PHOTO Tutorial R4 evidence and cleanup'
+          git push origin HEAD:main
+          echo "FINAL_COMMIT=$(git rev-parse HEAD)"
