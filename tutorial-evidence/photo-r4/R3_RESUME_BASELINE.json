@@ -1,0 +1,67 @@
+{
+  "checkedAt": "2026-08-28T01:18:08.371Z",
+  "phase": "R3_RESUME_BASELINE_AFTER_R3",
+  "results": [
+    {
+      "key": "owner1440",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/owner.html?demo=1",
+      "width": 1440,
+      "height": 1000,
+      "status": 200,
+      "overflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "navError": "",
+      "ok": true
+    },
+    {
+      "key": "ipad1024",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/owner-ipad.html?demo=1",
+      "width": 1024,
+      "height": 768,
+      "status": 200,
+      "overflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "navError": "",
+      "ok": true
+    },
+    {
+      "key": "member390",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/member.html?demo=1",
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "overflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "navError": "",
+      "ok": true
+    },
+    {
+      "key": "index390",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html?demo=1",
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "overflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "navError": "",
+      "ok": true
+    },
+    {
+      "key": "index320",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html?demo=1",
+      "width": 320,
+      "height": 720,
+      "status": 200,
+      "overflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "navError": "",
+      "ok": true
+    }
+  ],
+  "ok": true
+}

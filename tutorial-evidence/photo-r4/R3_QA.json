@@ -1,0 +1,73 @@
+{
+  "checkedAt": "2026-08-28T01:18:21.559Z",
+  "phase": "R3_LIVE_QA",
+  "results": [
+    {
+      "key": "desktop1440",
+      "width": 1440,
+      "height": 1000,
+      "status": 200,
+      "overflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "tutorialAttributableErrors": [],
+      "ok": true
+    },
+    {
+      "key": "ipad1024",
+      "width": 1024,
+      "height": 768,
+      "status": 200,
+      "overflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "tutorialAttributableErrors": [],
+      "ok": true
+    },
+    {
+      "key": "mobile390",
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "overflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "tutorialAttributableErrors": [],
+      "ok": true
+    },
+    {
+      "key": "mobile320",
+      "width": 320,
+      "height": 720,
+      "status": 200,
+      "overflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "tutorialAttributableErrors": [],
+      "ok": true
+    },
+    {
+      "key": "interaction",
+      "mousePointerDrag": true,
+      "touchPointerDrag": true,
+      "viewportClamp": true,
+      "keyboardMove": true,
+      "closeButton": true,
+      "escSupported": true,
+      "skip": true,
+      "resume": true,
+      "replay": true,
+      "back": true,
+      "next": true,
+      "crossPageResume": true,
+      "keyboardOnlyCompletion": true,
+      "focusRecoverable": true,
+      "first10Exactly10": true,
+      "tutorialErrors": [],
+      "tutorialAttributableErrors": [],
+      "ok": true
+    }
+  ],
+  "businessMutation": 0,
+  "ok": true
+}

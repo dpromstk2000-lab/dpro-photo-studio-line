@@ -1,0 +1,52 @@
+{
+  "checkedAt": "2026-08-28T01:18:59.410Z",
+  "phase": "R4_GUIDE_CENTER_LIVE_QA",
+  "results": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "status": 200,
+      "count": 10,
+      "href": "./index.html?demo=1&tutorial=1",
+      "overflow": false,
+      "focused": true,
+      "errors": [],
+      "ok": true
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "status": 200,
+      "count": 10,
+      "href": "./index.html?demo=1&tutorial=1",
+      "overflow": false,
+      "focused": true,
+      "errors": [],
+      "ok": true
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "count": 10,
+      "href": "./index.html?demo=1&tutorial=1",
+      "overflow": false,
+      "focused": true,
+      "errors": [],
+      "ok": true
+    },
+    {
+      "width": 320,
+      "height": 720,
+      "status": 200,
+      "count": 10,
+      "href": "./index.html?demo=1&tutorial=1",
+      "overflow": false,
+      "focused": true,
+      "errors": [],
+      "ok": true
+    }
+  ],
+  "businessMutation": 0,
+  "ok": true
+}
