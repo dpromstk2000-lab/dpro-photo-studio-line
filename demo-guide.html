@@ -77,6 +77,21 @@ a{color:inherit}.page{width:min(1140px,calc(100% - 24px));margin:0 auto;padding:
 </div>
 <section class="flow"><div class="flow-grid" id="flowGrid"></div></section>
 
+
+
+<div class="section-head">
+  <small>FIRST10 TUTORIAL / STANDARD V1.1</small>
+  <h2>10ステップ操作チュートリアル</h2>
+  <p>予約から当日受付、写真セレクト・納品、オーナー管理までを、実際の公開デモ画面に沿って10ステップで確認できます。</p>
+</div>
+<section class="flow" aria-label="10ステップ操作チュートリアル">
+  <div class="card-actions" style="margin-top:0;margin-bottom:16px">
+    <a class="open" href="./index.html?demo=1&tutorial=1" id="tutorialStartLink">First10を開始する</a>
+    <a class="official" href="#tutorialFirst10">10ステップ一覧</a>
+  </div>
+  <div class="flow-grid" id="tutorialFirst10" aria-label="First10操作ガイド"></div>
+</section>
+
 <div class="footer" id="footer"></div>
 </main>
 
@@ -232,5 +247,16 @@ document.getElementById("flowGrid").innerHTML = CONFIG.journey.map(x => `
   </div>
 `).join("");
 </script>
+
+<script src="./tutorial-data.js?v=DPRO-TUTORIAL-PHOTO-V1.1-R4-20260828"></script>
+<script>
+(() => {
+  const data = window.DPRO_PHOTO_TUTORIAL_V11;
+  const host = document.getElementById("tutorialFirst10");
+  if (!data || !host || data.steps.length !== 10) return;
+  host.innerHTML = data.steps.map(step => `<div class="flow-step"><b>${String(step.step).padStart(2,"0")}</b><strong>${step.title}</strong></div>`).join("");
+})();
+</script>
+
 </body>
 </html>
