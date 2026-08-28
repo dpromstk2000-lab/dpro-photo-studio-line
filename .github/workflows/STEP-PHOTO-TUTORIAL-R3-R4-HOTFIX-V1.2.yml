@@ -1,0 +1,102 @@
+name: DPRO PHOTO Tutorial R3 Hotfix Trigger V1.2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/STEP-PHOTO-TUTORIAL-R3-R4-HOTFIX-V1.2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  r3-hotfix-and-resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout newest main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: R3 hotfix source gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_R3='7fc99278d73f6c59344d197eb4094cf19bb6deb6'
+          git fetch origin main --quiet
+          git merge-base --is-ancestor "$BASE_R3" HEAD
+          test -f tutorial.js
+          test -f tutorial-data.js
+          test -f .github/workflows/STEP-PHOTO-TUTORIAL-R3-R4-RESUME-V1.1.yml
+          grep -q 'handle.setPointerCapture?.(e.pointerId)' tutorial.js
+          grep -q 'DPRO-TUTORIAL-PHOTO-V1.1-R4-20260828' tutorial-data.js
+          echo 'R3_HOTFIX_SOURCE_GATE=PASS'
+
+      - name: Apply safe pointer-capture hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("tutorial.js")
+          s = p.read_text(encoding="utf-8")
+          old = 'handle.setPointerCapture?.(e.pointerId); e.preventDefault();'
+          new = 'try { handle.setPointerCapture?.(e.pointerId); } catch {} e.preventDefault();'
+          if s.count(old) != 1:
+              raise SystemExit(f"expected exactly one pointer-capture target, found {s.count(old)}")
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding="utf-8")
+          PY
+          node --check tutorial.js
+          grep -q 'try { handle.setPointerCapture?.(e.pointerId); } catch {}' tutorial.js
+          python - <<'PY'
+          from pathlib import Path
+          j=Path('tutorial.js').read_text(encoding='utf-8')
+          d=Path('tutorial-data.js').read_text(encoding='utf-8')
+          assert d.count('step: ') == 10
+          for forbidden in ['fetch(', 'apiPost(', 'adminPost(', '.submit(', 'agreementCheck.checked', '.click()']:
+              assert forbidden not in j, forbidden
+          assert 'localStorage' in j and 'sessionStorage' not in j
+          print('STATIC_R3_HOTFIX=PASS')
+          PY
+
+      - name: Commit R3 hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'dpro-tutorial-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add tutorial.js
+          git commit -m 'Harden PHOTO Tutorial R3 pointer capture'
+          git push origin HEAD:main
+          echo "R3_FIXED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Retarget resume workflow and self-clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESUME='.github/workflows/STEP-PHOTO-TUTORIAL-R3-R4-RESUME-V1.1.yml'
+          SELF='.github/workflows/STEP-PHOTO-TUTORIAL-R3-R4-HOTFIX-V1.2.yml'
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          p=Path('.github/workflows/STEP-PHOTO-TUTORIAL-R3-R4-RESUME-V1.1.yml')
+          s=p.read_text(encoding='utf-8')
+          sha=os.environ['R3_FIXED_SHA']
+          old="R3='7fc99278d73f6c59344d197eb4094cf19bb6deb6'"
+          if old not in s:
+              raise SystemExit('resume R3 baseline marker not found')
+          s=s.replace(old, f"R3='{sha}'", 1)
+          old_regex="grep -Ev '^\\.github/workflows/STEP-PHOTO-TUTORIAL-R3-R4(-RESUME-V1\\.1)?\\.yml$'"
+          new_regex="grep -Ev '^\\.github/workflows/(STEP-PHOTO-TUTORIAL-R3-R4(-RESUME-V1\\.1)?\\.yml|STEP-PHOTO-TUTORIAL-R3-R4-HOTFIX-V1\\.2\\.yml)$'"
+          if old_regex not in s:
+              raise SystemExit('resume unexpected-file regex marker not found')
+          s=s.replace(old_regex, new_regex, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          grep -q "R3='$R3_FIXED_SHA'" "$RESUME"
+          git rm "$SELF"
+          git add "$RESUME"
+          git commit -m 'Resume PHOTO Tutorial R3-R4 after pointer hotfix'
+          git push origin HEAD:main
+          echo 'HOTFIX_TRIGGER_COMPLETE=PASS'
