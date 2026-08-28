@@ -1,0 +1,30 @@
+{
+  "system": "PHOTO",
+  "stage": "R5",
+  "standard": "V1.1",
+  "first10": 10,
+  "quickStart": "DPRO_TUTORIAL_PHOTO_QUICK_START_V1.0.pdf",
+  "detailedManual": "DPRO_TUTORIAL_PHOTO_DETAILED_MANUAL_V1.0.pdf",
+  "pdfPages": {
+    "quick": 1,
+    "detailed": 4
+  },
+  "finalRenderCount": 5,
+  "currentLiveScreenshots": 5,
+  "qrFinalRenderDecode": "PASS",
+  "businessMutation": 0,
+  "sessionReadRequestsClassifiedNonBusiness": true,
+  "tutorialAttributableErrors": 0,
+  "pdfTextExtractionGate": "NOT_USED",
+  "canonicalPrintQa": "PAGE_COUNT_RASTER_QR_VISUAL",
+  "protectedBoundaryChange": 0,
+  "dbWorkerApiAuthRolePermissionFeatureFlagChange": 0,
+  "assetSha256": {
+    "DPRO_TUTORIAL_PHOTO_QUICK_START_V1.0.pdf": "08233d45d24d07ca4c2663b0b1a9bc2fc9a776585dceabc2e88a19837f12fbb1",
+    "DPRO_TUTORIAL_PHOTO_QUICK_START_V1.0.png": "305e9dd8b00e91983e7122397658ebd3013e874e65ca4b2553a1276878621cc9",
+    "DPRO_TUTORIAL_PHOTO_DETAILED_MANUAL_V1.0.pdf": "cb248b66e9f7c1a4d728baeccf5d6b1d2e4ccff2f81187c718b4727d9faf5b59",
+    "DPRO_TUTORIAL_PHOTO_DETAILED_MANUAL_V1.0.png": "defed88f535908d69d2e4a940a2a54f50cb7e82f20e91d6d27befdf5fcbfac3b"
+  },
+  "automatedGate": "PASS",
+  "manualVisualReview": "PENDING_ASSISTANT_ARTIFACT_REVIEW"
+}

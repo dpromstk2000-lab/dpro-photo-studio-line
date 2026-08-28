@@ -1,0 +1,63 @@
+{
+  "checkedAt": "2026-08-28T02:22:04.546Z",
+  "meta": [
+    {
+      "file": "01_guide_first10.png",
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/demo-guide.html?demo=1",
+      "count": 10
+    },
+    {
+      "file": "02_step01_card.png",
+      "step": 1,
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html?demo=1&tutorial=1",
+      "text": "⋮⋮ DRAG / 1 of 10 × FIRST10 / STEP 01 撮影プラン カテゴリーから撮影内容に近いプランを選びます。選んだプランによって、後の予約可能日時や案内内容が変わります。 スキップ 戻る 次へ"
+    },
+    {
+      "file": "03_step08_card.png",
+      "step": 8,
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/owner-ipad.html?demo=1&tutorial=1",
+      "text": "⋮⋮ DRAG / 8 of 10 × FIRST10 / STEP 08 当日受付・撮影進行 来店待ち → 受付・撮影準備 → 撮影 → 会計・案内 → 完了の流れを、受付iPadのレーンで確認します。 スキップ 戻る 次へ"
+    },
+    {
+      "file": "04_step09_card.png",
+      "step": 9,
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/member.html?demo=1&tutorial=1",
+      "text": "⋮⋮ DRAG / 9 of 10 × FIRST10 / STEP 09 写真セレクト・納品 お客様マイページでは、予約・撮影前案内・写真セレクト・納品・再注文相談をタブでまとめて確認できます。 スキップ 戻る 次へ"
+    },
+    {
+      "file": "05_step10_card.png",
+      "step": 10,
+      "url": "https://dpromstk2000-lab.github.io/dpro-photo-studio-line/owner.html?demo=1&tutorial=1",
+      "text": "⋮⋮ DRAG / 10 of 10 × FIRST10 / STEP 10 撮影カルテ・再注文管理 オーナーPCでは、予約・ヒアリング、当日カルテ、写真セレクト、納品、タスク、再注文・アルバム相談までを一つの管理画面で扱います。 スキップ 戻る 完了"
+    }
+  ],
+  "sessionRequests": [
+    {
+      "method": "POST",
+      "url": "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v3/api/staff/session"
+    },
+    {
+      "method": "POST",
+      "url": "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v3/api/member/session"
+    },
+    {
+      "method": "POST",
+      "url": "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v3/api/member/session"
+    },
+    {
+      "method": "POST",
+      "url": "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v3/api/owner/session"
+    }
+  ],
+  "businessMutations": [],
+  "errors": [
+    "console:DproStudioApiError: APIへ接続できませんでした。通信環境とWorker URLを確認してください。\n    at apiFetch (https://dpromstk2000-lab.github.io/dpro-photo-studio-line/config.js?v=DPRO-TUTORIAL-PHOTO-V1.1-20260828:1038:13)\n    at async Promise.all (index 1)\n    at async initialize (https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html?demo=1&tutorial=1:715:45)"
+  ],
+  "nonTutorialErrors": [
+    "console:DproStudioApiError: APIへ接続できませんでした。通信環境とWorker URLを確認してください。\n    at apiFetch (https://dpromstk2000-lab.github.io/dpro-photo-studio-line/config.js?v=DPRO-TUTORIAL-PHOTO-V1.1-20260828:1038:13)\n    at async Promise.all (index 1)\n    at async initialize (https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html?demo=1&tutorial=1:715:45)"
+  ],
+  "tutorialAttributableErrors": [],
+  "businessMutation": 0,
+  "sessionRequestCount": 4,
+  "ok": true
+}

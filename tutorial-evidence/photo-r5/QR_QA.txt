@@ -1,0 +1,5 @@
+QUICK_PAGE_1=https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html?demo=1&tutorial=1
+DETAIL_PAGE_1=https://dpromstk2000-lab.github.io/dpro-photo-studio-line/demo-guide.html?demo=1
+DETAIL_PAGE_4=https://dpromstk2000-lab.github.io/dpro-photo-studio-line/index.html?demo=1&tutorial=1
+EXACT_DECODE=PASS
+DESTINATION_HTTP=PASS

@@ -1,0 +1,60 @@
+{
+  "quickPdfPages": 1,
+  "detailedPdfPages": 4,
+  "renderedPages": [
+    {
+      "file": "detail-1.png",
+      "width": 1323,
+      "height": 1871,
+      "whiteRatio": 0.9235,
+      "inkRatio": 0.0765,
+      "blackRatio": 0.004,
+      "ok": true
+    },
+    {
+      "file": "detail-2.png",
+      "width": 1323,
+      "height": 1871,
+      "whiteRatio": 0.9261,
+      "inkRatio": 0.0739,
+      "blackRatio": 0.0,
+      "ok": true
+    },
+    {
+      "file": "detail-3.png",
+      "width": 1323,
+      "height": 1871,
+      "whiteRatio": 0.9089,
+      "inkRatio": 0.0911,
+      "blackRatio": 0.0,
+      "ok": true
+    },
+    {
+      "file": "detail-4.png",
+      "width": 1323,
+      "height": 1871,
+      "whiteRatio": 0.915,
+      "inkRatio": 0.085,
+      "blackRatio": 0.0038,
+      "ok": true
+    },
+    {
+      "file": "quick-1.png",
+      "width": 1323,
+      "height": 1871,
+      "whiteRatio": 0.8895,
+      "inkRatio": 0.1105,
+      "blackRatio": 0.0038,
+      "ok": true
+    }
+  ],
+  "renderCount": 5,
+  "textExtractionGate": "NOT_USED_JAPANESE_FONT_EXTRACTION_IS_NON_CANONICAL",
+  "canonicalChecks": [
+    "PDF_PAGE_COUNT",
+    "FINAL_PAGE_RASTER",
+    "QR_FINAL_RENDER_DECODE",
+    "ASSISTANT_VISUAL_REVIEW"
+  ],
+  "ok": true
+}
