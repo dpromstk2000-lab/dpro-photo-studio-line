@@ -2713,6 +2713,7 @@
     async function quickNext(reservationId, visitStatus) {
       const row = state.reservations.find((item) => item.id === reservationId);
       if (!row) return;
+      if (visitStatus === "completed" && !confirm("この撮影・来店対応を完了にしますか？")) return;
 
       await runBusy(`${nextActionLabel(visitStatus)}へ更新しています...`, () =>
         C.adminPost(C.ENDPOINTS.IPAD_RESERVATION_STATUS, {

@@ -1508,6 +1508,11 @@
     async function saveReservationStatus() {
       const r = state.selectedReservation?.reservation;
       if (!r) return;
+      const nextReservation = $("detailReservationStatus").value;
+      const nextVisit = $("detailVisitStatus").value;
+      const nextPost = $("detailPostStatus").value;
+      const highImpact = (nextReservation !== r.reservation_status && ["cancelled", "no_show"].includes(nextReservation)) || (nextVisit !== r.visit_status && ["completed"].includes(nextVisit)) || (nextPost !== r.post_status && ["completed", "delivered"].includes(nextPost));
+      if (highImpact && !confirm("完了・取消などの重要状態へ更新しますか？")) return;
       await runBusy("予約状態を更新しています...", () => C.adminPost(C.ENDPOINTS.ADMIN_RESERVATION_STATUS, {
         reservation_id: r.id, reservation_status: $("detailReservationStatus").value, visit_status: $("detailVisitStatus").value, post_status: $("detailPostStatus").value, internal_note: $("detailInternalNote").value, updated_by: "owner_pc",
       }));
@@ -1550,6 +1555,7 @@
 
     async function markDeliveryStatus(status) {
       const r = state.selectedReservation?.reservation; if (!r) return;
+      if (["delivered", "cancelled"].includes(status) && !confirm(`納品状態を「${status}」へ変更しますか？`)) return;
       if (!state.selectedReservation.delivery) await saveDelivery();
       await runBusy("納品状態を更新しています...", () => C.adminPost(C.ENDPOINTS.ADMIN_DELIVERY_STATUS, { reservation_id: r.id, delivery_status: status }));
       toast(getLabel("deliveryStatus", status) + "に更新しました。"); await reloadCurrentReservation(); await refreshDashboard();
