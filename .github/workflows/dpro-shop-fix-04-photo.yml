@@ -1,0 +1,101 @@
+name: "DPRO SHOP Fix 04 PHOTO"
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/dpro-shop-fix-04-photo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "dpro-shop-fix-04-photo"
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify audited source SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          check() {
+            path="$1"; expected="$2"
+            test -f "$path" || { echo "Missing target: $path"; exit 31; }
+            got="$(git hash-object "$path")"
+            echo "$path  $got"
+            test "$got" = "$expected" || { echo "SOURCE SHA MISMATCH: $path expected=$expected got=$got"; exit 32; }
+          }
+          check 'owner.html' '4e46e6e851dae144cdc87e01b1d233e45edac122'
+          check 'owner-ipad.html' 'fe39168dea193b4de7a40560d351bc411415ed12'
+
+      - name: Apply narrow confirmed fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, sys
+          
+          def read(path):
+              return Path(path).read_text(encoding="utf-8")
+          
+          def write(path, text):
+              Path(path).write_text(text, encoding="utf-8")
+          
+          def replace_once(text, old, new, label):
+              n=text.count(old)
+              if n != 1:
+                  raise SystemExit(f"{label}: expected 1 exact match, found {n}")
+              return text.replace(old,new,1)
+          
+          def sub_once(text, pattern, repl, label, flags=0):
+              new,n=re.subn(pattern,repl,text,count=1,flags=flags)
+              if n != 1:
+                  raise SystemExit(f"{label}: expected 1 regex match, found {n}")
+              return new
+          
+          p='owner.html'; t=read(p)
+          t=replace_once(t,
+          '''  async function saveReservationStatus() {\n    const r = state.selectedReservation?.reservation;\n    if (!r) return;''',
+          '''  async function saveReservationStatus() {\n    const r = state.selectedReservation?.reservation;\n    if (!r) return;\n    const nextReservation = $("detailReservationStatus").value;\n    const nextVisit = $("detailVisitStatus").value;\n    const nextPost = $("detailPostStatus").value;\n    const highImpact = (nextReservation !== r.reservation_status && ["cancelled", "no_show"].includes(nextReservation)) || (nextVisit !== r.visit_status && ["completed"].includes(nextVisit)) || (nextPost !== r.post_status && ["completed", "delivered"].includes(nextPost));\n    if (highImpact && !confirm("完了・取消などの重要状態へ更新しますか？")) return;''','PHOTO owner reservation guard')
+          t=replace_once(t,
+          '''  async function markDeliveryStatus(status) {\n    const r = state.selectedReservation?.reservation; if (!r) return;''',
+          '''  async function markDeliveryStatus(status) {\n    const r = state.selectedReservation?.reservation; if (!r) return;\n    if (["delivered", "cancelled"].includes(status) && !confirm(`納品状態を「${status}」へ変更しますか？`)) return;''','PHOTO delivery guard')
+          write(p,t)
+          p='owner-ipad.html'; t=read(p)
+          t=replace_once(t,
+          '''  async function quickNext(reservationId, visitStatus) {\n    const row = state.reservations.find((item) => item.id === reservationId);\n    if (!row) return;''',
+          '''  async function quickNext(reservationId, visitStatus) {\n    const row = state.reservations.find((item) => item.id === reservationId);\n    if (!row) return;\n    if (visitStatus === "completed" && !confirm("この撮影・来店対応を完了にしますか？")) return;''','PHOTO ipad complete guard')
+          write(p,t)
+          PY
+
+      - name: Validate source diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --stat
+          git diff -- "owner.html" "owner-ipad.html"
+          if git diff --quiet -- "owner.html" "owner-ipad.html"; then
+            echo "No source change was produced."
+            exit 41
+          fi
+
+      - name: Commit fix to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "owner.html" "owner-ipad.html"
+          git diff --cached --check
+          git commit -m "Fix PHOTO terminal-state guards"
+          git push origin HEAD:main
