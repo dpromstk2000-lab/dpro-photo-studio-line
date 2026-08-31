@@ -1,3 +1,4 @@
+# PHOTO workflow package V1.1: corrected audited source indentation anchors
 name: "DPRO SHOP Fix 04 PHOTO"
 on:
   push:
@@ -64,16 +65,16 @@ jobs:
           
           p='owner.html'; t=read(p)
           t=replace_once(t,
-          '''  async function saveReservationStatus() {\n    const r = state.selectedReservation?.reservation;\n    if (!r) return;''',
-          '''  async function saveReservationStatus() {\n    const r = state.selectedReservation?.reservation;\n    if (!r) return;\n    const nextReservation = $("detailReservationStatus").value;\n    const nextVisit = $("detailVisitStatus").value;\n    const nextPost = $("detailPostStatus").value;\n    const highImpact = (nextReservation !== r.reservation_status && ["cancelled", "no_show"].includes(nextReservation)) || (nextVisit !== r.visit_status && ["completed"].includes(nextVisit)) || (nextPost !== r.post_status && ["completed", "delivered"].includes(nextPost));\n    if (highImpact && !confirm("完了・取消などの重要状態へ更新しますか？")) return;''','PHOTO owner reservation guard')
+          '''    async function saveReservationStatus() {\n      const r = state.selectedReservation?.reservation;\n      if (!r) return;''',
+          '''    async function saveReservationStatus() {\n      const r = state.selectedReservation?.reservation;\n      if (!r) return;\n      const nextReservation = $("detailReservationStatus").value;\n      const nextVisit = $("detailVisitStatus").value;\n      const nextPost = $("detailPostStatus").value;\n      const highImpact = (nextReservation !== r.reservation_status && ["cancelled", "no_show"].includes(nextReservation)) || (nextVisit !== r.visit_status && ["completed"].includes(nextVisit)) || (nextPost !== r.post_status && ["completed", "delivered"].includes(nextPost));\n      if (highImpact && !confirm("完了・取消などの重要状態へ更新しますか？")) return;''','PHOTO owner reservation guard')
           t=replace_once(t,
-          '''  async function markDeliveryStatus(status) {\n    const r = state.selectedReservation?.reservation; if (!r) return;''',
-          '''  async function markDeliveryStatus(status) {\n    const r = state.selectedReservation?.reservation; if (!r) return;\n    if (["delivered", "cancelled"].includes(status) && !confirm(`納品状態を「${status}」へ変更しますか？`)) return;''','PHOTO delivery guard')
+          '''    async function markDeliveryStatus(status) {\n      const r = state.selectedReservation?.reservation; if (!r) return;''',
+          '''    async function markDeliveryStatus(status) {\n      const r = state.selectedReservation?.reservation; if (!r) return;\n      if (["delivered", "cancelled"].includes(status) && !confirm(`納品状態を「${status}」へ変更しますか？`)) return;''','PHOTO delivery guard')
           write(p,t)
           p='owner-ipad.html'; t=read(p)
           t=replace_once(t,
-          '''  async function quickNext(reservationId, visitStatus) {\n    const row = state.reservations.find((item) => item.id === reservationId);\n    if (!row) return;''',
-          '''  async function quickNext(reservationId, visitStatus) {\n    const row = state.reservations.find((item) => item.id === reservationId);\n    if (!row) return;\n    if (visitStatus === "completed" && !confirm("この撮影・来店対応を完了にしますか？")) return;''','PHOTO ipad complete guard')
+          '''    async function quickNext(reservationId, visitStatus) {\n      const row = state.reservations.find((item) => item.id === reservationId);\n      if (!row) return;''',
+          '''    async function quickNext(reservationId, visitStatus) {\n      const row = state.reservations.find((item) => item.id === reservationId);\n      if (!row) return;\n      if (visitStatus === "completed" && !confirm("この撮影・来店対応を完了にしますか？")) return;''','PHOTO ipad complete guard')
           write(p,t)
           PY
 
