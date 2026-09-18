@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "DPRO-PHOTO-CRM-BRUSHUP-6-UI-HOTFIX1-20260918";
+  const VERSION = "DPRO-PHOTO-CRM-BRUSHUP-6-UI-HOTFIX2-20260918";
   const API_BASE = "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v6";
   const MAX_ROWS = 5000;
   const CHUNK_SIZE = 500;
@@ -546,6 +546,17 @@
     });
     $("settingsReloadBtn")?.addEventListener("click", syncEnabledStateSoon);
     $("settingsSaveBtn")?.addEventListener("click", syncEnabledStateSoon);
+
+    window.addEventListener("dpro:photo-settings-rendered", (event) => {
+      const enabled = event?.detail?.csvMigration === true;
+      const flag = $("featureCsvMigration");
+      if (flag) {
+        flag.checked = enabled;
+        flag.disabled = false;
+      }
+      updateEnabledState();
+      if (enabled) loadRecent();
+    });
   }
 
   function boot() {

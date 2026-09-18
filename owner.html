@@ -1358,6 +1358,9 @@
       $("featureReturnCycleSearch").checked = flags.return_cycle_search === true;
       $("featureLineSegment").checked = flags.line_segment === true;
       $("featureCsvMigration").checked = flags.csv_migration === true;
+      window.dispatchEvent(new CustomEvent("dpro:photo-settings-rendered", {
+        detail: { csvMigration: flags.csv_migration === true }
+      }));
       $("featureLineCustomerLink").checked = flags.line_customer_link === true;
       $("followupNavBtn").hidden = flags.customer_followup !== true;
       if (!$("followupTargetYear").value) $("followupTargetYear").value = new Date().getFullYear();
@@ -1939,6 +1942,6 @@
   </script>
   <!-- DPRO-PHOTO-CRM-BRUSHUP-5-20260918 -->
   <script src="./photo-crm-segment.js?v=DPRO-PHOTO-CRM-BRUSHUP-5-20260918"></script>
-  <script src="./photo-crm-import.js?v=DPRO-PHOTO-CRM-BRUSHUP-6-HOTFIX1-20260918"></script>
+  <script src="./photo-crm-import.js?v=DPRO-PHOTO-CRM-BRUSHUP-6-HOTFIX2-20260918"></script>
 </body>
 </html>
