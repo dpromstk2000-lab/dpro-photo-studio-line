@@ -1,0 +1,65 @@
+name: DPRO PHOTO CRM BRUSHUP-6.1 UI Sync Fix
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  photo-crm-brushup-6-1-ui-sync-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Source gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f owner.html
+          test -f photo-crm-import.js
+          grep -F 'DPRO-PHOTO-CRM-BRUSHUP-6-UI-20260918' photo-crm-import.js
+          grep -F './photo-crm-import.js?v=DPRO-PHOTO-CRM-BRUSHUP-6-20260918' owner.html
+          grep -F 'bind();' photo-crm-import.js
+          grep -F 'updateEnabledState();' photo-crm-import.js
+
+      - name: Apply UI sync fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpqcyA9IFBhdGgoInBob3RvLWNybS1pbXBvcnQuanMiKQpzID0ganMucmVhZF90ZXh0KGVuY29kaW5nPSJ1dGYtOCIpCgpvbGRfdmVyc2lvbiA9ICdjb25zdCBWRVJTSU9OID0gIkRQUk8tUEhPVE8tQ1JNLUJSVVNIVVAtNi1VSS0yMDI2MDkxOCI7JwpuZXdfdmVyc2lvbiA9ICdjb25zdCBWRVJTSU9OID0gIkRQUk8tUEhPVE8tQ1JNLUJSVVNIVVAtNi1VSS1IT1RGSVgxLTIwMjYwOTE4IjsnCmlmIHMuY291bnQob2xkX3ZlcnNpb24pICE9IDE6CiAgICByYWlzZSBTeXN0ZW1FeGl0KGYidmVyc2lvbiBhbmNob3IgbWlzbWF0Y2g6IHtzLmNvdW50KG9sZF92ZXJzaW9uKX0iKQpzID0gcy5yZXBsYWNlKG9sZF92ZXJzaW9uLCBuZXdfdmVyc2lvbiwgMSkKCm9sZF9tb3VudCA9ICcgICAgYmluZCgpO1xuICAgIHVwZGF0ZUVuYWJsZWRTdGF0ZSgpO1xuICAgIGxvYWRSZWNlbnQoKTtcbiAgfVxuXG4gIGZ1bmN0aW9uIHVwZGF0ZUVuYWJsZWRTdGF0ZSgpIHtcbiAgICBjb25zdCBlbmFibGVkID0gJCgiZmVhdHVyZUNzdk1pZ3JhdGlvbiIpPy5jaGVja2VkID09PSB0cnVlO1xuICAgIGlmICgkKCJjc3ZNaWdyYXRpb25PZmZOb3RlIikpICQoImNzdk1pZ3JhdGlvbk9mZk5vdGUiKS5oaWRkZW4gPSBlbmFibGVkO1xuICAgIGlmICgkKCJjc3ZNaWdyYXRpb25Cb2R5IikpICQoImNzdk1pZ3JhdGlvbkJvZHkiKS5oaWRkZW4gPSAhZW5hYmxlZDtcbiAgfVxuXG4nCm5ld19tb3VudCA9ICcgICAgYmluZCgpO1xuICAgIHN5bmNFbmFibGVkU3RhdGVTb29uKCk7XG4gICAgbG9hZFJlY2VudCgpO1xuICB9XG5cbiAgZnVuY3Rpb24gdXBkYXRlRW5hYmxlZFN0YXRlKCkge1xuICAgIGNvbnN0IGVuYWJsZWQgPSAkKCJmZWF0dXJlQ3N2TWlncmF0aW9uIik/LmNoZWNrZWQgPT09IHRydWU7XG4gICAgaWYgKCQoImNzdk1pZ3JhdGlvbk9mZk5vdGUiKSkgJCgiY3N2TWlncmF0aW9uT2ZmTm90ZSIpLmhpZGRlbiA9IGVuYWJsZWQ7XG4gICAgaWYgKCQoImNzdk1pZ3JhdGlvbkJvZHkiKSkgJCgiY3N2TWlncmF0aW9uQm9keSIpLmhpZGRlbiA9ICFlbmFibGVkO1xuICB9XG5cbiAgZnVuY3Rpb24gc3luY0VuYWJsZWRTdGF0ZVNvb24oKSB7XG4gICAgWzAsIDIwMCwgNTAwLCAxMDAwLCAyMDAwXS5mb3JFYWNoKChkZWxheSkgPT4ge1xuICAgICAgc2V0VGltZW91dCh1cGRhdGVFbmFibGVkU3RhdGUsIGRlbGF5KTtcbiAgICB9KTtcbiAgfVxuXG4nCmlmIHMuY291bnQob2xkX21vdW50KSAhPSAxOgogICAgcmFpc2UgU3lzdGVtRXhpdChmIm1vdW50IGFuY2hvciBtaXNtYXRjaDoge3MuY291bnQob2xkX21vdW50KX0iKQpzID0gcy5yZXBsYWNlKG9sZF9tb3VudCwgbmV3X21vdW50LCAxKQoKb2xkX2JpbmQgPSAnICAgICQoImNzdlJlY2VudFJlZnJlc2hCdG4iKT8uYWRkRXZlbnRMaXN0ZW5lcigiY2xpY2siLCBsb2FkUmVjZW50KTtcbiAgICAkKCJyZWZyZXNoQWxsQnRuIik/LmFkZEV2ZW50TGlzdGVuZXIoImNsaWNrIiwgKCkgPT4gc2V0VGltZW91dChsb2FkUmVjZW50LCAzNTApKTtcbiAgfVxuJwpuZXdfYmluZCA9ICcgICAgJCgiY3N2UmVjZW50UmVmcmVzaEJ0biIpPy5hZGRFdmVudExpc3RlbmVyKCJjbGljayIsIGxvYWRSZWNlbnQpO1xuICAgICQoInJlZnJlc2hBbGxCdG4iKT8uYWRkRXZlbnRMaXN0ZW5lcigiY2xpY2siLCAoKSA9PiB7XG4gICAgICBzZXRUaW1lb3V0KGxvYWRSZWNlbnQsIDM1MCk7XG4gICAgICBzeW5jRW5hYmxlZFN0YXRlU29vbigpO1xuICAgIH0pO1xuICAgICQoInNldHRpbmdzUmVsb2FkQnRuIik/LmFkZEV2ZW50TGlzdGVuZXIoImNsaWNrIiwgc3luY0VuYWJsZWRTdGF0ZVNvb24pO1xuICAgICQoInNldHRpbmdzU2F2ZUJ0biIpPy5hZGRFdmVudExpc3RlbmVyKCJjbGljayIsIHN5bmNFbmFibGVkU3RhdGVTb29uKTtcbiAgfVxuJwppZiBzLmNvdW50KG9sZF9iaW5kKSAhPSAxOgogICAgcmFpc2UgU3lzdGVtRXhpdChmImJpbmQgYW5jaG9yIG1pc21hdGNoOiB7cy5jb3VudChvbGRfYmluZCl9IikKcyA9IHMucmVwbGFjZShvbGRfYmluZCwgbmV3X2JpbmQsIDEpCgppZiAnc3luY0VuYWJsZWRTdGF0ZVNvb24nIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgic3luYyBmdW5jdGlvbiBtaXNzaW5nIikKaWYgJ3NldHRpbmdzUmVsb2FkQnRuJyBub3QgaW4gczoKICAgIHJhaXNlIFN5c3RlbUV4aXQoInNldHRpbmdzIHJlbG9hZCBiaW5kaW5nIG1pc3NpbmciKQoKanMud3JpdGVfdGV4dChzLCBlbmNvZGluZz0idXRmLTgiKQoKb3duZXIgPSBQYXRoKCJvd25lci5odG1sIikKbyA9IG93bmVyLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQpvbGRfc3JjID0gJy4vcGhvdG8tY3JtLWltcG9ydC5qcz92PURQUk8tUEhPVE8tQ1JNLUJSVVNIVVAtNi0yMDI2MDkxOCcKbmV3X3NyYyA9ICcuL3Bob3RvLWNybS1pbXBvcnQuanM/dj1EUFJPLVBIT1RPLUNSTS1CUlVTSFVQLTYtSE9URklYMS0yMDI2MDkxOCcKaWYgby5jb3VudChvbGRfc3JjKSAhPSAxOgogICAgcmFpc2UgU3lzdGVtRXhpdChmIm93bmVyIHNjcmlwdCBzcmMgYW5jaG9yIG1pc21hdGNoOiB7by5jb3VudChvbGRfc3JjKX0iKQpvID0gby5yZXBsYWNlKG9sZF9zcmMsIG5ld19zcmMsIDEpCm93bmVyLndyaXRlX3RleHQobywgZW5jb2Rpbmc9InV0Zi04IikKCnByaW50KCJCUlVTSFVQLTYuMSBVSSBzeW5jIGZpeCBjb21wbGV0ZS4iKQo=' | base64 -d > /tmp/photo_crm_b6_sync_fix.py
+          python -m py_compile /tmp/photo_crm_b6_sync_fix.py
+          python /tmp/photo_crm_b6_sync_fix.py
+
+      - name: Static QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          node --check photo-crm-import.js
+          grep -F 'DPRO-PHOTO-CRM-BRUSHUP-6-UI-HOTFIX1-20260918' photo-crm-import.js
+          grep -F 'function syncEnabledStateSoon()' photo-crm-import.js
+          grep -F '$("settingsReloadBtn")?.addEventListener("click", syncEnabledStateSoon);' photo-crm-import.js
+          grep -F './photo-crm-import.js?v=DPRO-PHOTO-CRM-BRUSHUP-6-HOTFIX1-20260918' owner.html
+
+      - name: Commit fix and clean workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "dpro-photo-crm-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add owner.html photo-crm-import.js
+          git rm -f --ignore-unmatch .github/workflows/STEP-PHOTO-CRM-BRUSHUP-6-1-UI-SYNC-FIX.yml
+          git commit -m "Fix PHOTO CRM CSV migration UI state sync"
+          git push origin HEAD:main
+
+      - name: Final
+        shell: bash
+        run: |
+          echo "DPRO PHOTO CRM BRUSHUP-6.1 UI Sync Fix: PASS"
