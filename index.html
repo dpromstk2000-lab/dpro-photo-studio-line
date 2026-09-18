@@ -609,6 +609,9 @@
       selectedDate: "",
       availability: null,
       selectedSlot: null,
+      planStartRule: { mode: "interval", interval_minutes: 30, anchor_time: "00:00", fixed_times: [] },
+      planStartRulePlanId: "",
+      planStartRulePromise: null,
       member: null,
       existingSubjects: [],
       subjectCounter: 0,
@@ -784,6 +787,69 @@
       }).join("");
     }
 
+    function defaultPlanStartRule() {
+      return { mode: "interval", interval_minutes: 30, anchor_time: "00:00", fixed_times: [] };
+    }
+
+    function normalizePlanStartRule(raw) {
+      const mode = raw?.mode === "fixed_times" ? "fixed_times" : "interval";
+      const interval = Math.max(30, Number(raw?.interval_minutes || 30));
+      const anchor = /^([01]\d|2[0-3]):(?:00|30)$/.test(String(raw?.anchor_time || "")) ? String(raw.anchor_time) : "00:00";
+      const fixed = Array.isArray(raw?.fixed_times)
+        ? [...new Set(raw.fixed_times.map((v) => String(v || "").slice(0,5)).filter((v) => /^([01]\d|2[0-3]):(?:00|30)$/.test(v)))].sort()
+        : [];
+      return { mode, interval_minutes: interval, anchor_time: anchor, fixed_times: fixed };
+    }
+
+    function timeToMinutes(value) {
+      const m = String(value || "").match(/^(\d{2}):(\d{2})$/);
+      if (!m) return null;
+      return Number(m[1]) * 60 + Number(m[2]);
+    }
+
+    function slotAllowedByPlanStartRule(slot) {
+      const time = String(slot?.time || "").slice(0,5);
+      const start = timeToMinutes(time);
+      if (start === null) return false;
+      const rule = normalizePlanStartRule(state.planStartRule);
+      if (rule.mode === "fixed_times") return rule.fixed_times.includes(time);
+      const anchor = timeToMinutes(rule.anchor_time) ?? 0;
+      return ((start - anchor + 1440) % Math.max(30, Number(rule.interval_minutes || 30))) === 0;
+    }
+
+    async function ensurePlanStartRule() {
+      const planId = state.selectedPlan?.id || "";
+      if (!planId) {
+        state.planStartRule = defaultPlanStartRule();
+        state.planStartRulePlanId = "";
+        return state.planStartRule;
+      }
+      if (state.planStartRulePlanId === planId) return state.planStartRule;
+      if (state.planStartRulePromise) return state.planStartRulePromise;
+
+      const task = (async () => {
+        const url = new URL(`${C.CALENDAR_API_BASE_URL}/api/public/plan-start-rule`);
+        url.searchParams.set("plan_id", planId);
+        const response = await fetch(url.toString(), { headers: { Accept: "application/json" }, cache: "no-store" });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || payload?.ok === false || !payload?.plan?.start_rule) {
+          throw new Error(payload?.error || "予約開始時間の設定を確認できませんでした。");
+        }
+        if (state.selectedPlan?.id === planId) {
+          state.planStartRule = normalizePlanStartRule(payload.plan.start_rule);
+          state.planStartRulePlanId = planId;
+        }
+        return state.planStartRule;
+      })();
+
+      state.planStartRulePromise = task;
+      try {
+        return await task;
+      } finally {
+        if (state.planStartRulePromise === task) state.planStartRulePromise = null;
+      }
+    }
+
     function selectPlan(planId) {
       const plan = state.plans.find((item) => item.id === planId);
       if (!plan) return;
@@ -795,7 +861,11 @@
         state.selectedDate = "";
         state.selectedSlot = null;
         state.availability = null;
+        state.planStartRule = defaultPlanStartRule();
+        state.planStartRulePlanId = "";
+        state.planStartRulePromise = null;
         els.reservationDate.value = "";
+        ensurePlanStartRule().catch((error) => console.warn("plan start rule load failed", error));
       }
       renderPlans(); renderOptions(); renderStaff(); renderPlanIntake(); updateDateRange();
       updatePrimaryActionState();
@@ -894,6 +964,7 @@
       }
       els.availabilityState.innerHTML = `<div class="loading-box"><span class="spinner"></span>空き時間を確認しています</div>`;
       try {
+        await ensurePlanStartRule();
         const query = { date: state.selectedDate, plan_id: state.selectedPlan.id };
         if (state.selectedStaffId) query.staff_id = state.selectedStaffId;
         state.availability = await C.apiGet(C.ENDPOINTS.PUBLIC_AVAILABILITY, query);
@@ -917,7 +988,8 @@
 
     function renderAvailability() {
       const data = state.availability;
-      const slots = Array.isArray(data?.slots) ? data.slots : [];
+      const rawSlots = Array.isArray(data?.slots) ? data.slots : [];
+      const slots = rawSlots.filter(slotAllowedByPlanStartRule);
       const available = slots.filter((slot) => slot.available);
       if (!available.length) {
         els.availabilityState.innerHTML = `<div class="empty-box">${esc(data?.reason || "選択した日には空き時間がありません。別の日付をお選びください。")}</div>`;
@@ -927,7 +999,8 @@
       const planName = state.selectedPlan?.plan_name || data?.plan?.plan_name || "撮影";
       const duration = Number(state.selectedPlan?.duration_minutes || data?.plan?.duration_minutes || 0);
       const durationText = duration > 0 ? `｜所要約${duration}分` : "";
-      els.availabilityState.innerHTML = `<p class="availability-summary">${esc(C.formatDate(state.selectedDate, { weekday: "short" }))}｜${esc(planName)}${durationText}｜${available.length}枠｜担当：${esc(selectedStaff || "おまかせ")}</p>
+      const startRuleText = state.planStartRule?.mode === "fixed_times" ? "｜指定開始時刻" : (Number(state.planStartRule?.interval_minutes || 30) > 30 ? `｜${Number(state.planStartRule.interval_minutes)}分間隔` : "");
+      els.availabilityState.innerHTML = `<p class="availability-summary">${esc(C.formatDate(state.selectedDate, { weekday: "short" }))}｜${esc(planName)}${durationText}${startRuleText}｜${available.length}枠｜担当：${esc(selectedStaff || "おまかせ")}</p>
         <div class="slot-grid">${slots.map((slot) => {
           const end = slotEndTime(slot);
           return `<button type="button" class="slot-button ${state.selectedSlot?.start_at === slot.start_at ? "is-selected" : ""}" data-slot-time="${esc(slot.start_at)}" ${slot.available ? "" : "disabled"}><span>${esc(slot.time)}</span>${end ? `<small>〜${esc(end)}</small>` : ""}</button>`;
@@ -1392,6 +1465,6 @@
     initialize();
   })();
   </script>
-  <script src="./photo-booking-calendar-v2.js?v=DPRO-PHOTO-RESERVATION-CALENDAR-V2-BRUSHUP-8-3-1-POLISH1-20260919"></script>
+  <!-- DPRO-PHOTO-RESERVATION-START-RULES-BRUSHUP-8-3-2-UI-20260919 --><script src="./photo-booking-calendar-v2.js?v=DPRO-PHOTO-RESERVATION-CALENDAR-V2-BRUSHUP-8-3-1-POLISH1-20260919"></script>
 </body>
 </html>
