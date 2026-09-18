@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "DPRO-PHOTO-RESERVATION-CALENDAR-V2-BRUSHUP-8-3-UI-20260919";
+  const VERSION = "DPRO-PHOTO-RESERVATION-CALENDAR-V2-BRUSHUP-8-3-1-POLISH1-20260919";
   const FALLBACK_API_BASE = "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v8";
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG || null;
   if (!C) return;
@@ -237,7 +237,7 @@
         aria-label="${esc(`${formatDay(day.date)} ${meta.label}${day.available_slot_count ? ` ${day.available_slot_count}枠` : ""}`)}">
         <span class="dpro-cal-date">${d.getUTCDate()}</span>
         <span class="dpro-cal-status"><b>${meta.mark}</b><em>${meta.label}</em></span>
-        ${day.available_slot_count > 0 ? `<span class="dpro-cal-count">${day.available_slot_count}枠</span>` : ""}
+        ${day.status === "limited" && day.available_slot_count > 0 ? `<span class="dpro-cal-count">残り${day.available_slot_count}枠</span>` : ""}
         ${firstTime ? `<span class="dpro-cal-first">${esc(firstTime)}</span>` : ""}
         ${event}
         ${reason}

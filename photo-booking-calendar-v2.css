@@ -276,3 +276,12 @@
   .dpro-cal-status b { font-size: 13px; }
   .dpro-cal-count { display: none; }
 }
+
+/* DPRO PHOTO Calendar V2 BRUSHUP-8-3.1 polish */
+@media (min-width: 900px) {
+  .dpro-cal-day { min-height: 98px; padding: 8px 5px 7px; }
+  .dpro-cal-date { font-size: 16px; }
+  .dpro-cal-status { font-size: 11px; }
+  .dpro-cal-status b { font-size: 15px; }
+  .dpro-cal-first { font-size: 10px; }
+}
