@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "DPRO-PHOTO-CRM-BRUSHUP-6-UI-20260918";
+  const VERSION = "DPRO-PHOTO-CRM-BRUSHUP-6-UI-HOTFIX1-20260918";
   const API_BASE = "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v6";
   const MAX_ROWS = 5000;
   const CHUNK_SIZE = 500;
@@ -267,7 +267,7 @@
     }
 
     bind();
-    updateEnabledState();
+    syncEnabledStateSoon();
     loadRecent();
   }
 
@@ -275,6 +275,12 @@
     const enabled = $("featureCsvMigration")?.checked === true;
     if ($("csvMigrationOffNote")) $("csvMigrationOffNote").hidden = enabled;
     if ($("csvMigrationBody")) $("csvMigrationBody").hidden = !enabled;
+  }
+
+  function syncEnabledStateSoon() {
+    [0, 200, 500, 1000, 2000].forEach((delay) => {
+      setTimeout(updateEnabledState, delay);
+    });
   }
 
   async function onFileChange() {
@@ -534,7 +540,12 @@
     $("csvPreflightBtn")?.addEventListener("click", preflight);
     $("csvSampleBtn")?.addEventListener("click", downloadSample);
     $("csvRecentRefreshBtn")?.addEventListener("click", loadRecent);
-    $("refreshAllBtn")?.addEventListener("click", () => setTimeout(loadRecent, 350));
+    $("refreshAllBtn")?.addEventListener("click", () => {
+      setTimeout(loadRecent, 350);
+      syncEnabledStateSoon();
+    });
+    $("settingsReloadBtn")?.addEventListener("click", syncEnabledStateSoon);
+    $("settingsSaveBtn")?.addEventListener("click", syncEnabledStateSoon);
   }
 
   function boot() {
