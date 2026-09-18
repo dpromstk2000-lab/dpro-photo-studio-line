@@ -1,0 +1,71 @@
+name: DPRO PHOTO CRM BRUSHUP-5.1 Polish
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  photo-crm-brushup-5-1-polish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Source gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f photo-crm-segment.js
+          grep -F 'DPRO-PHOTO-CRM-BRUSHUP-5-UI-20260918' photo-crm-segment.js
+          grep -F '<h3 style="margin:0;">LINEセグメント配信</h3>' photo-crm-segment.js
+          grep -F '$("segmentRecentRefreshBtn")?.addEventListener("click", loadRecent);' photo-crm-segment.js
+
+      - name: Decode polish patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCnAgPSBQYXRoKCJwaG90by1jcm0tc2VnbWVudC5qcyIpCnMgPSBwLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQoKb2xkX3ZlcnNpb24gPSAnY29uc3QgVkVSU0lPTiA9ICJEUFJPLVBIT1RPLUNSTS1CUlVTSFVQLTUtVUktMjAyNjA5MTgiOycKbmV3X3ZlcnNpb24gPSAnY29uc3QgVkVSU0lPTiA9ICJEUFJPLVBIT1RPLUNSTS1CUlVTSFVQLTUtVUktUE9MSVNIMS0yMDI2MDkxOCI7JwppZiBzLmNvdW50KG9sZF92ZXJzaW9uKSAhPSAxOgogICAgcmFpc2UgU3lzdGVtRXhpdChmInZlcnNpb24gYW5jaG9yIG1pc21hdGNoOiB7cy5jb3VudChvbGRfdmVyc2lvbil9IikKcyA9IHMucmVwbGFjZShvbGRfdmVyc2lvbiwgbmV3X3ZlcnNpb24sIDEpCgpvbGRfaGVhZCA9ICcgICAgICA8ZGl2IGNsYXNzPSJwYW5lbC1oZWFkIiBzdHlsZT0ibWFyZ2luLWJvdHRvbToxMHB4OyI+XG4gICAgICAgIDxkaXY+XG4gICAgICAgICAgPGgzIHN0eWxlPSJtYXJnaW46MDsiPkxJTkXjgrvjgrDjg6Hjg7Pjg4jphY3kv6E8L2gzPlxuICAgICAgICAgIDxwIHN0eWxlPSJtYXJnaW46NXB4IDAgMDsiPuaknOe0oue1kOaenOOBi+OCieWvvuixoeiAheOCkumBuOOBs+OAgemhp+WuouWNmOS9jeOBrumHjeikh+mZpOWkluOBqOacgOe1gueiuuiqjeOCkuOBl+OBpuOBi+OCiemFjeS/oeOBl+OBvuOBmeOAgjwvcD5cbiAgICAgICAgPC9kaXY+XG4gICAgICAgIDxkaXYgaWQ9InNlZ21lbnRDYXBhYmlsaXR5QmFkZ2UiPiR7Y2FwYWJpbGl0eUJhZGdlKHN0YXRlLmNhcGFiaWxpdHkpfTwvZGl2PlxuICAgICAgPC9kaXY+XG5cbicKbmV3X2hlYWQgPSAnICAgICAgPGRpdiBjbGFzcz0icGFnZS1hY3Rpb25zIiBzdHlsZT0ianVzdGlmeS1jb250ZW50OmZsZXgtZW5kO21hcmdpbi1ib3R0b206MTBweDsiPlxuICAgICAgICA8ZGl2IGlkPSJzZWdtZW50Q2FwYWJpbGl0eUJhZGdlIj4ke2NhcGFiaWxpdHlCYWRnZShzdGF0ZS5jYXBhYmlsaXR5KX08L2Rpdj5cbiAgICAgIDwvZGl2PlxuXG4nCmlmIHMuY291bnQob2xkX2hlYWQpICE9IDE6CiAgICByYWlzZSBTeXN0ZW1FeGl0KGYiZHVwbGljYXRlLWhlYWRpbmcgYW5jaG9yIG1pc21hdGNoOiB7cy5jb3VudChvbGRfaGVhZCl9IikKcyA9IHMucmVwbGFjZShvbGRfaGVhZCwgbmV3X2hlYWQsIDEpCgpvbGRfZXZlbnRzID0gJyAgICAkKCJzZWdtZW50UmVjZW50UmVmcmVzaEJ0biIpPy5hZGRFdmVudExpc3RlbmVyKCJjbGljayIsIGxvYWRSZWNlbnQpO1xuICAgIGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3JBbGwoIltkYXRhLXNlZ21lbnQtdGVtcGxhdGVdIikuZm9yRWFjaCgoYnV0dG9uKSA9PiB7JwpuZXdfZXZlbnRzID0gJyAgICAkKCJzZWdtZW50UmVjZW50UmVmcmVzaEJ0biIpPy5hZGRFdmVudExpc3RlbmVyKCJjbGljayIsIGxvYWRSZWNlbnQpO1xuXG4gICAgY29uc3QgcmVmcmVzaFNlZ21lbnRTb29uID0gKCkgPT4gc2V0VGltZW91dCgoKSA9PiB7XG4gICAgICBsb2FkQ2FwYWJpbGl0eSgpO1xuICAgICAgbG9hZFJlY2VudCgpO1xuICAgIH0sIDM1MCk7XG5cbiAgICAkKCJyZWZyZXNoQWxsQnRuIik/LmFkZEV2ZW50TGlzdGVuZXIoImNsaWNrIiwgcmVmcmVzaFNlZ21lbnRTb29uKTtcbiAgICAkKCJmb2xsb3d1cFJlZnJlc2hCdG4iKT8uYWRkRXZlbnRMaXN0ZW5lcigiY2xpY2siLCByZWZyZXNoU2VnbWVudFNvb24pO1xuXG4gICAgZG9jdW1lbnQucXVlcnlTZWxlY3RvckFsbCgiW2RhdGEtc2VnbWVudC10ZW1wbGF0ZV0iKS5mb3JFYWNoKChidXR0b24pID0+IHsnCmlmIHMuY291bnQob2xkX2V2ZW50cykgIT0gMToKICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJyZWZyZXNoIGFuY2hvciBtaXNtYXRjaDoge3MuY291bnQob2xkX2V2ZW50cyl9IikKcyA9IHMucmVwbGFjZShvbGRfZXZlbnRzLCBuZXdfZXZlbnRzLCAxKQoKaWYgJzxoMyBzdHlsZT0ibWFyZ2luOjA7Ij5MSU5F44K744Kw44Oh44Oz44OI6YWN5L+hPC9oMz4nIGluIHM6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJkdXBsaWNhdGUgaW5uZXIgaGVhZGluZyBzdGlsbCBwcmVzZW50IikKaWYgJyQoInJlZnJlc2hBbGxCdG4iKT8uYWRkRXZlbnRMaXN0ZW5lcigiY2xpY2siLCByZWZyZXNoU2VnbWVudFNvb24pOycgbm90IGluIHM6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJnbG9iYWwgcmVmcmVzaCBiaW5kaW5nIG1pc3NpbmciKQppZiAnJCgiZm9sbG93dXBSZWZyZXNoQnRuIik/LmFkZEV2ZW50TGlzdGVuZXIoImNsaWNrIiwgcmVmcmVzaFNlZ21lbnRTb29uKTsnIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgiZm9sbG93LXVwIHJlZnJlc2ggYmluZGluZyBtaXNzaW5nIikKCnAud3JpdGVfdGV4dChzLCBlbmNvZGluZz0idXRmLTgiKQpwcmludCgiUEhPVE8gQ1JNIEJSVVNIVVAtNS4xIHBvbGlzaCBwYXRjaCBjb21wbGV0ZS4iKQo=' | base64 -d > /tmp/photo_crm_polish.py
+          python -m py_compile /tmp/photo_crm_polish.py
+
+      - name: Apply polish patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python /tmp/photo_crm_polish.py
+
+      - name: Static QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          grep -F 'DPRO-PHOTO-CRM-BRUSHUP-5-UI-POLISH1-20260918' photo-crm-segment.js
+          grep -F '$("refreshAllBtn")?.addEventListener("click", refreshSegmentSoon);' photo-crm-segment.js
+          grep -F '$("followupRefreshBtn")?.addEventListener("click", refreshSegmentSoon);' photo-crm-segment.js
+          if grep -F '<h3 style="margin:0;">LINEセグメント配信</h3>' photo-crm-segment.js; then
+            echo "Duplicate LINE segment heading still exists"
+            exit 1
+          fi
+          node --check photo-crm-segment.js
+
+      - name: Commit polish and clean workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "dpro-photo-crm-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add photo-crm-segment.js
+          git rm -f --ignore-unmatch .github/workflows/STEP-PHOTO-CRM-BRUSHUP-5-1-POLISH.yml
+          git commit -m "Polish PHOTO CRM LINE segment UI"
+          git push origin HEAD:main
+
+      - name: Final
+        shell: bash
+        run: |
+          echo "DPRO PHOTO CRM BRUSHUP-5.1 POLISH: PASS"
