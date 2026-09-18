@@ -510,6 +510,7 @@
           <button class="nav-btn" data-view="today" type="button"><span class="nav-icon">日</span><span>今日の撮影</span><span id="navTodayBadge" class="nav-badge">-</span></button>
           <button class="nav-btn" data-view="reservations" type="button"><span class="nav-icon">予</span><span>予約一覧</span></button>
           <button class="nav-btn" data-view="customers" type="button"><span class="nav-icon">顧</span><span>顧客検索</span></button>
+          <button id="followupNavBtn" class="nav-btn" data-view="followup" type="button"><span class="nav-icon">育</span><span>顧客フォロー</span><span id="navFollowupBadge" class="nav-badge">-</span></button>
           <button class="nav-btn" data-view="post" type="button"><span class="nav-icon">後</span><span>セレクト・納品</span><span id="navPostBadge" class="nav-badge">-</span></button>
           <button class="nav-btn" data-view="tasks" type="button"><span class="nav-icon">✓</span><span>タスク・再注文</span><span id="navTaskBadge" class="nav-badge">-</span></button>
           <button class="nav-btn" data-view="settings" type="button"><span class="nav-icon">設</span><span>店舗設定</span></button>
@@ -604,6 +605,44 @@
           </section>
         </section>
 
+        <!-- DPRO-PHOTO-CRM-BRUSHUP-4-20260918 -->
+        <section id="view-followup" class="view">
+          <div class="page-head">
+            <div><h2>顧客フォロー</h2><p>年齢・誕生日・前回撮影日から、次の撮影につながるお客様を見つけます。</p></div>
+            <div class="page-actions"><button id="followupRefreshBtn" class="btn btn-secondary" type="button">最新情報へ更新</button></div>
+          </div>
+          <div id="followupStats" class="stats-grid"></div>
+          <section class="panel">
+            <div class="panel-head">
+              <div><h3>ライフイベント検索</h3><p>七五三、誕生日、再来店時期などを組み合わせて検索できます。</p></div>
+              <span id="followupResultCount" class="badge green">0名</span>
+            </div>
+            <div class="filters">
+              <div class="field"><label for="followupTargetYear">対象年</label><input id="followupTargetYear" class="input" type="number" min="1900" max="2200" /></div>
+              <div class="field"><label>その年になる年齢</label><div class="check-row"><label><input id="followupAge3" type="checkbox" /> 3歳</label><label><input id="followupAge5" type="checkbox" /> 5歳</label><label><input id="followupAge7" type="checkbox" /> 7歳</label></div></div>
+              <div class="field"><label for="followupBirthdayMonth">誕生月</label><select id="followupBirthdayMonth"><option value="">すべて</option><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></div>
+              <div class="field"><label for="followupInactiveMonths">前回撮影から</label><select id="followupInactiveMonths"><option value="">指定なし</option><option value="6">6か月以上</option><option value="12">1年以上</option><option value="18">1年6か月以上</option><option value="24">2年以上</option><option value="36">3年以上</option></select></div>
+              <div class="field"><label for="followupLineStatus">LINE連携</label><select id="followupLineStatus"><option value="all">すべて</option><option value="linked">連携済み</option><option value="unlinked">未連携</option></select></div>
+              <div class="field"><label for="followupQuery">名前・顧客番号・電話</label><input id="followupQuery" class="input" type="search" placeholder="例：佐藤、PHOTO-DEMO-001" /></div>
+              <button id="followupSearchBtn" class="btn btn-primary" type="button">この条件で検索</button>
+            </div>
+            <div class="page-actions" style="margin-top:12px;">
+              <button class="btn btn-small btn-secondary" data-followup-preset="shichigosan" type="button">今年の3・5・7歳</button>
+              <button class="btn btn-small btn-secondary" data-followup-preset="birthday-next" type="button">来月誕生日</button>
+              <button class="btn btn-small btn-secondary" data-followup-preset="inactive-12" type="button">1年以上撮影なし</button>
+              <button class="btn btn-small btn-neutral" data-followup-preset="clear" type="button">条件をクリア</button>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><div><h3>検索結果</h3><p>撮影対象者単位で表示します。兄弟・姉妹がいるご家庭も個別に追えます。</p></div></div>
+            <div id="followupResults" class="search-results"><div class="empty">条件を指定して検索してください。</div></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><div><h3>LINEフォロー</h3><p>検索から配信までの誤送信防止フローは次工程で追加します。</p></div></div>
+            <div class="auth-note" style="margin:0;">現在は検索・対象確認・撮影履歴まで利用できます。LINEセグメント配信はBRUSHUP-5で「対象確認 → LINE連携済み抽出 → 顧客単位の重複除去 → 文面確認 → 最終確認 → 配信ログ保存」を実装してから有効化します。</div>
+          </section>
+        </section>
+
         <section id="view-post" class="view">
           <div class="page-head">
             <div><h2>写真セレクト・納品</h2><p>外部ギャラリー案内、セレクト期限、納品準備を管理します。</p></div>
@@ -660,6 +699,24 @@
               <div class="field span-2"><label for="settingPublicNotice">予約画面のお知らせ</label><textarea id="settingPublicNotice"></textarea></div>
             </div>
           </section>
+          <section class="panel">
+            <div class="panel-head"><div><h3>顧客フォロー機能</h3><p>写真館の運用に合わせて必要な機能だけ表示できます。</p></div></div>
+            <div class="form-grid">
+              <div class="field span-2"><label>基本機能</label><div class="check-row">
+                <label><input id="featureCustomerFollowup" type="checkbox" /> 顧客フォローを使用</label>
+                <label><input id="featureSubjectHistory" type="checkbox" /> 撮影対象者ごとの履歴</label>
+                <label><input id="featureLifecycleSearch" type="checkbox" /> 年齢・ライフイベント検索</label>
+                <label><input id="featureBirthdaySearch" type="checkbox" /> 誕生日検索</label>
+                <label><input id="featureReturnCycleSearch" type="checkbox" /> 再来店時期検索</label>
+              </div></div>
+              <div class="field span-2"><label>次工程で解放する機能</label><div class="check-row">
+                <label><input id="featureLineSegment" type="checkbox" disabled /> LINEセグメント配信</label>
+                <label><input id="featureCsvMigration" type="checkbox" disabled /> CSVデータ移行</label>
+                <label><input id="featureLineCustomerLink" type="checkbox" disabled /> 既存顧客とLINE再紐付け</label>
+              </div><div class="field-help">安全実装・QAが完了するまで、この3機能はOFF固定です。</div></div>
+            </div>
+          </section>
+
           <section class="panel">
             <div class="panel-head"><div><h3>営業時間</h3><p>曜日別の営業時間・最終受付を設定します。</p></div></div>
             <div id="businessHoursGrid" class="hours-grid"></div>
@@ -801,6 +858,14 @@
     </section>
   </div>
 
+  <div id="subjectHistoryModal" class="modal-backdrop" hidden>
+    <section class="modal small">
+      <header class="modal-head"><div><h3 id="subjectHistoryTitle">撮影履歴</h3><p id="subjectHistoryMeta">撮影対象者ごとの履歴です。</p></div><button class="icon-btn" data-close-modal="subjectHistoryModal" type="button" aria-label="閉じる">×</button></header>
+      <div id="subjectHistoryBody" class="modal-body"></div>
+      <footer class="modal-foot"><button class="btn btn-neutral" data-close-modal="subjectHistoryModal" type="button">閉じる</button></footer>
+    </section>
+  </div>
+
   <div id="loadingCover" class="loading-cover" hidden><div id="loadingText" class="loading-box">読み込み中...</div></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
@@ -814,7 +879,9 @@
       return;
     }
 
-    const VERSION = "STUDIO-11-OWNER-FINAL-INTEGRATION-20260715";
+    const VERSION = "STUDIO-11-OWNER-FINAL-INTEGRATION-20260715+CRM-BRUSHUP-4-20260918";
+    const CRM_VERSION = "DPRO-PHOTO-CRM-BRUSHUP-4-20260918";
+    const CRM_API_BASE_URL = "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v4";
     const $ = (id) => document.getElementById(id);
     const esc = (value) => C.escapeHtml(value ?? "");
     const state = {
@@ -825,6 +892,9 @@
       dayRows: [],
       reservationRows: [],
       customerRows: [],
+      followupSummary: null,
+      followupRows: [],
+      selectedFollowupSubject: null,
       selectedReservation: null,
       selectedCustomer: null,
       manualSelectedSlot: null,
@@ -913,7 +983,7 @@
     }
 
     function openModal(id) { $(id).hidden = false; document.body.style.overflow = "hidden"; }
-    function closeModal(id) { $(id).hidden = true; if (!["manualModal","reservationModal","customerModal"].some((mid) => !$(mid).hidden)) document.body.style.overflow = ""; }
+    function closeModal(id) { $(id).hidden = true; if (!["manualModal","reservationModal","customerModal","subjectHistoryModal"].some((mid) => !$(mid).hidden)) document.body.style.overflow = ""; }
 
     async function verifyAndStart() {
       const code = $("adminCodeInput").value.trim();
@@ -967,6 +1037,7 @@
       $("navTodayBadge").textContent = counts.today_reservations ?? 0;
       $("navPostBadge").textContent = Number(counts.selection_pending || 0) + Number(counts.delivery_in_progress || 0);
       $("navTaskBadge").textContent = Number(counts.open_tasks || 0) + Number(counts.reorder_open || 0);
+      if ($("navFollowupBadge")) $("navFollowupBadge").textContent = state.followupSummary?.age_3_5_7_this_year ?? "-";
     }
 
     function renderDashboard() {
@@ -1078,6 +1149,136 @@
       $("customerResults").innerHTML = rows.map((row) => `<article class="customer-row"><div><div class="customer-name">${esc(row.customer_name)} 様</div><div class="item-meta">${esc(row.customer_no)}｜${esc(C.formatPhone(row.phone))}</div><div class="item-tags">${row.subject_names ? badge(`撮影対象：${row.subject_names}`, "gray") : ""}${badge(`撮影 ${row.total_shoot_count || 0}回`, "green")}</div></div><div><div class="field-label">最終予約</div><div style="font-weight:850;">${row.last_reservation_start_at ? esc(fmtDate(row.last_reservation_start_at)) : "予約なし"}</div><div class="item-meta">${esc(row.last_plan_name || "")} ${row.last_staff_name ? `｜${esc(row.last_staff_name)}` : ""}</div></div><div class="page-actions"><button class="btn btn-small btn-secondary" data-open-customer="${esc(row.customer_id)}" type="button">顧客詳細</button>${row.last_reservation_id ? `<button class="btn btn-small btn-neutral" data-open-reservation="${esc(row.last_reservation_id)}" type="button">最新予約</button>` : ""}</div></article>`).join("");
     }
 
+    function followupFlags() {
+      return state.settings?.settings?.feature_flags || {};
+    }
+
+    function followupEnabled() {
+      return followupFlags().customer_followup === true;
+    }
+
+    function crmQueryUrl(path, query = {}) {
+      const url = new URL(`${CRM_API_BASE_URL}${path}`);
+      Object.entries(query || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === "") return;
+        url.searchParams.set(key, String(value));
+      });
+      return url.toString();
+    }
+
+    async function crmAdminGet(path, query = {}) {
+      const token = C.getSessionToken("owner");
+      if (!token) throw new Error("管理者認証が必要です。");
+      const response = await fetch(crmQueryUrl(path, query), {
+        method: "GET",
+        headers: { "Accept": "application/json", "X-Owner-Session": token },
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.ok === false) throw new Error(payload?.error || payload?.message || `CRM通信に失敗しました（HTTP ${response.status}）`);
+      return payload;
+    }
+
+    function renderFollowupSummary() {
+      const summary = state.followupSummary || {};
+      const stats = [
+        ["撮影対象者", summary.subjects_total || 0, "名", "登録中の撮影対象者", ""],
+        ["今年3・5・7歳", summary.age_3_5_7_this_year || 0, "名", "七五三候補", "info"],
+        ["来月誕生日", summary.birthday_next_month || 0, "名", "誕生日フォロー候補", "alert"],
+        ["1年以上撮影なし", summary.inactive_12m || 0, "名", "再来店フォロー候補", "alert"],
+        ["LINE連携済み", summary.line_linked || 0, "名", "将来の配信対象候補", "info"],
+        ["LINE未連携", summary.line_unlinked || 0, "名", "紐付け確認候補", ""],
+      ];
+      $("followupStats").innerHTML = stats.map(([name,value,unit,note,tone]) => `<article class="stat-card ${tone}"><span>${esc(name)}</span><strong>${esc(value)}<small style="display:inline;margin-left:3px;font-size:12px;">${esc(unit)}</small></strong><small>${esc(note)}</small></article>`).join("");
+      updateNavBadges();
+    }
+
+    async function loadFollowupSummary() {
+      if (!followupEnabled()) {
+        state.followupSummary = null;
+        $("followupStats").innerHTML = '<div class="empty">顧客フォロー機能は店舗設定でOFFになっています。</div>';
+        return;
+      }
+      const result = await runBusy("顧客フォロー情報を読み込んでいます...", () => crmAdminGet("/api/admin/followup/summary"));
+      state.followupSummary = result.summary || {};
+      renderFollowupSummary();
+    }
+
+    function followupAges() {
+      return [3,5,7].filter((age) => $(`followupAge${age}`).checked);
+    }
+
+    async function searchFollowup() {
+      if (!followupEnabled()) {
+        toast("店舗設定で「顧客フォローを使用」をONにしてください。", "error");
+        return;
+      }
+      const ages = followupAges();
+      const result = await runBusy("顧客フォロー対象を検索しています...", () => crmAdminGet("/api/admin/followup/search", {
+        target_year: $("followupTargetYear").value || undefined,
+        ages: ages.length ? ages.join(",") : undefined,
+        birthday_month: $("followupBirthdayMonth").value || undefined,
+        inactive_months: $("followupInactiveMonths").value || undefined,
+        line_status: $("followupLineStatus").value || "all",
+        q: $("followupQuery").value.trim() || undefined,
+        limit: 300,
+      }));
+      state.followupRows = result.rows || [];
+      renderFollowupResults();
+    }
+
+    function renderFollowupResults() {
+      const rows = state.followupRows || [];
+      $("followupResultCount").textContent = `${rows.length}名`;
+      if (!rows.length) {
+        $("followupResults").innerHTML = '<div class="empty">条件に一致する撮影対象者はいません。</div>';
+        return;
+      }
+      $("followupResults").innerHTML = rows.map((row) => {
+        const age = row.turning_age === null || row.turning_age === undefined ? "年齢未登録" : `${row.turning_age}歳`;
+        const birth = row.birth_date ? fmtDate(row.birth_date) : "生年月日未登録";
+        const last = row.last_shoot_at ? fmtDate(row.last_shoot_at) : "撮影履歴なし";
+        return `<article class="customer-row"><div><div class="customer-name">${esc(row.subject_name)} <small style="font-size:12px;">${esc(row.relationship_to_customer || "")}</small></div><div class="item-meta">ご契約者：${esc(row.customer_name)} 様｜${esc(row.customer_no || "")}</div><div class="item-tags">${badge(age,"green")}${badge(`誕生日 ${birth}`,"gray")}${badge(row.line_linked ? "LINE連携済み" : "LINE未連携", row.line_linked ? "blue" : "amber")}</div></div><div><div class="field-label">撮影履歴</div><div style="font-weight:850;">最終 ${esc(last)}</div><div class="item-meta">${esc(row.total_shoot_count || 0)}回撮影</div></div><div class="page-actions"><button class="btn btn-small btn-secondary" data-open-customer="${esc(row.customer_id)}" type="button">顧客詳細</button><button class="btn btn-small btn-neutral" data-open-subject-history="${esc(row.subject_id)}" type="button">撮影履歴</button></div></article>`;
+      }).join("");
+    }
+
+    function setFollowupPreset(preset) {
+      const nextMonth = (new Date().getMonth() + 1) % 12 + 1;
+      $("followupAge3").checked = false;
+      $("followupAge5").checked = false;
+      $("followupAge7").checked = false;
+      $("followupBirthdayMonth").value = "";
+      $("followupInactiveMonths").value = "";
+      $("followupLineStatus").value = "all";
+      $("followupQuery").value = "";
+
+      if (preset === "shichigosan") {
+        $("followupTargetYear").value = new Date().getFullYear();
+        $("followupAge3").checked = true; $("followupAge5").checked = true; $("followupAge7").checked = true;
+        searchFollowup().catch(() => {});
+      } else if (preset === "birthday-next") {
+        $("followupBirthdayMonth").value = String(nextMonth);
+        searchFollowup().catch(() => {});
+      } else if (preset === "inactive-12") {
+        $("followupInactiveMonths").value = "12";
+        searchFollowup().catch(() => {});
+      } else {
+        $("followupTargetYear").value = new Date().getFullYear();
+        $("followupResults").innerHTML = '<div class="empty">条件を指定して検索してください。</div>';
+        $("followupResultCount").textContent = "0名";
+      }
+    }
+
+    async function openSubjectHistory(subjectId) {
+      const subject = (state.followupRows || []).find((row) => row.subject_id === subjectId) || {};
+      const result = await runBusy("撮影履歴を読み込んでいます...", () => crmAdminGet("/api/admin/subjects/history", { subject_id: subjectId }));
+      const rows = result.rows || [];
+      $("subjectHistoryTitle").textContent = `${subject.subject_name || "撮影対象者"}｜撮影履歴`;
+      $("subjectHistoryMeta").textContent = `${subject.customer_name || ""} 様｜${rows.length}件`;
+      $("subjectHistoryBody").innerHTML = rows.length ? `<div class="simple-list">${rows.map((row) => `<article class="simple-item" style="padding:13px;"><div class="item-tags">${row.age_at_shoot === null || row.age_at_shoot === undefined ? "" : badge(`撮影時 ${row.age_at_shoot}歳`,"green")}${badge(getLabel("postStatus",row.post_status),statusTone(row.post_status))}</div><p class="item-title">${esc(fmtDateTime(row.start_at))}｜${esc(row.plan_name || "撮影")}</p><div class="item-meta">${esc(row.reservation_no || "")}</div>${row.shooting_note ? `<p style="margin:8px 0 0;white-space:pre-wrap;">${esc(row.shooting_note)}</p>` : ""}</article>`).join("")}</div>` : '<div class="empty">この撮影対象者の完了済み撮影履歴はまだありません。</div>';
+      openModal("subjectHistoryModal");
+    }
+
     function renderPostBoard() {
       $("postBoard").innerHTML = renderPostItems(state.dashboard?.post_production || []);
     }
@@ -1149,6 +1350,17 @@
       $("settingStaffChoice").checked = settings.allow_staff_choice !== false;
       $("settingAutoAssign").checked = settings.auto_assign_staff !== false;
       $("settingPublicNotice").value = settings.public_notice || "";
+      const flags = settings.feature_flags || {};
+      $("featureCustomerFollowup").checked = flags.customer_followup === true;
+      $("featureSubjectHistory").checked = flags.subject_history === true;
+      $("featureLifecycleSearch").checked = flags.lifecycle_search === true;
+      $("featureBirthdaySearch").checked = flags.birthday_search === true;
+      $("featureReturnCycleSearch").checked = flags.return_cycle_search === true;
+      $("featureLineSegment").checked = flags.line_segment === true;
+      $("featureCsvMigration").checked = flags.csv_migration === true;
+      $("featureLineCustomerLink").checked = flags.line_customer_link === true;
+      $("followupNavBtn").hidden = flags.customer_followup !== true;
+      if (!$("followupTargetYear").value) $("followupTargetYear").value = new Date().getFullYear();
       renderBusinessHours(data.business_hours || []);
       renderCatalogs();
       renderTemplateEditor();
@@ -1200,7 +1412,7 @@
           studio_name: $("settingStudioName").value.trim(), phone: $("settingPhone").value.trim(), email: $("settingEmail").value.trim(), postal_code: $("settingPostal").value.trim(), address: $("settingAddress").value.trim(), subtitle: $("settingSubtitle").value.trim(), max_daily_reservations: Number($("settingMaxDaily").value || 50),
         },
         settings: {
-          reservation_open_days_ahead: Number($("settingOpenDays").value || 180), min_advance_hours: Number($("settingAdvanceHours").value || 0), cancellation_deadline_hours: Number($("settingCancelHours").value || 0), max_subjects_per_reservation: Number($("settingMaxSubjects").value || 10), default_gallery_provider: $("settingGalleryProvider").value.trim(), allow_same_day_booking: $("settingSameDay").checked, allow_staff_choice: $("settingStaffChoice").checked, auto_assign_staff: $("settingAutoAssign").checked, public_notice: $("settingPublicNotice").value,
+          reservation_open_days_ahead: Number($("settingOpenDays").value || 180), min_advance_hours: Number($("settingAdvanceHours").value || 0), cancellation_deadline_hours: Number($("settingCancelHours").value || 0), max_subjects_per_reservation: Number($("settingMaxSubjects").value || 10), default_gallery_provider: $("settingGalleryProvider").value.trim(), allow_same_day_booking: $("settingSameDay").checked, allow_staff_choice: $("settingStaffChoice").checked, auto_assign_staff: $("settingAutoAssign").checked, public_notice: $("settingPublicNotice").value, feature_flags: { ...(state.settings?.settings?.feature_flags || {}), customer_followup: $("featureCustomerFollowup").checked, subject_history: $("featureSubjectHistory").checked, lifecycle_search: $("featureLifecycleSearch").checked, birthday_search: $("featureBirthdaySearch").checked, return_cycle_search: $("featureReturnCycleSearch").checked, line_segment: false, csv_migration: false, line_customer_link: false, crm_ui_version: CRM_VERSION },
         },
         business_hours: hours,
         message_templates: templates,
@@ -1219,6 +1431,7 @@
       window.location.hash = view;
       if (view === "today" && !state.dayRows.length) loadToday().catch(() => {});
       if (view === "reservations" && !state.reservationRows.length) searchReservations().catch(() => {});
+      if (view === "followup" && followupEnabled() && !state.followupSummary) loadFollowupSummary().catch(() => {});
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -1650,6 +1863,8 @@
       $("customerSearchBtn").addEventListener("click", () => searchCustomers().catch(() => {}));
       $("customerSearchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") searchCustomers().catch(() => {}); });
       $("customerSearchInput").addEventListener("input", (e) => { const n = C.normalizePhone(e.target.value); $("customerNormalizedPreview").textContent = n.length >= 7 ? `正規化：${n}` : "入力すると正規化結果を表示"; });
+      $("followupSearchBtn").addEventListener("click", () => searchFollowup().catch(() => {}));
+      $("followupRefreshBtn").addEventListener("click", async () => { await loadFollowupSummary(); await searchFollowup(); });
       $("openManualBookingBtn").addEventListener("click", () => openManualModal());
       $("manualCustomerSearchBtn").addEventListener("click", () => searchManualCustomer().catch(() => {}));
       $("manualPlan").addEventListener("change", () => { populateOwnerRegisteredSubjects(); loadManualSlots().catch(() => {}); });
@@ -1693,6 +1908,8 @@
         const close = event.target.closest("[data-close-modal]"); if (close) closeModal(close.dataset.closeModal);
         const res = event.target.closest("[data-open-reservation]"); if (res) { closeModal("customerModal"); openReservation(res.dataset.openReservation).catch(() => {}); }
         const cust = event.target.closest("[data-open-customer]"); if (cust) openCustomer(cust.dataset.openCustomer).catch(() => {});
+        const fp = event.target.closest("[data-followup-preset]"); if (fp) setFollowupPreset(fp.dataset.followupPreset);
+        const sh = event.target.closest("[data-open-subject-history]"); if (sh) openSubjectHistory(sh.dataset.openSubjectHistory).catch(() => {});
         const tc = event.target.closest("[data-task-status]"); if (tc) updateTask(tc.dataset.taskStatus, tc.dataset.nextStatus).catch(() => {});
         const rr = event.target.closest("[data-reorder-status]"); if (rr) updateReorder(rr.dataset.reorderStatus, rr.dataset.nextStatus).catch(() => {});
         const vn = event.target.closest("[data-visit-next]"); if (vn) updateVisitNext(vn.dataset.visitNext, vn.dataset.nextStatus).catch(() => {});
@@ -1701,8 +1918,8 @@
         const dt = event.target.closest("[data-detail-tab]"); if (dt) activateDetailTab(dt.dataset.detailTab);
       });
 
-      ["manualModal","reservationModal","customerModal"].forEach((id) => $(id).addEventListener("click", (e) => { if (e.target === $(id)) closeModal(id); }));
-      window.addEventListener("keydown", (e) => { if (e.key === "Escape") ["manualModal","reservationModal","customerModal"].forEach((id) => { if (!$(id).hidden) closeModal(id); }); });
+      ["manualModal","reservationModal","customerModal","subjectHistoryModal"].forEach((id) => $(id).addEventListener("click", (e) => { if (e.target === $(id)) closeModal(id); }));
+      window.addEventListener("keydown", (e) => { if (e.key === "Escape") ["manualModal","reservationModal","customerModal","subjectHistoryModal"].forEach((id) => { if (!$(id).hidden) closeModal(id); }); });
     }
 
     async function boot() {
@@ -1710,7 +1927,7 @@
       const saved = C.getAdminCode();
       $("adminCodeInput").value = saved;
       const hash = location.hash.replace("#", "");
-      if (["dashboard","today","reservations","customers","post","tasks","settings"].includes(hash)) state.view = hash;
+      if (["dashboard","today","reservations","customers","followup","post","tasks","settings"].includes(hash)) state.view = hash;
       if (saved) {
         try { await verifyAndStart(); switchView(state.view); }
         catch (_) { $("authGate").hidden = false; $("ownerApp").hidden = true; }
