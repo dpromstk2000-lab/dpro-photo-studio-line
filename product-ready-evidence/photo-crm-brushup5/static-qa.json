@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "owner_marker": "DPRO-PHOTO-CRM-BRUSHUP-5-20260918",
+  "segment_runtime": "DPRO-PHOTO-CRM-BRUSHUP-5-UI-20260918",
+  "gateway": "dpro-photo-product-ready-gateway-v5",
+  "dedupe": "customer_id",
+  "demo_external_send": false,
+  "csv_migration_locked": true,
+  "line_customer_link_locked": true
+}
