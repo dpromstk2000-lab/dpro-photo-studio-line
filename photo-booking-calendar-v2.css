@@ -1,0 +1,278 @@
+.dpro-cal {
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid #d6e5e1;
+  border-radius: 18px;
+  background: #fbfefd;
+  box-shadow: 0 8px 24px rgba(31, 75, 68, .06);
+}
+.dpro-cal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.dpro-cal-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: #607471;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+.dpro-cal-head h3 { margin: 0; font-size: 20px; line-height: 1.35; }
+.dpro-cal-nav { display: flex; align-items: center; gap: 6px; }
+.dpro-cal-icon,
+.dpro-cal-today,
+.dpro-cal-view {
+  min-height: 40px;
+  border: 1px solid #cadbd7;
+  border-radius: 10px;
+  background: #fff;
+  color: #315b55;
+  font-weight: 850;
+  cursor: pointer;
+}
+.dpro-cal-icon { width: 42px; padding: 0; font-size: 24px; line-height: 1; }
+.dpro-cal-today { padding: 0 11px; font-size: 12px; }
+.dpro-cal-views {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.dpro-cal-view { min-height: 42px; font-size: 13px; }
+.dpro-cal-view.is-active {
+  color: #fff;
+  border-color: #15584f;
+  background: #15584f;
+}
+.dpro-cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  margin: 0 0 12px;
+  color: #617672;
+  font-size: 11px;
+  font-weight: 750;
+}
+.dpro-cal-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.dpro-cal-legend b { font-size: 14px; font-style: normal; }
+.dpro-cal-legend .is-available { color: #1d7455; }
+.dpro-cal-legend .is-limited { color: #a56b16; }
+.dpro-cal-legend .is-full { color: #9d4444; }
+.dpro-cal-legend .is-closed { color: #687774; }
+.dpro-cal-body { min-height: 180px; }
+.dpro-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-bottom: 5px;
+  color: #6d7c79;
+  font-size: 11px;
+  font-weight: 850;
+  text-align: center;
+}
+.dpro-cal-weekdays span:first-child { color: #a44e4e; }
+.dpro-cal-weekdays span:last-child { color: #416d93; }
+.dpro-cal-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+.dpro-cal-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  min-height: 92px;
+  padding: 7px 4px 6px;
+  border: 1px solid #d9e5e2;
+  border-radius: 11px;
+  background: #fff;
+  color: #263e3a;
+  cursor: pointer;
+  overflow: hidden;
+}
+.dpro-cal-day:hover:not(:disabled) { border-color: #76a99f; background: #f4fcfa; }
+.dpro-cal-day:disabled { cursor: default; opacity: .64; }
+.dpro-cal-day.is-selected {
+  border-color: #15584f;
+  box-shadow: inset 0 0 0 2px #15584f, 0 5px 14px rgba(21, 88, 79, .12);
+}
+.dpro-cal-day.is-outside { opacity: .45; }
+.dpro-cal-date { font-size: 15px; font-weight: 900; line-height: 1.2; }
+.dpro-cal-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 5px;
+  font-size: 10px;
+  font-weight: 800;
+}
+.dpro-cal-status b { font-size: 14px; line-height: 1; }
+.dpro-cal-status em { font-style: normal; }
+.dpro-cal-day.is-available .dpro-cal-status { color: #1e7456; }
+.dpro-cal-day.is-limited .dpro-cal-status { color: #9a681d; }
+.dpro-cal-day.is-full .dpro-cal-status { color: #9d4444; }
+.dpro-cal-day.is-closed .dpro-cal-status,
+.dpro-cal-day.is-out .dpro-cal-status { color: #687774; }
+.dpro-cal-count,
+.dpro-cal-first {
+  margin-top: 2px;
+  color: #647672;
+  font-size: 9px;
+  font-weight: 750;
+}
+.dpro-cal-event {
+  max-width: 100%;
+  margin-top: 3px;
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: #fff1d9;
+  color: #78551f;
+  font-size: 8px;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dpro-cal-reason { display: block; margin-top: 5px; color: #758582; font-size: 10px; }
+.dpro-cal-week-grid,
+.dpro-cal-list { display: grid; gap: 7px; }
+.dpro-cal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid #dce7e4;
+  border-radius: 12px;
+  background: #fff;
+}
+.dpro-cal-row-date strong { display: block; font-size: 14px; }
+.dpro-cal-row-date span { display: block; margin-top: 2px; color: #805d26; font-size: 11px; }
+.dpro-cal-row-state { display: grid; grid-template-columns: auto auto; align-items: center; gap: 4px; min-width: 82px; font-size: 11px; }
+.dpro-cal-row-state b { font-size: 18px; }
+.dpro-cal-row-state small { grid-column: 1 / -1; color: #667874; }
+.dpro-cal-row button,
+.dpro-cal-focus button {
+  min-height: 42px;
+  padding: 7px 11px;
+  border: 1px solid #15584f;
+  border-radius: 9px;
+  background: #15584f;
+  color: #fff;
+  font-weight: 850;
+  cursor: pointer;
+}
+.dpro-cal-row button:disabled,
+.dpro-cal-focus button:disabled { border-color: #d9e2e0; background: #eef2f1; color: #8a9895; cursor: default; }
+.dpro-cal-focus {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid #d8e5e2;
+  border-radius: 15px;
+  background: #fff;
+}
+.dpro-cal-focus-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #eaf5f2;
+  color: #15584f;
+  font-size: 25px;
+  font-weight: 900;
+}
+.dpro-cal-focus h4 { margin: 0; font-size: 17px; }
+.dpro-cal-focus p { margin: 3px 0 0; color: #516a66; font-size: 13px; }
+.dpro-cal-focus-time { font-weight: 850; }
+.dpro-cal-focus-event { color: #7d5922 !important; }
+.dpro-cal-list-item {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) 100px 54px 58px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 50px;
+  padding: 9px 11px;
+  border: 1px solid #dce7e4;
+  border-radius: 11px;
+  background: #fff;
+  color: #2d4642;
+  text-align: left;
+  cursor: pointer;
+}
+.dpro-cal-list-item:disabled { opacity: .65; cursor: default; }
+.dpro-cal-list-date { font-size: 13px; font-weight: 850; }
+.dpro-cal-list-status { display: flex; gap: 5px; align-items: center; font-size: 11px; font-weight: 800; }
+.dpro-cal-list-status b { font-size: 17px; }
+.dpro-cal-list-count,
+.dpro-cal-list-time { color: #657773; font-size: 11px; font-weight: 750; }
+.dpro-cal-empty,
+.dpro-cal-error {
+  padding: 28px 16px;
+  border-radius: 13px;
+  background: #f2f7f5;
+  color: #61736f;
+  text-align: center;
+  font-size: 13px;
+}
+.dpro-cal-error { border: 1px solid #ebc5c5; background: #fff6f6; color: #813d3d; }
+.dpro-cal-error strong,
+.dpro-cal-error span { display: block; }
+.dpro-cal-error span { margin-top: 5px; font-weight: 600; }
+.dpro-cal-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 7px;
+  vertical-align: -4px;
+  border: 3px solid #cbdcd8;
+  border-top-color: #15584f;
+  border-radius: 50%;
+  animation: dproCalSpin .75s linear infinite;
+}
+@keyframes dproCalSpin { to { transform: rotate(360deg); } }
+.dpro-cal-foot {
+  margin-top: 10px;
+  color: #6c7d79;
+  font-size: 11px;
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  .dpro-cal { padding: 13px 10px; border-radius: 15px; }
+  .dpro-cal-head { align-items: center; }
+  .dpro-cal-head h3 { font-size: 17px; }
+  .dpro-cal-icon { width: 38px; min-height: 38px; }
+  .dpro-cal-today { min-height: 38px; padding-inline: 9px; }
+  .dpro-cal-views { gap: 4px; }
+  .dpro-cal-view { min-height: 40px; }
+  .dpro-cal-month-grid { gap: 3px; }
+  .dpro-cal-day { min-height: 76px; padding: 5px 2px; border-radius: 8px; }
+  .dpro-cal-date { font-size: 13px; }
+  .dpro-cal-status { margin-top: 4px; }
+  .dpro-cal-status em { display: none; }
+  .dpro-cal-count { font-size: 8px; }
+  .dpro-cal-first { display: none; }
+  .dpro-cal-event { max-width: 42px; }
+  .dpro-cal-row { grid-template-columns: 1fr auto; }
+  .dpro-cal-row button { grid-column: 1 / -1; width: 100%; }
+  .dpro-cal-focus { grid-template-columns: auto 1fr; }
+  .dpro-cal-focus button { grid-column: 1 / -1; width: 100%; }
+  .dpro-cal-list-item { grid-template-columns: 1fr auto; }
+  .dpro-cal-list-count,
+  .dpro-cal-list-time { display: none; }
+}
+@media (max-width: 380px) {
+  .dpro-cal-legend { gap: 5px 8px; }
+  .dpro-cal-day { min-height: 70px; }
+  .dpro-cal-status b { font-size: 13px; }
+  .dpro-cal-count { display: none; }
+}

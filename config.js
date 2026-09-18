@@ -36,6 +36,8 @@
   const WORKER_VERSION = "STUDIO-10-R9-WORKER-SUBJECT-DAY-DUPLICATE-GUARD-20260715";
   const API_BASE_URL =
     "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v3";
+  const CALENDAR_API_BASE_URL =
+    "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v8";
   const SITE_BASE_URL =
     "https://dpromstk2000-lab.github.io/dpro-photo-studio-line";
   const REPOSITORY_URL =
@@ -1170,6 +1172,7 @@
     DATABASE_VERSION,
     WORKER_VERSION,
     API_BASE_URL,
+    CALENDAR_API_BASE_URL,
     SITE_BASE_URL,
     REPOSITORY_URL,
     STUDIO_CODE,
