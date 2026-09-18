@@ -1,11 +1,12 @@
 (() => {
   "use strict";
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
-  const VERSION = "DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-UI-20260919";
+  const VERSION = "DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-UI-HOTFIX2-20260919";
   if (!C || !document.getElementById("view-settings")) return;
 
   const esc = (v) => C.escapeHtml(v ?? "");
   const token = () => String(C.getSessionToken("owner") || "").trim();
+  let loadPromise = null;
 
   async function request(path, options = {}) {
     const response = await fetch(`${C.CALENDAR_API_BASE_URL}${path}`, {
@@ -55,6 +56,25 @@
     const payload = await request("/api/admin/booking-presentation");
     fill(payload.presentation || {});
     setStatus(`読込済み｜${VERSION}`);
+  }
+
+  async function loadWhenReady() {
+    if (!token()) {
+      setStatus("管理画面の認証完了を待っています…");
+      return false;
+    }
+    if (loadPromise) return loadPromise;
+    const task = load()
+      .then(() => true)
+      .catch((error) => {
+        showError(error);
+        return false;
+      })
+      .finally(() => {
+        if (loadPromise === task) loadPromise = null;
+      });
+    loadPromise = task;
+    return task;
   }
 
   async function save() {
@@ -139,7 +159,16 @@
     `;
     reservationPanel.insertAdjacentElement("afterend", section);
     document.getElementById("bookingPresentationSave").addEventListener("click", () => save().catch(showError));
-    load().catch(showError);
+
+    window.addEventListener("dpro:photo-settings-rendered", () => {
+      loadWhenReady();
+    });
+    window.addEventListener("dpro-studio:admin-code-changed", () => {
+      window.setTimeout(() => loadWhenReady(), 0);
+    });
+
+    if (token()) loadWhenReady();
+    else setStatus("管理画面の認証完了を待っています…");
   }
 
   mount();
