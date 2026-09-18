@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "DPRO-PHOTO-CRM-BRUSHUP-5-UI-20260918";
+  const VERSION = "DPRO-PHOTO-CRM-BRUSHUP-5-UI-POLISH1-20260918";
   const API_BASE = "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v5";
   const state = {
     selected: new Set(),
@@ -179,11 +179,7 @@
 
   function panelHtml() {
     return `
-      <div class="panel-head" style="margin-bottom:10px;">
-        <div>
-          <h3 style="margin:0;">LINEセグメント配信</h3>
-          <p style="margin:5px 0 0;">検索結果から対象者を選び、顧客単位の重複除外と最終確認をしてから配信します。</p>
-        </div>
+      <div class="page-actions" style="justify-content:flex-end;margin-bottom:10px;">
         <div id="segmentCapabilityBadge">${capabilityBadge(state.capability)}</div>
       </div>
 
@@ -513,6 +509,15 @@
     $("segmentPreviewBtn")?.addEventListener("click", showPreview);
     $("segmentMessageBody")?.addEventListener("input", updateCharCount);
     $("segmentRecentRefreshBtn")?.addEventListener("click", loadRecent);
+
+    const refreshSegmentSoon = () => setTimeout(() => {
+      loadCapability();
+      loadRecent();
+    }, 350);
+
+    $("refreshAllBtn")?.addEventListener("click", refreshSegmentSoon);
+    $("followupRefreshBtn")?.addEventListener("click", refreshSegmentSoon);
+
     document.querySelectorAll("[data-segment-template]").forEach((button) => {
       button.addEventListener("click", () => setTemplate(button.dataset.segmentTemplate));
     });
