@@ -74,6 +74,9 @@
     .hero h1 { margin: 0; font-size: clamp(25px, 6vw, 36px); line-height: 1.25; letter-spacing: .01em; }
     .hero-subtitle { margin: 9px 0 0; max-width: 630px; font-size: 14px; line-height: 1.7; color: rgba(255,255,255,.88); }
     .hero-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+    .public-brand-logo { display: none; max-width: 240px; max-height: 64px; object-fit: contain; margin: 0 0 12px; }
+    .public-home-link { display: none; width: fit-content; margin-top: 14px; padding: 7px 12px; border: 1px solid rgba(255,255,255,.45); border-radius: 999px; color: #fff; font-size: 12px; font-weight: 800; text-decoration: none; background: rgba(255,255,255,.09); }
+    .public-home-link:hover { background: rgba(255,255,255,.16); }
     .hero-chip {
       display: inline-flex; align-items: center; gap: 6px;
       min-height: 34px; padding: 6px 11px;
@@ -356,8 +359,9 @@
 </head>
 <body>
   <main class="app-shell" id="app" aria-live="polite">
-    <header class="hero">
-      <p class="eyebrow">DPRO PHOTO STUDIO LINE</p>
+    <header class="hero" id="publicHero">
+      <img id="publicBrandLogo" class="public-brand-logo" alt="" />
+      <p class="eyebrow" id="publicEyebrow">DPRO PHOTO STUDIO LINE</p>
       <h1 id="studioName">DPROフォトスタジオ</h1>
       <p class="hero-subtitle" id="studioSubtitle">撮影プランと空いている日時を選んで、スマートフォンからご予約いただけます。</p>
       <div class="hero-meta">
@@ -365,6 +369,7 @@
         <span class="hero-chip">事前ヒアリング対応</span>
         <span class="hero-chip">2回目以降は入力を簡単に</span>
       </div>
+      <a id="publicHomeLink" class="public-home-link" href="#" rel="noopener">公式サイトへ戻る</a>
     </header>
 
     <div class="notice" id="publicNotice">
@@ -572,7 +577,7 @@
 
     <footer>
       <div id="studioContact">DPROフォトスタジオ</div>
-      <!-- Internal version: STUDIO-11-INDEX-FINAL-INTEGRATION-20260715 -->
+      <!-- DPRO-PHOTO-EXISTING-SITE-WHITELABEL-BRUSHUP-8-4-UI-20260919 --><!-- Internal version: STUDIO-11-INDEX-FINAL-INTEGRATION-20260715 -->
     </footer>
   </main>
 
@@ -599,6 +604,7 @@
     const state = {
       currentStep: 1,
       config: null,
+      bookingPresentation: null,
       categories: [],
       plans: [],
       globalOptions: [],
@@ -625,6 +631,7 @@
     const $ = (id) => document.getElementById(id);
     const els = {
       studioName: $("studioName"), studioSubtitle: $("studioSubtitle"), publicNotice: $("publicNotice"), studioContact: $("studioContact"),
+      publicHero: $("publicHero"), publicBrandLogo: $("publicBrandLogo"), publicEyebrow: $("publicEyebrow"), publicHomeLink: $("publicHomeLink"),
       progressWrap: $("progressWrap"), progressTitle: $("progressTitle"), progressCount: $("progressCount"), progressBar: $("progressBar"), stepDots: $("stepDots"),
       statusBanner: $("statusBanner"), statusIcon: $("statusIcon"), statusText: $("statusText"),
       duplicateConflict: $("duplicateConflict"), duplicateConflictTitle: $("duplicateConflictTitle"), duplicateConflictMessage: $("duplicateConflictMessage"), duplicateMemberLink: $("duplicateMemberLink"), duplicateAnotherDateButton: $("duplicateAnotherDateButton"), duplicateCloseButton: $("duplicateCloseButton"),
@@ -719,12 +726,17 @@
         bindEvents();
         if (C.isDemoMode()) els.demoTools.classList.add("show");
 
-        const [config, plans, optionData] = await Promise.all([
+        const presentationPromise = fetch(`${C.CALENDAR_API_BASE_URL}/api/public/booking-presentation`, { headers: { Accept: "application/json" }, cache: "no-store" })
+          .then(async (response) => response.ok ? response.json() : null)
+          .catch(() => null);
+        const [config, plans, optionData, presentationPayload] = await Promise.all([
           C.apiGet(C.ENDPOINTS.PUBLIC_CONFIG),
           C.apiGet(C.ENDPOINTS.PUBLIC_PLANS),
           C.apiGet(C.ENDPOINTS.PUBLIC_RESERVATION_OPTIONS),
+          presentationPromise,
         ]);
         state.config = config;
+        state.bookingPresentation = presentationPayload?.presentation || null;
         state.categories = Array.isArray(plans.categories) ? plans.categories : [];
         state.plans = Array.isArray(plans.plans) ? plans.plans : [];
         state.globalOptions = Array.isArray(optionData.options) ? optionData.options : [];
@@ -753,12 +765,40 @@
     function applyStudioConfig() {
       const studio = state.config?.studio || {};
       const settings = state.config?.settings || {};
-      els.studioName.textContent = studio.studio_name || C.STUDIO_NAME;
+      const presentation = state.bookingPresentation || {};
+      const whiteLabel = presentation.white_label === true;
+      const displayName = whiteLabel && presentation.brand_name ? presentation.brand_name : (studio.studio_name || C.STUDIO_NAME);
+
+      els.studioName.textContent = displayName;
       els.studioSubtitle.textContent = studio.subtitle || C.SUBTITLE;
+      els.publicEyebrow.hidden = whiteLabel && presentation.hide_dpro_public_brand === true;
+
+      if (whiteLabel && presentation.logo_url) {
+        els.publicBrandLogo.src = presentation.logo_url;
+        els.publicBrandLogo.alt = `${displayName} ロゴ`;
+        els.publicBrandLogo.style.display = "block";
+      } else {
+        els.publicBrandLogo.removeAttribute("src");
+        els.publicBrandLogo.style.display = "none";
+      }
+
+      if (whiteLabel && /^#[0-9A-Fa-f]{6}$/.test(String(presentation.brand_primary || ""))) {
+        document.documentElement.style.setProperty("--brand", presentation.brand_primary);
+        els.publicHero.style.background = presentation.brand_primary;
+      }
+
+      if (presentation.existing_site_mode === true && presentation.home_url) {
+        els.publicHomeLink.href = presentation.home_url;
+        els.publicHomeLink.style.display = "inline-flex";
+      } else {
+        els.publicHomeLink.style.display = "none";
+      }
+
       const noticeText = settings.public_notice || "撮影プランを選び、空いている日時からご予約ください。";
       els.publicNotice.querySelector("div").textContent = noticeText;
-      const contacts = [studio.studio_name, studio.phone, studio.address].filter(Boolean);
+      const contacts = [displayName, studio.phone, studio.address].filter(Boolean);
       els.studioContact.textContent = contacts.join(" ｜ ");
+      document.title = `${displayName}｜撮影予約`;
     }
 
     function renderCategories() {
