@@ -75,8 +75,10 @@
     .hero-subtitle { margin: 9px 0 0; max-width: 630px; font-size: 14px; line-height: 1.7; color: rgba(255,255,255,.88); }
     .hero-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
     .public-brand-logo { display: none; max-width: 240px; max-height: 64px; object-fit: contain; margin: 0 0 12px; }
-    .public-home-link { display: none; width: fit-content; margin-top: 14px; padding: 7px 12px; border: 1px solid rgba(255,255,255,.45); border-radius: 999px; color: #fff; font-size: 12px; font-weight: 800; text-decoration: none; background: rgba(255,255,255,.09); }
+    .public-link-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+    .public-home-link { display: none; width: fit-content; padding: 7px 12px; border: 1px solid rgba(255,255,255,.45); border-radius: 999px; color: #fff; font-size: 12px; font-weight: 800; text-decoration: none; background: rgba(255,255,255,.09); }
     .public-home-link:hover { background: rgba(255,255,255,.16); }
+    .public-line-link { border-color: rgba(255,255,255,.72); background: rgba(255,255,255,.16); }
     .hero-chip {
       display: inline-flex; align-items: center; gap: 6px;
       min-height: 34px; padding: 6px 11px;
@@ -369,7 +371,10 @@
         <span class="hero-chip">事前ヒアリング対応</span>
         <span class="hero-chip">2回目以降は入力を簡単に</span>
       </div>
-      <a id="publicHomeLink" class="public-home-link" href="#" rel="noopener">公式サイトへ戻る</a>
+      <div class="public-link-row">
+        <a id="publicHomeLink" class="public-home-link" href="#" rel="noopener">公式サイトへ戻る</a>
+        <a id="publicLineBookingLink" class="public-home-link public-line-link" href="#" rel="noopener">LINEから予約</a>
+      </div>
     </header>
 
     <div class="notice" id="publicNotice">
@@ -577,7 +582,7 @@
 
     <footer>
       <div id="studioContact">DPROフォトスタジオ</div>
-      <!-- DPRO-PHOTO-EXISTING-SITE-WHITELABEL-BRUSHUP-8-4-UI-20260919 --><!-- Internal version: STUDIO-11-INDEX-FINAL-INTEGRATION-20260715 -->
+      <!-- DPRO-PHOTO-EXISTING-SITE-WHITELABEL-BRUSHUP-8-4-UI-20260919 --><!-- DPRO-PHOTO-PRODUCTION-READINESS-BRUSHUP-8-5-LINE-ENTRY-20260919 --><!-- Internal version: STUDIO-11-INDEX-FINAL-INTEGRATION-20260715 -->
     </footer>
   </main>
 
@@ -631,7 +636,7 @@
     const $ = (id) => document.getElementById(id);
     const els = {
       studioName: $("studioName"), studioSubtitle: $("studioSubtitle"), publicNotice: $("publicNotice"), studioContact: $("studioContact"),
-      publicHero: $("publicHero"), publicBrandLogo: $("publicBrandLogo"), publicEyebrow: $("publicEyebrow"), publicHomeLink: $("publicHomeLink"),
+      publicHero: $("publicHero"), publicBrandLogo: $("publicBrandLogo"), publicEyebrow: $("publicEyebrow"), publicHomeLink: $("publicHomeLink"), publicLineBookingLink: $("publicLineBookingLink"),
       progressWrap: $("progressWrap"), progressTitle: $("progressTitle"), progressCount: $("progressCount"), progressBar: $("progressBar"), stepDots: $("stepDots"),
       statusBanner: $("statusBanner"), statusIcon: $("statusIcon"), statusText: $("statusText"),
       duplicateConflict: $("duplicateConflict"), duplicateConflictTitle: $("duplicateConflictTitle"), duplicateConflictMessage: $("duplicateConflictMessage"), duplicateMemberLink: $("duplicateMemberLink"), duplicateAnotherDateButton: $("duplicateAnotherDateButton"), duplicateCloseButton: $("duplicateCloseButton"),
@@ -792,6 +797,16 @@
         els.publicHomeLink.style.display = "inline-flex";
       } else {
         els.publicHomeLink.style.display = "none";
+      }
+
+      const bookingChannels = Array.isArray(presentation.booking_channels) ? presentation.booking_channels : ["web"];
+      const lineBookingUrl = String(presentation.line_booking_url || "").trim();
+      if (bookingChannels.includes("line") && /^https:\/\//i.test(lineBookingUrl)) {
+        els.publicLineBookingLink.href = lineBookingUrl;
+        els.publicLineBookingLink.style.display = "inline-flex";
+      } else {
+        els.publicLineBookingLink.removeAttribute("href");
+        els.publicLineBookingLink.style.display = "none";
       }
 
       const noticeText = settings.public_notice || "撮影プランを選び、空いている日時からご予約ください。";

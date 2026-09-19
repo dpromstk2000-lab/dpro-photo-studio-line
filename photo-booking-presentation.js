@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
-  const VERSION = "DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-1-SAVE-FEEDBACK-20260919";
+  const VERSION = "DPRO-PHOTO-PRODUCTION-READINESS-BRUSHUP-8-5-LINE-ENTRY-20260919";
   if (!C || !document.getElementById("view-settings")) return;
 
   const esc = (v) => C.escapeHtml(v ?? "");
@@ -84,6 +84,7 @@
     document.getElementById("bookingBrandName").value = p.brand_name || "";
     document.getElementById("bookingBrandColor").value = p.brand_primary || "";
     document.getElementById("bookingLogoUrl").value = p.logo_url || "";
+    document.getElementById("bookingLineBookingUrl").value = p.line_booking_url || "";
     const channels = Array.isArray(p.booking_channels) ? p.booking_channels : ["web"];
     document.getElementById("bookingChannelWeb").checked = channels.includes("web");
     document.getElementById("bookingChannelLine").checked = channels.includes("line");
@@ -121,6 +122,11 @@
     if (document.getElementById("bookingChannelWeb").checked) channels.push("web");
     if (document.getElementById("bookingChannelLine").checked) channels.push("line");
 
+    const lineBookingUrl = document.getElementById("bookingLineBookingUrl").value.trim();
+    if (channels.includes("line") && !lineBookingUrl) {
+      throw new Error("LINEから予約をONにする場合は、LINE予約URLを入力してください。");
+    }
+
     const body = {
       existing_site_mode: document.getElementById("bookingExistingSiteMode").checked,
       white_label: document.getElementById("bookingWhiteLabel").checked,
@@ -129,6 +135,7 @@
       brand_name: document.getElementById("bookingBrandName").value.trim() || null,
       brand_primary: document.getElementById("bookingBrandColor").value.trim() || null,
       logo_url: document.getElementById("bookingLogoUrl").value.trim() || null,
+      line_booking_url: lineBookingUrl || null,
       booking_channels: channels.length ? channels : ["web"],
     };
 
@@ -188,10 +195,15 @@
           <div class="field-help">任意。HTTPS画像URLを指定します。</div>
         </div>
         <div class="field span-2">
+          <label for="bookingLineBookingUrl">LINE予約URL</label>
+          <input id="bookingLineBookingUrl" class="input" type="url" placeholder="https://liff.line.me/..." />
+          <div class="field-help">LINEから予約をONにするときだけ必須です。LIFF URLまたはLINE公式のHTTPS予約導線を指定します。</div>
+        </div>
+        <div class="field span-2">
           <label>予約入口</label>
           <div class="check-row">
             <label><input id="bookingChannelWeb" type="checkbox" checked /> WEB予約</label>
-            <label><input id="bookingChannelLine" type="checkbox" /> LINEから予約</label>
+            <label><input id="bookingChannelLine" type="checkbox" /> LINEから予約（URL設定時のみ）</label>
           </div>
         </div>
       </div>
