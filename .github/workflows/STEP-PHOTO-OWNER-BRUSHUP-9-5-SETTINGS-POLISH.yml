@@ -1,0 +1,119 @@
+name: DPRO PHOTO BRUSHUP-9-5 Owner Settings Polish
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  owner-settings-polish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Source and drift gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA="2b51680f4d7e5cd6d569c008680cc01689231ef3"
+          WORKFLOW=".github/workflows/STEP-PHOTO-OWNER-BRUSHUP-9-5-SETTINGS-POLISH.yml"
+          HEAD_SHA="$(git rev-parse HEAD)"
+
+          if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+            PARENT_SHA="$(git rev-parse HEAD^)"
+            test "$PARENT_SHA" = "$BASE_SHA"
+            CHANGED="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+            test "$CHANGED" = "$WORKFLOW"
+          fi
+
+          test -f owner.html
+          test -f photo-owner-settings-v2.js
+          test -f photo-owner-plan-resource.js
+          test -f photo-owner-setup-checklist.js
+
+          grep -F 'DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-1-2-UI-20260919' photo-owner-settings-v2.js
+          grep -F 'id="featureCsvMigration" type="checkbox" disabled' owner.html
+          grep -F '次工程のためOFF固定' owner.html
+          grep -F 'photo-owner-setup-checklist.js?v=DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-4-SETUP-CHECKLIST-UI-20260919' owner.html
+
+      - name: Patch Owner settings polish
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwID0gUGF0aCgib3duZXIuaHRtbCIpCnMgPSBwLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQoKcmVwbGFjZW1lbnRzID0gWwogICAgKAogICAgICAgICc8ZGl2IGNsYXNzPSJwYW5lbC1oZWFkIj48ZGl2PjxoMz7poaflrqLjg5Xjgqnjg63jg7zmqZ/og708L2gzPjxwPuWGmeecn+mkqOOBrumBi+eUqOOBq+WQiOOCj+OBm+OBpuW/heimgeOBquapn+iDveOBoOOBkeihqOekuuOBp+OBjeOBvuOBmeOAgjwvcD48L2Rpdj48L2Rpdj4nLAogICAgICAgICc8ZGl2IGNsYXNzPSJwYW5lbC1oZWFkIj48ZGl2PjxoMz7poaflrqLjg7tDUk3mqZ/og708L2gzPjxwPumhp+WuouODleOCqeODreODvOODu0NTVuenu+ihjOODu0xJTkXpgKPmkLrjgarjganjgIHlv4XopoHjgarmqZ/og73jgaDjgZFPTi9PRkbjgafjgY3jgb7jgZnjgII8L3A+PC9kaXY+PC9kaXY+JwogICAgKSwKICAgICgKICAgICAgICAnPGxhYmVsPjxpbnB1dCBpZD0iZmVhdHVyZUNzdk1pZ3JhdGlvbiIgdHlwZT0iY2hlY2tib3giIGRpc2FibGVkIC8+IENTVuODh+ODvOOCv+enu+ihjDwvbGFiZWw+JywKICAgICAgICAnPGxhYmVsPjxpbnB1dCBpZD0iZmVhdHVyZUNzdk1pZ3JhdGlvbiIgdHlwZT0iY2hlY2tib3giIC8+IENTVuODh+ODvOOCv+enu+ihjDwvbGFiZWw+JwogICAgKSwKICAgICgKICAgICAgICAnPGRpdiBjbGFzcz0iZmllbGQtaGVscCI+TElOReOCu+OCsOODoeODs+ODiOmFjeS/oeOBr+WIqeeUqOWPr+OAgkNTVuODh+ODvOOCv+enu+ihjOODu+aXouWtmOmhp+WuouOBqExJTkXlho3ntJDku5jjgZHjga/mrKHlt6XnqIvjga7jgZ/jgoFPRkblm7rlrprjgafjgZnjgII8L2Rpdj4nLAogICAgICAgICc8ZGl2IGNsYXNzPSJmaWVsZC1oZWxwIj5MSU5F44K744Kw44Oh44Oz44OI6YWN5L+h44O7Q1NW44OH44O844K/56e76KGM44O75pei5a2Y6aGn5a6i44GoTElOReWGjee0kOS7mOOBkeOBr+OAgeWIqeeUqOOBmeOCi+apn+iDveOBoOOBkU9O44Gr44GX44Gm44GP44Gg44GV44GE44CC5ZCE566h55CG55S76Z2i44Gv44GT44Gu44CM6aGn5a6i44O7Q1JN6Kit5a6a44CN44Gr6KGo56S644GV44KM44G+44GZ44CCPC9kaXY+JwogICAgKSwKICAgICgKICAgICAgICAnPHNjcmlwdCBzcmM9Ii4vcGhvdG8tb3duZXItc2V0dGluZ3MtdjIuanM/dj1EUFJPLVBIT1RPLU9XTkVSLU9QRVJBVElPTlMtQlJVU0hVUC05LTEtMi1VSS0yMDI2MDkxOSI+PC9zY3JpcHQ+JywKICAgICAgICAnPHNjcmlwdCBzcmM9Ii4vcGhvdG8tb3duZXItc2V0dGluZ3MtdjIuanM/dj1EUFJPLVBIT1RPLU9XTkVSLU9QRVJBVElPTlMtQlJVU0hVUC05LTUtU0VUVElOR1MtUE9MSVNILVVJLTIwMjYwOTE5Ij48L3NjcmlwdD4nCiAgICApLApdCgpmb3Igb2xkLCBuZXcgaW4gcmVwbGFjZW1lbnRzOgogICAgaWYgb2xkIG5vdCBpbiBzOgogICAgICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJvd25lciBhbmNob3IgbWlzc2luZzoge29sZFs6OTBdfSIpCiAgICBzID0gcy5yZXBsYWNlKG9sZCwgbmV3LCAxKQoKaWYgJ+asoeW3peeoi+OBruOBn+OCgU9GRuWbuuWumicgaW4gczoKICAgIHJhaXNlIFN5c3RlbUV4aXQoInN0YWxlIE9GRi1maXhlZCBjb3B5IHN0aWxsIHJlbWFpbnMiKQppZiAnaWQ9ImZlYXR1cmVDc3ZNaWdyYXRpb24iIHR5cGU9ImNoZWNrYm94IiBkaXNhYmxlZCcgaW4gczoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIkNTViBtaWdyYXRpb24gY2hlY2tib3ggaXMgc3RpbGwgZGlzYWJsZWQiKQoKcC53cml0ZV90ZXh0KHMsIGVuY29kaW5nPSJ1dGYtOCIpCg==' | base64 -d > /tmp/patch_owner_95.py
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwID0gUGF0aCgicGhvdG8tb3duZXItc2V0dGluZ3MtdjIuanMiKQpzID0gcC5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKCm9sZF92ZXJzaW9uID0gJ2NvbnN0IFZFUlNJT04gPSAiRFBSTy1QSE9UTy1PV05FUi1PUEVSQVRJT05TLUJSVVNIVVAtOS0xLTItVUktMjAyNjA5MTkiOycKbmV3X3ZlcnNpb24gPSAnY29uc3QgVkVSU0lPTiA9ICJEUFJPLVBIT1RPLU9XTkVSLU9QRVJBVElPTlMtQlJVU0hVUC05LTUtU0VUVElOR1MtUE9MSVNILVVJLTIwMjYwOTE5IjsnCmlmIG9sZF92ZXJzaW9uIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgic2V0dGluZ3MgdmVyc2lvbiBhbmNob3IgbWlzc2luZyIpCnMgPSBzLnJlcGxhY2Uob2xkX3ZlcnNpb24sIG5ld192ZXJzaW9uLCAxKQoKcmVwbGFjZW1lbnRzID0gWwogICAgKAogICAgICAgICd7IGlkOiAicmVzZXJ2YXRpb24iLCBsYWJlbDogIuS6iOe0hOioreWumiIsIGRlc2M6ICLlj5fku5jmnaHku7bjg7vkuojntITjg6vjg7zjg6siIH0sJywKICAgICAgICAneyBpZDogInJlc2VydmF0aW9uIiwgbGFiZWw6ICLkuojntIToqK3lrpoiLCBub3RlOiAi5pel5bi4IiwgZGVzYzogIuWPl+S7mOadoeS7tuODu+S6iOe0hOODq+ODvOODqyIgfSwnCiAgICApLAogICAgKAogICAgICAgICd7IGlkOiAic3RhZmYiLCBsYWJlbDogIuOCueOCv+ODg+ODleeuoeeQhiIsIGRlc2M6ICLov73liqDjg7vnt6jpm4bjg7vlgZzmraIiIH0sJywKICAgICAgICAneyBpZDogInN0YWZmIiwgbGFiZWw6ICLjgrnjgr/jg4Pjg5XnrqHnkIYiLCBub3RlOiAi5pel5bi4IiwgZGVzYzogIui/veWKoOODu+e3qOmbhuODu+WBnOatoiIgfSwnCiAgICApLAogICAgKAogICAgICAgICd7IGlkOiAicGxhbnMiLCBsYWJlbDogIuaSruW9seODl+ODqeODs+euoeeQhiIsIGRlc2M6ICLmkq7lvbHjgrnjg5rjg7zjgrnjg7vjg5fjg6njg7MiIH0sJywKICAgICAgICAneyBpZDogInBsYW5zIiwgbGFiZWw6ICLmkq7lvbHjg5fjg6njg7PnrqHnkIYiLCBub3RlOiAi5pel5bi4IiwgZGVzYzogIuaSruW9seOCueODmuODvOOCueODu+ODl+ODqeODsyIgfSwnCiAgICApLAogICAgKAogICAgICAgICd7IGlkOiAicHVibGljIiwgbGFiZWw6ICLlhazplovjg7vpgKPmkLroqK3lrpoiLCBkZXNjOiAiSFDjg7vjg5bjg6njg7Pjg4njg7tMSU5F5LqI57SEIiB9LCcsCiAgICAgICAgJ3sgaWQ6ICJwdWJsaWMiLCBsYWJlbDogIuWFrOmWi+ODu+mAo+aQuuioreWumiIsIG5vdGU6ICLlv4XopoHmmYIiLCBkZXNjOiAiSFDjg7vjg5bjg6njg7Pjg4njg7tMSU5F5LqI57SEIiB9LCcKICAgICksCiAgICAoCiAgICAgICAgJ3sgaWQ6ICJjcm0iLCBsYWJlbDogIumhp+WuouODu0NSTeioreWumiIsIGRlc2M6ICLjg5Xjgqnjg63jg7zjg7tDU1bjg7tMSU5FIiB9LCcsCiAgICAgICAgJ3sgaWQ6ICJjcm0iLCBsYWJlbDogIumhp+WuouODu0NSTeioreWumiIsIG5vdGU6ICLlv4XopoHmmYIiLCBkZXNjOiAi44OV44Kp44Ot44O844O7Q1NW44O7TElORSIgfSwnCiAgICApLAogICAgKAogICAgICAgICd7IGlkOiAiYWR2YW5jZWQiLCBsYWJlbDogIuips+e0sOioreWumiIsIGRlc2M6ICLmlofpnaLjg7vjgZ3jga7ku5YiIH0sJywKICAgICAgICAneyBpZDogImFkdmFuY2VkIiwgbGFiZWw6ICLoqbPntLDoqK3lrpoiLCBub3RlOiAi6Kmz57SwIiwgZGVzYzogIuaWh+mdouODu+OBneOBruS7liIgfSwnCiAgICApLAogICAgKAogICAgICAgICdpZiAoL+mhp+WuouODleOCqeODreODvOapn+iDvXxDU1bjg4fjg7zjgr/np7vooYx8TElOReWPi+OBoOOBoeODu+aXouWtmOmhp+Wuoi8udGVzdChoKSkgcmV0dXJuICJjcm0iOycsCiAgICAgICAgJ2lmICgv6aGn5a6i44OV44Kp44Ot44O85qmf6IO9fOmhp+WuouODu0NSTeapn+iDvXxDU1bjg4fjg7zjgr/np7vooYx8TElOReWPi+OBoOOBoeODu+aXouWtmOmhp+Wuoi8udGVzdChoKSkgcmV0dXJuICJjcm0iOycKICAgICksCiAgICAoCiAgICAgICAgJzxwPuW/heimgeOBqumgheebruOBoOOBkeOCkumWi+OBhOOBpuioreWumuOBp+OBjeOBvuOBmeOAgjwvcD4nLAogICAgICAgICc8cD7liJ3lm57jg7vml6XluLjjg7vlv4XopoHmmYLjga7oqK3lrprjgpLliIbjgZHjgabjgYTjgb7jgZnjgII8L3A+JwogICAgKSwKICAgICgKICAgICAgICAnaWYgKGludHJvKSBpbnRyby50ZXh0Q29udGVudCA9ICLliJ3mnJ/oqK3lrprjgajml6XluLjoqK3lrprjgpLliIbjgZHjgIHlv4XopoHjgarpoIXnm67jgaDjgZHooajnpLrjgZfjgb7jgZnjgIIiOycsCiAgICAgICAgJ2lmIChpbnRybykgaW50cm8udGV4dENvbnRlbnQgPSAi5Yid5Zue6Kit5a6a44O75pel5bi46YGL55So44O75b+F6KaB5pmC44Gu6YCj5pC644KS5YiG44GR44CB5b+F6KaB44Gq6aCF55uu44Gg44GR6KGo56S644GX44G+44GZ44CCIjsnCiAgICApLApdCgpmb3Igb2xkLCBuZXcgaW4gcmVwbGFjZW1lbnRzOgogICAgaWYgb2xkIG5vdCBpbiBzOgogICAgICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJzZXR0aW5ncyBhbmNob3IgbWlzc2luZzoge29sZFs6OTBdfSIpCiAgICBzID0gcy5yZXBsYWNlKG9sZCwgbmV3LCAxKQoKcC53cml0ZV90ZXh0KHMsIGVuY29kaW5nPSJ1dGYtOCIpCg==' | base64 -d > /tmp/patch_settings_95.py
+          python -m py_compile /tmp/patch_owner_95.py /tmp/patch_settings_95.py
+          python /tmp/patch_owner_95.py
+          python /tmp/patch_settings_95.py
+
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node --check photo-owner-settings-v2.js
+
+          grep -F 'DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-5-SETTINGS-POLISH-UI-20260919' photo-owner-settings-v2.js
+          grep -F 'photo-owner-settings-v2.js?v=DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-5-SETTINGS-POLISH-UI-20260919' owner.html
+
+          grep -F '<h3>顧客・CRM機能</h3>' owner.html
+          grep -F 'id="featureCsvMigration" type="checkbox"' owner.html
+          ! grep -F 'id="featureCsvMigration" type="checkbox" disabled' owner.html
+          ! grep -F '次工程のためOFF固定' owner.html
+
+          grep -F 'label: "予約設定", note: "日常"' photo-owner-settings-v2.js
+          grep -F 'label: "スタッフ管理", note: "日常"' photo-owner-settings-v2.js
+          grep -F 'label: "撮影プラン管理", note: "日常"' photo-owner-settings-v2.js
+          grep -F 'label: "公開・連携設定", note: "必要時"' photo-owner-settings-v2.js
+          grep -F 'label: "顧客・CRM設定", note: "必要時"' photo-owner-settings-v2.js
+          grep -F 'label: "詳細設定", note: "詳細"' photo-owner-settings-v2.js
+          grep -F '顧客・CRM機能' photo-owner-settings-v2.js
+
+          grep -F 'csv_migration: $("featureCsvMigration").checked' owner.html
+          grep -F 'line_customer_link: $("featureLineCustomerLink").checked' owner.html
+          grep -F 'dpro:photo-settings-rendered' owner.html
+
+          git diff --check
+
+      - name: Regression and scope gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+          changed=set(subprocess.check_output(["git","diff","--name-only"],text=True).split())
+          allowed={"owner.html","photo-owner-settings-v2.js"}
+          if changed != allowed:
+              raise SystemExit(f"scope gate failed changed={sorted(changed)}")
+          PY
+
+          grep -F 'photo-owner-plan-resource.js?v=DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-3-1-PRICE-LABEL-20260919' owner.html
+          grep -F 'photo-owner-setup-checklist.js?v=DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-4-SETUP-CHECKLIST-UI-20260919' owner.html
+          grep -F 'photo-booking-presentation.js?v=DPRO-PHOTO-PRODUCTION-READINESS-BRUSHUP-8-5-LINE-ENTRY-20260919' owner.html
+          grep -F '/api/admin/staff-management' photo-owner-settings-v2.js
+          grep -F 'ownerStaffManagementPanel' photo-owner-settings-v2.js
+
+      - name: Self-delete workflow and final validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f ".github/workflows/STEP-PHOTO-OWNER-BRUSHUP-9-5-SETTINGS-POLISH.yml"
+          git diff --check
+
+      - name: Commit BRUSHUP-9-5
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "dpro-photo-owner-ops-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add owner.html photo-owner-settings-v2.js .github/workflows
+          git diff --cached --check
+          git commit -m "Polish PHOTO Owner settings BRUSHUP-9-5"
+          git push origin HEAD:main
