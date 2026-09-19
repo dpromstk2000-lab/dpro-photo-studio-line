@@ -1,0 +1,115 @@
+name: DPRO PHOTO BRUSHUP-8-5 Production Readiness
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  production-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Source and drift gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA="8e17d76ac85e57319ec58277721e596e8833e9c0"
+          WORKFLOW=".github/workflows/STEP-PHOTO-RESERVATION-CALENDAR-BRUSHUP-8-5-PRODUCTION-READINESS.yml"
+          HEAD_SHA="$(git rev-parse HEAD)"
+
+          if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+            PARENT_SHA="$(git rev-parse HEAD^)"
+            test "$PARENT_SHA" = "$BASE_SHA"
+            CHANGED="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+            test "$CHANGED" = "$WORKFLOW"
+          fi
+
+          test -f index.html
+          test -f owner.html
+          test -f photo-booking-presentation.js
+          test -f config.js
+
+          grep -F 'publicHomeLink' index.html
+          grep -F 'bookingChannelLine' photo-booking-presentation.js
+          grep -F 'DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-1-SAVE-FEEDBACK-20260919' owner.html
+          grep -F 'dpro-photo-product-ready-gateway-v8' config.js
+
+      - name: Patch LINE booking entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwID0gUGF0aCgiaW5kZXguaHRtbCIpCnMgPSBwLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQoKY3NzX2FuY2hvciA9ICcnJyAgICAucHVibGljLWhvbWUtbGluayB7IGRpc3BsYXk6IG5vbmU7IHdpZHRoOiBmaXQtY29udGVudDsgbWFyZ2luLXRvcDogMTRweDsgcGFkZGluZzogN3B4IDEycHg7IGJvcmRlcjogMXB4IHNvbGlkIHJnYmEoMjU1LDI1NSwyNTUsLjQ1KTsgYm9yZGVyLXJhZGl1czogOTk5cHg7IGNvbG9yOiAjZmZmOyBmb250LXNpemU6IDEycHg7IGZvbnQtd2VpZ2h0OiA4MDA7IHRleHQtZGVjb3JhdGlvbjogbm9uZTsgYmFja2dyb3VuZDogcmdiYSgyNTUsMjU1LDI1NSwuMDkpOyB9CiAgICAucHVibGljLWhvbWUtbGluazpob3ZlciB7IGJhY2tncm91bmQ6IHJnYmEoMjU1LDI1NSwyNTUsLjE2KTsgfScnJwpjc3NfcmVwbCA9ICcnJyAgICAucHVibGljLWxpbmstcm93IHsgZGlzcGxheTogZmxleDsgZmxleC13cmFwOiB3cmFwOyBnYXA6IDhweDsgYWxpZ24taXRlbXM6IGNlbnRlcjsgbWFyZ2luLXRvcDogMTRweDsgfQogICAgLnB1YmxpYy1ob21lLWxpbmsgeyBkaXNwbGF5OiBub25lOyB3aWR0aDogZml0LWNvbnRlbnQ7IHBhZGRpbmc6IDdweCAxMnB4OyBib3JkZXI6IDFweCBzb2xpZCByZ2JhKDI1NSwyNTUsMjU1LC40NSk7IGJvcmRlci1yYWRpdXM6IDk5OXB4OyBjb2xvcjogI2ZmZjsgZm9udC1zaXplOiAxMnB4OyBmb250LXdlaWdodDogODAwOyB0ZXh0LWRlY29yYXRpb246IG5vbmU7IGJhY2tncm91bmQ6IHJnYmEoMjU1LDI1NSwyNTUsLjA5KTsgfQogICAgLnB1YmxpYy1ob21lLWxpbms6aG92ZXIgeyBiYWNrZ3JvdW5kOiByZ2JhKDI1NSwyNTUsMjU1LC4xNik7IH0KICAgIC5wdWJsaWMtbGluZS1saW5rIHsgYm9yZGVyLWNvbG9yOiByZ2JhKDI1NSwyNTUsMjU1LC43Mik7IGJhY2tncm91bmQ6IHJnYmEoMjU1LDI1NSwyNTUsLjE2KTsgfScnJwppZiBjc3NfYW5jaG9yIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgicHVibGljIGxpbmsgY3NzIGFuY2hvciBtaXNzaW5nIikKcyA9IHMucmVwbGFjZShjc3NfYW5jaG9yLCBjc3NfcmVwbCwgMSkKCm1hcmt1cF9hbmNob3IgPSAnJycgICAgICA8YSBpZD0icHVibGljSG9tZUxpbmsiIGNsYXNzPSJwdWJsaWMtaG9tZS1saW5rIiBocmVmPSIjIiByZWw9Im5vb3BlbmVyIj7lhazlvI/jgrXjgqTjg4jjgbjmiLvjgos8L2E+CiAgICA8L2hlYWRlcj4nJycKbWFya3VwX3JlcGwgPSAnJycgICAgICA8ZGl2IGNsYXNzPSJwdWJsaWMtbGluay1yb3ciPgogICAgICAgIDxhIGlkPSJwdWJsaWNIb21lTGluayIgY2xhc3M9InB1YmxpYy1ob21lLWxpbmsiIGhyZWY9IiMiIHJlbD0ibm9vcGVuZXIiPuWFrOW8j+OCteOCpOODiOOBuOaIu+OCizwvYT4KICAgICAgICA8YSBpZD0icHVibGljTGluZUJvb2tpbmdMaW5rIiBjbGFzcz0icHVibGljLWhvbWUtbGluayBwdWJsaWMtbGluZS1saW5rIiBocmVmPSIjIiByZWw9Im5vb3BlbmVyIj5MSU5F44GL44KJ5LqI57SEPC9hPgogICAgICA8L2Rpdj4KICAgIDwvaGVhZGVyPicnJwppZiBtYXJrdXBfYW5jaG9yIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgicHVibGljIGxpbmsgbWFya3VwIGFuY2hvciBtaXNzaW5nIikKcyA9IHMucmVwbGFjZShtYXJrdXBfYW5jaG9yLCBtYXJrdXBfcmVwbCwgMSkKCmVsc19hbmNob3IgPSAnJycgICAgICBwdWJsaWNIZXJvOiAkKCJwdWJsaWNIZXJvIiksIHB1YmxpY0JyYW5kTG9nbzogJCgicHVibGljQnJhbmRMb2dvIiksIHB1YmxpY0V5ZWJyb3c6ICQoInB1YmxpY0V5ZWJyb3ciKSwgcHVibGljSG9tZUxpbms6ICQoInB1YmxpY0hvbWVMaW5rIiksJycnCmVsc19yZXBsID0gJycnICAgICAgcHVibGljSGVybzogJCgicHVibGljSGVybyIpLCBwdWJsaWNCcmFuZExvZ286ICQoInB1YmxpY0JyYW5kTG9nbyIpLCBwdWJsaWNFeWVicm93OiAkKCJwdWJsaWNFeWVicm93IiksIHB1YmxpY0hvbWVMaW5rOiAkKCJwdWJsaWNIb21lTGluayIpLCBwdWJsaWNMaW5lQm9va2luZ0xpbms6ICQoInB1YmxpY0xpbmVCb29raW5nTGluayIpLCcnJwppZiBlbHNfYW5jaG9yIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgicHVibGljIGxpbmUgZWxlbWVudCBhbmNob3IgbWlzc2luZyIpCnMgPSBzLnJlcGxhY2UoZWxzX2FuY2hvciwgZWxzX3JlcGwsIDEpCgphcHBseV9hbmNob3IgPSAnJycgICAgICBpZiAocHJlc2VudGF0aW9uLmV4aXN0aW5nX3NpdGVfbW9kZSA9PT0gdHJ1ZSAmJiBwcmVzZW50YXRpb24uaG9tZV91cmwpIHsKICAgICAgICBlbHMucHVibGljSG9tZUxpbmsuaHJlZiA9IHByZXNlbnRhdGlvbi5ob21lX3VybDsKICAgICAgICBlbHMucHVibGljSG9tZUxpbmsuc3R5bGUuZGlzcGxheSA9ICJpbmxpbmUtZmxleCI7CiAgICAgIH0gZWxzZSB7CiAgICAgICAgZWxzLnB1YmxpY0hvbWVMaW5rLnN0eWxlLmRpc3BsYXkgPSAibm9uZSI7CiAgICAgIH0KCiAgICAgIGNvbnN0IG5vdGljZVRleHQgPSBzZXR0aW5ncy5wdWJsaWNfbm90aWNlIHx8ICLmkq7lvbHjg5fjg6njg7PjgpLpgbjjgbPjgIHnqbrjgYTjgabjgYTjgovml6XmmYLjgYvjgonjgZTkuojntITjgY/jgaDjgZXjgYTjgIIiOycnJwphcHBseV9yZXBsID0gJycnICAgICAgaWYgKHByZXNlbnRhdGlvbi5leGlzdGluZ19zaXRlX21vZGUgPT09IHRydWUgJiYgcHJlc2VudGF0aW9uLmhvbWVfdXJsKSB7CiAgICAgICAgZWxzLnB1YmxpY0hvbWVMaW5rLmhyZWYgPSBwcmVzZW50YXRpb24uaG9tZV91cmw7CiAgICAgICAgZWxzLnB1YmxpY0hvbWVMaW5rLnN0eWxlLmRpc3BsYXkgPSAiaW5saW5lLWZsZXgiOwogICAgICB9IGVsc2UgewogICAgICAgIGVscy5wdWJsaWNIb21lTGluay5zdHlsZS5kaXNwbGF5ID0gIm5vbmUiOwogICAgICB9CgogICAgICBjb25zdCBib29raW5nQ2hhbm5lbHMgPSBBcnJheS5pc0FycmF5KHByZXNlbnRhdGlvbi5ib29raW5nX2NoYW5uZWxzKSA/IHByZXNlbnRhdGlvbi5ib29raW5nX2NoYW5uZWxzIDogWyJ3ZWIiXTsKICAgICAgY29uc3QgbGluZUJvb2tpbmdVcmwgPSBTdHJpbmcocHJlc2VudGF0aW9uLmxpbmVfYm9va2luZ191cmwgfHwgIiIpLnRyaW0oKTsKICAgICAgaWYgKGJvb2tpbmdDaGFubmVscy5pbmNsdWRlcygibGluZSIpICYmIC9eaHR0cHM6XFwvXFwvL2kudGVzdChsaW5lQm9va2luZ1VybCkpIHsKICAgICAgICBlbHMucHVibGljTGluZUJvb2tpbmdMaW5rLmhyZWYgPSBsaW5lQm9va2luZ1VybDsKICAgICAgICBlbHMucHVibGljTGluZUJvb2tpbmdMaW5rLnN0eWxlLmRpc3BsYXkgPSAiaW5saW5lLWZsZXgiOwogICAgICB9IGVsc2UgewogICAgICAgIGVscy5wdWJsaWNMaW5lQm9va2luZ0xpbmsucmVtb3ZlQXR0cmlidXRlKCJocmVmIik7CiAgICAgICAgZWxzLnB1YmxpY0xpbmVCb29raW5nTGluay5zdHlsZS5kaXNwbGF5ID0gIm5vbmUiOwogICAgICB9CgogICAgICBjb25zdCBub3RpY2VUZXh0ID0gc2V0dGluZ3MucHVibGljX25vdGljZSB8fCAi5pKu5b2x44OX44Op44Oz44KS6YG444Gz44CB56m644GE44Gm44GE44KL5pel5pmC44GL44KJ44GU5LqI57SE44GP44Gg44GV44GE44CCIjsnJycKaWYgYXBwbHlfYW5jaG9yIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgicHVibGljIGxpbmUgYXBwbHkgYW5jaG9yIG1pc3NpbmciKQpzID0gcy5yZXBsYWNlKGFwcGx5X2FuY2hvciwgYXBwbHlfcmVwbCwgMSkKCm1hcmtlciA9ICJEUFJPLVBIT1RPLVBST0RVQ1RJT04tUkVBRElORVNTLUJSVVNIVVAtOC01LUxJTkUtRU5UUlktMjAyNjA5MTkiCmlmIG1hcmtlciBub3QgaW4gczoKICAgIG9sZCA9ICc8IS0tIERQUk8tUEhPVE8tRVhJU1RJTkctU0lURS1XSElURUxBQkVMLUJSVVNIVVAtOC00LVVJLTIwMjYwOTE5IC0tPicKICAgIGlmIG9sZCBub3QgaW4gczoKICAgICAgICByYWlzZSBTeXN0ZW1FeGl0KCJCUlVTSFVQLTgtNCBtYXJrZXIgbWlzc2luZyIpCiAgICBzID0gcy5yZXBsYWNlKG9sZCwgb2xkICsgZic8IS0tIHttYXJrZXJ9IC0tPicsIDEpCgpwLndyaXRlX3RleHQocywgZW5jb2Rpbmc9InV0Zi04IikK' | base64 -d > /tmp/patch_index.py
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwID0gUGF0aCgicGhvdG8tYm9va2luZy1wcmVzZW50YXRpb24uanMiKQpzID0gcC5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKCm9sZF92ZXJzaW9uID0gJ2NvbnN0IFZFUlNJT04gPSAiRFBSTy1QSE9UTy1CT09LSU5HLVBSRVNFTlRBVElPTi1CUlVTSFVQLTgtNC0xLVNBVkUtRkVFREJBQ0stMjAyNjA5MTkiOycKbmV3X3ZlcnNpb24gPSAnY29uc3QgVkVSU0lPTiA9ICJEUFJPLVBIT1RPLVBST0RVQ1RJT04tUkVBRElORVNTLUJSVVNIVVAtOC01LUxJTkUtRU5UUlktMjAyNjA5MTkiOycKaWYgb2xkX3ZlcnNpb24gbm90IGluIHM6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJwcmVzZW50YXRpb24gdmVyc2lvbiBhbmNob3IgbWlzc2luZyIpCnMgPSBzLnJlcGxhY2Uob2xkX3ZlcnNpb24sIG5ld192ZXJzaW9uLCAxKQoKZmlsbF9hbmNob3IgPSAnJycgICAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImJvb2tpbmdMb2dvVXJsIikudmFsdWUgPSBwLmxvZ29fdXJsIHx8ICIiOwogICAgY29uc3QgY2hhbm5lbHMgPSBBcnJheS5pc0FycmF5KHAuYm9va2luZ19jaGFubmVscykgPyBwLmJvb2tpbmdfY2hhbm5lbHMgOiBbIndlYiJdOycnJwpmaWxsX3JlcGwgPSAnJycgICAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImJvb2tpbmdMb2dvVXJsIikudmFsdWUgPSBwLmxvZ29fdXJsIHx8ICIiOwogICAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImJvb2tpbmdMaW5lQm9va2luZ1VybCIpLnZhbHVlID0gcC5saW5lX2Jvb2tpbmdfdXJsIHx8ICIiOwogICAgY29uc3QgY2hhbm5lbHMgPSBBcnJheS5pc0FycmF5KHAuYm9va2luZ19jaGFubmVscykgPyBwLmJvb2tpbmdfY2hhbm5lbHMgOiBbIndlYiJdOycnJwppZiBmaWxsX2FuY2hvciBub3QgaW4gczoKICAgIHJhaXNlIFN5c3RlbUV4aXQoInByZXNlbnRhdGlvbiBmaWxsIGFuY2hvciBtaXNzaW5nIikKcyA9IHMucmVwbGFjZShmaWxsX2FuY2hvciwgZmlsbF9yZXBsLCAxKQoKc2F2ZV9hbmNob3IgPSAnJycgICAgY29uc3QgY2hhbm5lbHMgPSBbXTsKICAgIGlmIChkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiYm9va2luZ0NoYW5uZWxXZWIiKS5jaGVja2VkKSBjaGFubmVscy5wdXNoKCJ3ZWIiKTsKICAgIGlmIChkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiYm9va2luZ0NoYW5uZWxMaW5lIikuY2hlY2tlZCkgY2hhbm5lbHMucHVzaCgibGluZSIpOwoKICAgIGNvbnN0IGJvZHkgPSB7JycnCnNhdmVfcmVwbCA9ICcnJyAgICBjb25zdCBjaGFubmVscyA9IFtdOwogICAgaWYgKGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJib29raW5nQ2hhbm5lbFdlYiIpLmNoZWNrZWQpIGNoYW5uZWxzLnB1c2goIndlYiIpOwogICAgaWYgKGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJib29raW5nQ2hhbm5lbExpbmUiKS5jaGVja2VkKSBjaGFubmVscy5wdXNoKCJsaW5lIik7CgogICAgY29uc3QgbGluZUJvb2tpbmdVcmwgPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiYm9va2luZ0xpbmVCb29raW5nVXJsIikudmFsdWUudHJpbSgpOwogICAgaWYgKGNoYW5uZWxzLmluY2x1ZGVzKCJsaW5lIikgJiYgIWxpbmVCb29raW5nVXJsKSB7CiAgICAgIHRocm93IG5ldyBFcnJvcigiTElOReOBi+OCieS6iOe0hOOCkk9O44Gr44GZ44KL5aC05ZCI44Gv44CBTElOReS6iOe0hFVSTOOCkuWFpeWKm+OBl+OBpuOBj+OBoOOBleOBhOOAgiIpOwogICAgfQoKICAgIGNvbnN0IGJvZHkgPSB7JycnCmlmIHNhdmVfYW5jaG9yIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgicHJlc2VudGF0aW9uIHNhdmUgdmFsaWRhdGlvbiBhbmNob3IgbWlzc2luZyIpCnMgPSBzLnJlcGxhY2Uoc2F2ZV9hbmNob3IsIHNhdmVfcmVwbCwgMSkKCmJvZHlfYW5jaG9yID0gJycnICAgICAgbG9nb191cmw6IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJib29raW5nTG9nb1VybCIpLnZhbHVlLnRyaW0oKSB8fCBudWxsLAogICAgICBib29raW5nX2NoYW5uZWxzOiBjaGFubmVscy5sZW5ndGggPyBjaGFubmVscyA6IFsid2ViIl0sJycnCmJvZHlfcmVwbCA9ICcnJyAgICAgIGxvZ29fdXJsOiBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgiYm9va2luZ0xvZ29VcmwiKS52YWx1ZS50cmltKCkgfHwgbnVsbCwKICAgICAgbGluZV9ib29raW5nX3VybDogbGluZUJvb2tpbmdVcmwgfHwgbnVsbCwKICAgICAgYm9va2luZ19jaGFubmVsczogY2hhbm5lbHMubGVuZ3RoID8gY2hhbm5lbHMgOiBbIndlYiJdLCcnJwppZiBib2R5X2FuY2hvciBub3QgaW4gczoKICAgIHJhaXNlIFN5c3RlbUV4aXQoInByZXNlbnRhdGlvbiBib2R5IGFuY2hvciBtaXNzaW5nIikKcyA9IHMucmVwbGFjZShib2R5X2FuY2hvciwgYm9keV9yZXBsLCAxKQoKbWFya3VwX2FuY2hvciA9ICcnJyAgICAgICAgPGRpdiBjbGFzcz0iZmllbGQgc3Bhbi0yIj4KICAgICAgICAgIDxsYWJlbD7kuojntITlhaXlj6M8L2xhYmVsPgogICAgICAgICAgPGRpdiBjbGFzcz0iY2hlY2stcm93Ij4KICAgICAgICAgICAgPGxhYmVsPjxpbnB1dCBpZD0iYm9va2luZ0NoYW5uZWxXZWIiIHR5cGU9ImNoZWNrYm94IiBjaGVja2VkIC8+IFdFQuS6iOe0hDwvbGFiZWw+CiAgICAgICAgICAgIDxsYWJlbD48aW5wdXQgaWQ9ImJvb2tpbmdDaGFubmVsTGluZSIgdHlwZT0iY2hlY2tib3giIC8+IExJTkXjgYvjgonkuojntIQ8L2xhYmVsPgogICAgICAgICAgPC9kaXY+CiAgICAgICAgPC9kaXY+JycnCm1hcmt1cF9yZXBsID0gJycnICAgICAgICA8ZGl2IGNsYXNzPSJmaWVsZCBzcGFuLTIiPgogICAgICAgICAgPGxhYmVsIGZvcj0iYm9va2luZ0xpbmVCb29raW5nVXJsIj5MSU5F5LqI57SEVVJMPC9sYWJlbD4KICAgICAgICAgIDxpbnB1dCBpZD0iYm9va2luZ0xpbmVCb29raW5nVXJsIiBjbGFzcz0iaW5wdXQiIHR5cGU9InVybCIgcGxhY2Vob2xkZXI9Imh0dHBzOi8vbGlmZi5saW5lLm1lLy4uLiIgLz4KICAgICAgICAgIDxkaXYgY2xhc3M9ImZpZWxkLWhlbHAiPkxJTkXjgYvjgonkuojntITjgpJPTuOBq+OBmeOCi+OBqOOBjeOBoOOBkeW/hemgiOOBp+OBmeOAgkxJRkYgVVJM44G+44Gf44GvTElOReWFrOW8j+OBrkhUVFBT5LqI57SE5bCO57ea44KS5oyH5a6a44GX44G+44GZ44CCPC9kaXY+CiAgICAgICAgPC9kaXY+CiAgICAgICAgPGRpdiBjbGFzcz0iZmllbGQgc3Bhbi0yIj4KICAgICAgICAgIDxsYWJlbD7kuojntITlhaXlj6M8L2xhYmVsPgogICAgICAgICAgPGRpdiBjbGFzcz0iY2hlY2stcm93Ij4KICAgICAgICAgICAgPGxhYmVsPjxpbnB1dCBpZD0iYm9va2luZ0NoYW5uZWxXZWIiIHR5cGU9ImNoZWNrYm94IiBjaGVja2VkIC8+IFdFQuS6iOe0hDwvbGFiZWw+CiAgICAgICAgICAgIDxsYWJlbD48aW5wdXQgaWQ9ImJvb2tpbmdDaGFubmVsTGluZSIgdHlwZT0iY2hlY2tib3giIC8+IExJTkXjgYvjgonkuojntITvvIhVUkzoqK3lrprmmYLjga7jgb/vvIk8L2xhYmVsPgogICAgICAgICAgPC9kaXY+CiAgICAgICAgPC9kaXY+JycnCmlmIG1hcmt1cF9hbmNob3Igbm90IGluIHM6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJwcmVzZW50YXRpb24gbGluZSBtYXJrdXAgYW5jaG9yIG1pc3NpbmciKQpzID0gcy5yZXBsYWNlKG1hcmt1cF9hbmNob3IsIG1hcmt1cF9yZXBsLCAxKQoKcC53cml0ZV90ZXh0KHMsIGVuY29kaW5nPSJ1dGYtOCIpCg==' | base64 -d > /tmp/patch_presentation.py
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwID0gUGF0aCgib3duZXIuaHRtbCIpCnMgPSBwLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQoKb2xkID0gJzxzY3JpcHQgc3JjPSIuL3Bob3RvLWJvb2tpbmctcHJlc2VudGF0aW9uLmpzP3Y9RFBSTy1QSE9UTy1CT09LSU5HLVBSRVNFTlRBVElPTi1CUlVTSFVQLTgtNC0xLVNBVkUtRkVFREJBQ0stMjAyNjA5MTkiPjwvc2NyaXB0PicKbmV3ID0gJzxzY3JpcHQgc3JjPSIuL3Bob3RvLWJvb2tpbmctcHJlc2VudGF0aW9uLmpzP3Y9RFBSTy1QSE9UTy1QUk9EVUNUSU9OLVJFQURJTkVTUy1CUlVTSFVQLTgtNS1MSU5FLUVOVFJZLTIwMjYwOTE5Ij48L3NjcmlwdD4nCgppZiBvbGQgbm90IGluIHM6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJvd25lciBjYWNoZS1idXN0IGFuY2hvciBtaXNzaW5nIikKcyA9IHMucmVwbGFjZShvbGQsIG5ldywgMSkKCnAud3JpdGVfdGV4dChzLCBlbmNvZGluZz0idXRmLTgiKQo=' | base64 -d > /tmp/patch_owner.py
+
+          python -m py_compile /tmp/patch_index.py /tmp/patch_presentation.py /tmp/patch_owner.py
+          python /tmp/patch_index.py
+          python /tmp/patch_presentation.py
+          python /tmp/patch_owner.py
+
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check photo-booking-presentation.js
+
+          grep -F 'publicLineBookingLink' index.html
+          grep -F 'LINEから予約</a>' index.html
+          grep -F 'presentation.line_booking_url' index.html
+          grep -F 'DPRO-PHOTO-PRODUCTION-READINESS-BRUSHUP-8-5-LINE-ENTRY-20260919' index.html
+
+          grep -F 'bookingLineBookingUrl' photo-booking-presentation.js
+          grep -F 'line_booking_url: lineBookingUrl || null' photo-booking-presentation.js
+          grep -F 'LINEから予約をONにする場合は、LINE予約URLを入力してください。' photo-booking-presentation.js
+          grep -F 'DPRO-PHOTO-PRODUCTION-READINESS-BRUSHUP-8-5-LINE-ENTRY-20260919' owner.html
+
+          git diff --check
+
+      - name: Regression and scope gate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import subprocess
+          changed = set(subprocess.check_output(["git","diff","--name-only"], text=True).split())
+          allowed = {"index.html", "owner.html", "photo-booking-presentation.js"}
+          if changed != allowed:
+              raise SystemExit(f"scope gate failed changed={sorted(changed)}")
+          PY
+
+          grep -F 'dpro-photo-product-ready-gateway-v3' config.js
+          grep -F 'dpro-photo-product-ready-gateway-v8' config.js
+          grep -F 'PUBLIC_AVAILABILITY: "/api/public/availability"' config.js
+
+          grep -F 'async function ensurePlanStartRule()' index.html
+          grep -F 'rawSlots.filter(slotAllowedByPlanStartRule)' index.html
+          grep -F 'function setSaveButton(state = "idle")' photo-booking-presentation.js
+          grep -F 'dpro:photo-settings-rendered' photo-booking-presentation.js
+
+      - name: Self-delete workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f ".github/workflows/STEP-PHOTO-RESERVATION-CALENDAR-BRUSHUP-8-5-PRODUCTION-READINESS.yml"
+          git diff --check
+
+      - name: Commit BRUSHUP-8-5
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "dpro-photo-calendar-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add index.html owner.html photo-booking-presentation.js .github/workflows
+          git diff --cached --check
+          git commit -m "Harden PHOTO production readiness BRUSHUP-8-5"
+          git push origin HEAD:main
