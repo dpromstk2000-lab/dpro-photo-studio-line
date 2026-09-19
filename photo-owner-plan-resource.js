@@ -2,7 +2,7 @@
   "use strict";
 
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
-  const VERSION = "DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-3-UI-20260919";
+  const VERSION = "DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-3-1-PRICE-LABEL-20260919";
   if (!C || !document.getElementById("view-settings")) return;
 
   const esc = (v) => C.escapeHtml(v ?? "");
@@ -201,7 +201,7 @@
                 <h5>${esc(row.plan_name)}</h5>
                 <div class="pr-v2-meta">
                   ${esc(categoryName(row.category_id))}｜${esc(resourceName(row.default_resource_id))}<br>
-                  所要 ${esc(row.duration_minutes)}分｜${Number(row.base_price || 0).toLocaleString("ja-JP")}円〜<br>
+                  所要 ${esc(row.duration_minutes)}分｜${esc(row.price_label || `${Number(row.base_price || 0).toLocaleString("ja-JP")}円〜`)}<br>
                   受付：${esc(weekdayText(row.available_weekdays))}｜${esc(startRuleText(row))}
                 </div>
               </div>
