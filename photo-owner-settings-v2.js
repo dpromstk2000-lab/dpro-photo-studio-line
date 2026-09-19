@@ -2,7 +2,7 @@
   "use strict";
 
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
-  const VERSION = "DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-1-2-UI-20260919";
+  const VERSION = "DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-5-SETTINGS-POLISH-UI-20260919";
   if (!C || !document.getElementById("view-settings")) return;
 
   const view = document.getElementById("view-settings");
@@ -11,12 +11,12 @@
 
   const GROUPS = [
     { id: "basic", label: "かんたん設定", note: "初回", desc: "店舗情報・営業時間" },
-    { id: "reservation", label: "予約設定", desc: "受付条件・予約ルール" },
-    { id: "staff", label: "スタッフ管理", desc: "追加・編集・停止" },
-    { id: "plans", label: "撮影プラン管理", desc: "撮影スペース・プラン" },
-    { id: "public", label: "公開・連携設定", desc: "HP・ブランド・LINE予約" },
-    { id: "crm", label: "顧客・CRM設定", desc: "フォロー・CSV・LINE" },
-    { id: "advanced", label: "詳細設定", desc: "文面・その他" },
+    { id: "reservation", label: "予約設定", note: "日常", desc: "受付条件・予約ルール" },
+    { id: "staff", label: "スタッフ管理", note: "日常", desc: "追加・編集・停止" },
+    { id: "plans", label: "撮影プラン管理", note: "日常", desc: "撮影スペース・プラン" },
+    { id: "public", label: "公開・連携設定", note: "必要時", desc: "HP・ブランド・LINE予約" },
+    { id: "crm", label: "顧客・CRM設定", note: "必要時", desc: "フォロー・CSV・LINE" },
+    { id: "advanced", label: "詳細設定", note: "詳細", desc: "文面・その他" },
   ];
 
   const ROLE_LABELS = {
@@ -115,7 +115,7 @@
     if (/予約受付設定/.test(h)) return "reservation";
     if (/スタッフ・撮影スペース・プラン|撮影スペース・プラン/.test(h)) return "plans";
     if (/予約画面・既存ホームページ連携/.test(h)) return "public";
-    if (/顧客フォロー機能|CSVデータ移行|LINE友だち・既存顧客/.test(h)) return "crm";
+    if (/顧客フォロー機能|顧客・CRM機能|CSVデータ移行|LINE友だち・既存顧客/.test(h)) return "crm";
     if (/文面テンプレート/.test(h)) return "advanced";
     return "advanced";
   }
@@ -147,7 +147,7 @@
     workspace.innerHTML = `
       <aside class="settings-v2-nav">
         <h3>設定メニュー</h3>
-        <p>必要な項目だけを開いて設定できます。</p>
+        <p>初回・日常・必要時の設定を分けています。</p>
         <div id="settingsV2NavList" class="settings-v2-nav-list"></div>
       </aside>
       <div id="settingsV2Content" class="settings-v2-content"></div>
@@ -155,7 +155,7 @@
     pageHead.insertAdjacentElement("afterend", workspace);
 
     const intro = pageHead.querySelector("p");
-    if (intro) intro.textContent = "初期設定と日常設定を分け、必要な項目だけ表示します。";
+    if (intro) intro.textContent = "初回設定・日常運用・必要時の連携を分け、必要な項目だけ表示します。";
 
     const navList = workspace.querySelector("#settingsV2NavList");
     navList.innerHTML = GROUPS.map((g) => `
