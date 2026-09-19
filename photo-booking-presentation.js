@@ -1,12 +1,13 @@
 (() => {
   "use strict";
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
-  const VERSION = "DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-UI-HOTFIX2-20260919";
+  const VERSION = "DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-1-SAVE-FEEDBACK-20260919";
   if (!C || !document.getElementById("view-settings")) return;
 
   const esc = (v) => C.escapeHtml(v ?? "");
   const token = () => String(C.getSessionToken("owner") || "").trim();
   let loadPromise = null;
+  let saveFeedbackTimer = null;
 
   async function request(path, options = {}) {
     const response = await fetch(`${C.CALENDAR_API_BASE_URL}${path}`, {
@@ -26,15 +27,52 @@
     return payload;
   }
 
-  function setStatus(message, error = false) {
+  function setStatus(message, error = false, success = false) {
     const el = document.getElementById("bookingPresentationStatus");
     if (!el) return;
     el.textContent = message;
-    el.style.color = error ? "#b64040" : "";
+    el.style.color = error ? "#b64040" : (success ? "#0b5e51" : "");
+    el.style.background = error ? "#fff1f1" : (success ? "#eaf8f3" : "");
+    el.style.border = error ? "1px solid #f1c7c7" : (success ? "1px solid #b9e4d5" : "");
+    el.style.fontWeight = success ? "800" : "";
+  }
+
+  function setSaveButton(state = "idle") {
+    const button = document.getElementById("bookingPresentationSave");
+    if (!button) return;
+
+    if (saveFeedbackTimer) {
+      window.clearTimeout(saveFeedbackTimer);
+      saveFeedbackTimer = null;
+    }
+
+    if (state === "saving") {
+      button.disabled = true;
+      button.textContent = "保存しています…";
+      button.setAttribute("aria-busy", "true");
+      return;
+    }
+
+    button.removeAttribute("aria-busy");
+
+    if (state === "saved") {
+      button.disabled = true;
+      button.textContent = "✓ 保存済み";
+      saveFeedbackTimer = window.setTimeout(() => {
+        button.disabled = false;
+        button.textContent = "この設定を保存";
+        saveFeedbackTimer = null;
+      }, 2200);
+      return;
+    }
+
+    button.disabled = false;
+    button.textContent = "この設定を保存";
   }
 
   function showError(error) {
     console.error(error);
+    setSaveButton("idle");
     setStatus(error?.message || "予約画面設定の処理に失敗しました。", true);
   }
 
@@ -94,10 +132,12 @@
       booking_channels: channels.length ? channels : ["web"],
     };
 
+    setSaveButton("saving");
     setStatus("保存しています…");
     const payload = await request("/api/admin/booking-presentation", { method: "POST", body });
     fill(payload.presentation || {});
-    setStatus("予約画面設定を保存しました。予約画面を再読み込みして確認してください。");
+    setSaveButton("saved");
+    setStatus("✓ 保存しました。公開予約画面にも反映されています。", false, true);
   }
 
   function mount() {
