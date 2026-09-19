@@ -1,0 +1,94 @@
+name: DPRO PHOTO BRUSHUP-8-4.1 Save Feedback
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  save-feedback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Source and drift gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA="527936ed5eeda607be605d4b83ee224bccc674a2"
+          WORKFLOW=".github/workflows/STEP-PHOTO-RESERVATION-CALENDAR-BRUSHUP-8-4-1-SAVE-FEEDBACK.yml"
+          HEAD_SHA="$(git rev-parse HEAD)"
+
+          if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+            PARENT_SHA="$(git rev-parse HEAD^)"
+            test "$PARENT_SHA" = "$BASE_SHA"
+            CHANGED="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+            test "$CHANGED" = "$WORKFLOW"
+          fi
+
+          test -f owner.html
+          test -f photo-booking-presentation.js
+          grep -F 'DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-UI-HOTFIX2-20260919' owner.html
+          grep -F 'const VERSION = "DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-UI-HOTFIX2-20260919";' photo-booking-presentation.js
+          grep -F 'setStatus("保存しています…");' photo-booking-presentation.js
+          grep -F '予約画面設定を保存しました。予約画面を再読み込みして確認してください。' photo-booking-presentation.js
+
+      - name: Patch save feedback
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwID0gUGF0aCgicGhvdG8tYm9va2luZy1wcmVzZW50YXRpb24uanMiKQpzID0gcC5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKCm9sZF92ZXJzaW9uID0gJ2NvbnN0IFZFUlNJT04gPSAiRFBSTy1QSE9UTy1CT09LSU5HLVBSRVNFTlRBVElPTi1CUlVTSFVQLTgtNC1VSS1IT1RGSVgyLTIwMjYwOTE5IjsnCm5ld192ZXJzaW9uID0gJ2NvbnN0IFZFUlNJT04gPSAiRFBSTy1QSE9UTy1CT09LSU5HLVBSRVNFTlRBVElPTi1CUlVTSFVQLTgtNC0xLVNBVkUtRkVFREJBQ0stMjAyNjA5MTkiOycKaWYgb2xkX3ZlcnNpb24gbm90IGluIHM6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJwcmVzZW50YXRpb24gdmVyc2lvbiBnYXRlIGZhaWxlZCIpCnMgPSBzLnJlcGxhY2Uob2xkX3ZlcnNpb24sIG5ld192ZXJzaW9uLCAxKQoKb2xkID0gJycnICBjb25zdCB0b2tlbiA9ICgpID0+IFN0cmluZyhDLmdldFNlc3Npb25Ub2tlbigib3duZXIiKSB8fCAiIikudHJpbSgpOwogIGxldCBsb2FkUHJvbWlzZSA9IG51bGw7CicnJwpuZXcgPSAnJycgIGNvbnN0IHRva2VuID0gKCkgPT4gU3RyaW5nKEMuZ2V0U2Vzc2lvblRva2VuKCJvd25lciIpIHx8ICIiKS50cmltKCk7CiAgbGV0IGxvYWRQcm9taXNlID0gbnVsbDsKICBsZXQgc2F2ZUZlZWRiYWNrVGltZXIgPSBudWxsOwonJycKaWYgb2xkIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgic2F2ZSBmZWVkYmFjayBzdGF0ZSBhbmNob3IgbWlzc2luZyIpCnMgPSBzLnJlcGxhY2Uob2xkLCBuZXcsIDEpCgpvbGQgPSAnJycgIGZ1bmN0aW9uIHNldFN0YXR1cyhtZXNzYWdlLCBlcnJvciA9IGZhbHNlKSB7CiAgICBjb25zdCBlbCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCJib29raW5nUHJlc2VudGF0aW9uU3RhdHVzIik7CiAgICBpZiAoIWVsKSByZXR1cm47CiAgICBlbC50ZXh0Q29udGVudCA9IG1lc3NhZ2U7CiAgICBlbC5zdHlsZS5jb2xvciA9IGVycm9yID8gIiNiNjQwNDAiIDogIiI7CiAgfQoKICBmdW5jdGlvbiBzaG93RXJyb3IoZXJyb3IpIHsKICAgIGNvbnNvbGUuZXJyb3IoZXJyb3IpOwogICAgc2V0U3RhdHVzKGVycm9yPy5tZXNzYWdlIHx8ICLkuojntITnlLvpnaLoqK3lrprjga7lh6bnkIbjgavlpLHmlZfjgZfjgb7jgZfjgZ/jgIIiLCB0cnVlKTsKICB9CicnJwpuZXcgPSAnJycgIGZ1bmN0aW9uIHNldFN0YXR1cyhtZXNzYWdlLCBlcnJvciA9IGZhbHNlLCBzdWNjZXNzID0gZmFsc2UpIHsKICAgIGNvbnN0IGVsID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImJvb2tpbmdQcmVzZW50YXRpb25TdGF0dXMiKTsKICAgIGlmICghZWwpIHJldHVybjsKICAgIGVsLnRleHRDb250ZW50ID0gbWVzc2FnZTsKICAgIGVsLnN0eWxlLmNvbG9yID0gZXJyb3IgPyAiI2I2NDA0MCIgOiAoc3VjY2VzcyA/ICIjMGI1ZTUxIiA6ICIiKTsKICAgIGVsLnN0eWxlLmJhY2tncm91bmQgPSBlcnJvciA/ICIjZmZmMWYxIiA6IChzdWNjZXNzID8gIiNlYWY4ZjMiIDogIiIpOwogICAgZWwuc3R5bGUuYm9yZGVyID0gZXJyb3IgPyAiMXB4IHNvbGlkICNmMWM3YzciIDogKHN1Y2Nlc3MgPyAiMXB4IHNvbGlkICNiOWU0ZDUiIDogIiIpOwogICAgZWwuc3R5bGUuZm9udFdlaWdodCA9IHN1Y2Nlc3MgPyAiODAwIiA6ICIiOwogIH0KCiAgZnVuY3Rpb24gc2V0U2F2ZUJ1dHRvbihzdGF0ZSA9ICJpZGxlIikgewogICAgY29uc3QgYnV0dG9uID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImJvb2tpbmdQcmVzZW50YXRpb25TYXZlIik7CiAgICBpZiAoIWJ1dHRvbikgcmV0dXJuOwoKICAgIGlmIChzYXZlRmVlZGJhY2tUaW1lcikgewogICAgICB3aW5kb3cuY2xlYXJUaW1lb3V0KHNhdmVGZWVkYmFja1RpbWVyKTsKICAgICAgc2F2ZUZlZWRiYWNrVGltZXIgPSBudWxsOwogICAgfQoKICAgIGlmIChzdGF0ZSA9PT0gInNhdmluZyIpIHsKICAgICAgYnV0dG9uLmRpc2FibGVkID0gdHJ1ZTsKICAgICAgYnV0dG9uLnRleHRDb250ZW50ID0gIuS/neWtmOOBl+OBpuOBhOOBvuOBmeKApiI7CiAgICAgIGJ1dHRvbi5zZXRBdHRyaWJ1dGUoImFyaWEtYnVzeSIsICJ0cnVlIik7CiAgICAgIHJldHVybjsKICAgIH0KCiAgICBidXR0b24ucmVtb3ZlQXR0cmlidXRlKCJhcmlhLWJ1c3kiKTsKCiAgICBpZiAoc3RhdGUgPT09ICJzYXZlZCIpIHsKICAgICAgYnV0dG9uLmRpc2FibGVkID0gdHJ1ZTsKICAgICAgYnV0dG9uLnRleHRDb250ZW50ID0gIuKckyDkv53lrZjmuIjjgb8iOwogICAgICBzYXZlRmVlZGJhY2tUaW1lciA9IHdpbmRvdy5zZXRUaW1lb3V0KCgpID0+IHsKICAgICAgICBidXR0b24uZGlzYWJsZWQgPSBmYWxzZTsKICAgICAgICBidXR0b24udGV4dENvbnRlbnQgPSAi44GT44Gu6Kit5a6a44KS5L+d5a2YIjsKICAgICAgICBzYXZlRmVlZGJhY2tUaW1lciA9IG51bGw7CiAgICAgIH0sIDIyMDApOwogICAgICByZXR1cm47CiAgICB9CgogICAgYnV0dG9uLmRpc2FibGVkID0gZmFsc2U7CiAgICBidXR0b24udGV4dENvbnRlbnQgPSAi44GT44Gu6Kit5a6a44KS5L+d5a2YIjsKICB9CgogIGZ1bmN0aW9uIHNob3dFcnJvcihlcnJvcikgewogICAgY29uc29sZS5lcnJvcihlcnJvcik7CiAgICBzZXRTYXZlQnV0dG9uKCJpZGxlIik7CiAgICBzZXRTdGF0dXMoZXJyb3I/Lm1lc3NhZ2UgfHwgIuS6iOe0hOeUu+mdouioreWumuOBruWHpueQhuOBq+WkseaVl+OBl+OBvuOBl+OBn+OAgiIsIHRydWUpOwogIH0KJycnCmlmIG9sZCBub3QgaW4gczoKICAgIHJhaXNlIFN5c3RlbUV4aXQoInN0YXR1cyBmdW5jdGlvbiBhbmNob3IgbWlzc2luZyIpCnMgPSBzLnJlcGxhY2Uob2xkLCBuZXcsIDEpCgpvbGQgPSAnJycgICAgc2V0U3RhdHVzKCLkv53lrZjjgZfjgabjgYTjgb7jgZnigKYiKTsKICAgIGNvbnN0IHBheWxvYWQgPSBhd2FpdCByZXF1ZXN0KCIvYXBpL2FkbWluL2Jvb2tpbmctcHJlc2VudGF0aW9uIiwgeyBtZXRob2Q6ICJQT1NUIiwgYm9keSB9KTsKICAgIGZpbGwocGF5bG9hZC5wcmVzZW50YXRpb24gfHwge30pOwogICAgc2V0U3RhdHVzKCLkuojntITnlLvpnaLoqK3lrprjgpLkv53lrZjjgZfjgb7jgZfjgZ/jgILkuojntITnlLvpnaLjgpLlho3oqq3jgb/ovrzjgb/jgZfjgabnorroqo3jgZfjgabjgY/jgaDjgZXjgYTjgIIiKTsKICB9CicnJwpuZXcgPSAnJycgICAgc2V0U2F2ZUJ1dHRvbigic2F2aW5nIik7CiAgICBzZXRTdGF0dXMoIuS/neWtmOOBl+OBpuOBhOOBvuOBmeKApiIpOwogICAgY29uc3QgcGF5bG9hZCA9IGF3YWl0IHJlcXVlc3QoIi9hcGkvYWRtaW4vYm9va2luZy1wcmVzZW50YXRpb24iLCB7IG1ldGhvZDogIlBPU1QiLCBib2R5IH0pOwogICAgZmlsbChwYXlsb2FkLnByZXNlbnRhdGlvbiB8fCB7fSk7CiAgICBzZXRTYXZlQnV0dG9uKCJzYXZlZCIpOwogICAgc2V0U3RhdHVzKCLinJMg5L+d5a2Y44GX44G+44GX44Gf44CC5YWs6ZaL5LqI57SE55S76Z2i44Gr44KC5Y+N5pig44GV44KM44Gm44GE44G+44GZ44CCIiwgZmFsc2UsIHRydWUpOwogIH0KJycnCmlmIG9sZCBub3QgaW4gczoKICAgIHJhaXNlIFN5c3RlbUV4aXQoInNhdmUgc3VjY2VzcyBhbmNob3IgbWlzc2luZyIpCnMgPSBzLnJlcGxhY2Uob2xkLCBuZXcsIDEpCgpwLndyaXRlX3RleHQocywgZW5jb2Rpbmc9InV0Zi04IikK' | base64 -d > /tmp/patch_presentation.py
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwID0gUGF0aCgib3duZXIuaHRtbCIpCnMgPSBwLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQoKb2xkID0gJzxzY3JpcHQgc3JjPSIuL3Bob3RvLWJvb2tpbmctcHJlc2VudGF0aW9uLmpzP3Y9RFBSTy1QSE9UTy1CT09LSU5HLVBSRVNFTlRBVElPTi1CUlVTSFVQLTgtNC1VSS1IT1RGSVgyLTIwMjYwOTE5Ij48L3NjcmlwdD4nCm5ldyA9ICc8c2NyaXB0IHNyYz0iLi9waG90by1ib29raW5nLXByZXNlbnRhdGlvbi5qcz92PURQUk8tUEhPVE8tQk9PS0lORy1QUkVTRU5UQVRJT04tQlJVU0hVUC04LTQtMS1TQVZFLUZFRURCQUNLLTIwMjYwOTE5Ij48L3NjcmlwdD4nCgppZiBvbGQgbm90IGluIHM6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJvd25lciBwcmVzZW50YXRpb24gY2FjaGUtYnVzdCBnYXRlIGZhaWxlZCIpCnMgPSBzLnJlcGxhY2Uob2xkLCBuZXcsIDEpCgpwLndyaXRlX3RleHQocywgZW5jb2Rpbmc9InV0Zi04IikK' | base64 -d > /tmp/patch_owner.py
+          python -m py_compile /tmp/patch_presentation.py /tmp/patch_owner.py
+          python /tmp/patch_presentation.py
+          python /tmp/patch_owner.py
+
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check photo-booking-presentation.js
+          grep -F 'DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-1-SAVE-FEEDBACK-20260919' owner.html
+          grep -F 'const VERSION = "DPRO-PHOTO-BOOKING-PRESENTATION-BRUSHUP-8-4-1-SAVE-FEEDBACK-20260919";' photo-booking-presentation.js
+          grep -F 'function setSaveButton(state = "idle")' photo-booking-presentation.js
+          grep -F 'button.textContent = "保存しています…";' photo-booking-presentation.js
+          grep -F 'button.textContent = "✓ 保存済み";' photo-booking-presentation.js
+          grep -F '✓ 保存しました。公開予約画面にも反映されています。' photo-booking-presentation.js
+          git diff --check
+
+      - name: Scope gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+          changed = set(subprocess.check_output(["git","diff","--name-only"], text=True).split())
+          allowed = {"owner.html", "photo-booking-presentation.js"}
+          if changed != allowed:
+              raise SystemExit(f"scope gate failed changed={sorted(changed)}")
+          PY
+
+      - name: Self-delete workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f ".github/workflows/STEP-PHOTO-RESERVATION-CALENDAR-BRUSHUP-8-4-1-SAVE-FEEDBACK.yml"
+          git diff --check
+
+      - name: Commit BRUSHUP-8-4.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "dpro-photo-calendar-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add owner.html photo-booking-presentation.js .github/workflows
+          git diff --cached --check
+          git commit -m "Improve PHOTO booking presentation save feedback BRUSHUP-8-4.1"
+          git push origin HEAD:main
