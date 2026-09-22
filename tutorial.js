@@ -44,7 +44,20 @@
     launcher = doc.createElement("button"); launcher.id = "dproTutorialLauncher"; launcher.type = "button";
     launcher.addEventListener("click", () => resume()); doc.body.appendChild(launcher); return launcher;
   }
-  function updateLauncher() { const s = readState(); const l = makeLauncher(); l.textContent = s.completed ? "操作ガイドをもう一度見る" : (s.step ? "操作ガイドを再開" : "操作ガイド"); l.hidden = Boolean(s.active); }
+
+  function updateLauncher() {
+    const s = readState();
+    const l = makeLauncher();
+
+    if (s.completed === true && s.active !== true) {
+      l.textContent = "操作ガイド";
+      l.hidden = true;
+      return;
+    }
+
+    l.textContent = s.step ? "操作ガイドを再開" : "操作ガイド";
+    l.hidden = Boolean(s.active);
+  }
 
   function closeTutorial() { removeHighlight(); restorePanels(); if (card) { card.remove(); card = null; } writeState({ active: false }); updateLauncher(); }
   function skipTutorial() { removeHighlight(); restorePanels(); if (card) { card.remove(); card = null; } writeState({ active: false, completed: true, step: 10 }); updateLauncher(); }
@@ -57,7 +70,14 @@
     render(next.step);
   }
   function nextStep(step) {
-    if (step.complete) { removeHighlight(); restorePanels(); if (card) { card.remove(); card = null; } writeState({ active:false,completed:true,step:10 }); updateLauncher(); makeLauncher().focus(); return; }
+    if (step.complete) {
+      removeHighlight();
+      restorePanels();
+      if (card) { card.remove(); card = null; }
+      writeState({ active:false,completed:true,step:10 });
+      updateLauncher();
+      return;
+    }
     if (step.next) { writeState({ active:true,step:step.step+1 }); global.location.href = step.next; return; }
     navigate(step.step + 1);
   }

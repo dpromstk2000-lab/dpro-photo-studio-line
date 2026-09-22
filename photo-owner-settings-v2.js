@@ -2,7 +2,7 @@
   "use strict";
 
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
-  const VERSION = "DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-10-V21-EVERGREEN-20260922";
+  const VERSION = "DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-10-HOTFIX2-V21-20260922";
   if (!C || !document.getElementById("view-settings")) return;
 
   const view = document.getElementById("view-settings");
@@ -752,7 +752,80 @@
     input.setAttribute("name", "dpro_photo_owner_management_code");
   }
 
+
+  let v21ReservationFetchGuardInstalled = false;
+  let v21TutorialLauncherObserver = null;
+
+  function installV21ReservationSearchLimitGuard() {
+    if (v21ReservationFetchGuardInstalled) return;
+    v21ReservationFetchGuardInstalled = true;
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    globalThis.fetch = function dproPhotoV21FetchGuard(input, init) {
+      let nextInput = input;
+      try {
+        const rawUrl = input instanceof Request ? input.url : String(input || "");
+        const url = new URL(rawUrl, globalThis.location.href);
+
+        if (url.pathname.endsWith("/api/admin/reservations")) {
+          const current = Number(url.searchParams.get("limit") || "0");
+          if (!Number.isFinite(current) || current < 1 || current > 100) {
+            url.searchParams.set("limit", "100");
+          }
+
+          if (input instanceof Request) {
+            nextInput = new Request(url.toString(), input);
+          } else {
+            nextInput = url.toString();
+          }
+        }
+      } catch {
+        nextInput = input;
+      }
+      return nativeFetch(nextInput, init);
+    };
+  }
+
+  function ensureV21ReservationSearchHint() {
+    const button = document.getElementById("reservationSearchBtn");
+    if (!button) return;
+    const panel = button.closest("section.panel");
+    if (!panel || document.getElementById("reservationSearchV21Hint")) return;
+
+    const hint = document.createElement("div");
+    hint.id = "reservationSearchV21Hint";
+    hint.className = "auth-note";
+    hint.style.cssText = "margin-top:10px;font-size:11px;line-height:1.55;";
+    hint.textContent = "予約検索は安全のため最大100件まで表示します。条件を追加して絞り込んでください。";
+    panel.appendChild(hint);
+  }
+
+  function hideCompletedTutorialLauncher() {
+    const sync = () => {
+      try {
+        const data = globalThis.DPRO_PHOTO_TUTORIAL_V11;
+        const ns = data?.namespace;
+        if (!ns) return;
+        const state = JSON.parse(globalThis.localStorage.getItem(ns) || "null") || {};
+        const launcher = document.getElementById("dproTutorialLauncher");
+        if (state.completed === true && state.active !== true && launcher) {
+          launcher.hidden = true;
+        }
+      } catch {}
+    };
+
+    sync();
+
+    if (!v21TutorialLauncherObserver && document.body) {
+      v21TutorialLauncherObserver = new MutationObserver(sync);
+      v21TutorialLauncherObserver.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
   function setupV21Brushup() {
+    installV21ReservationSearchLimitGuard();
+    hideCompletedTutorialLauncher();
+    ensureV21ReservationSearchHint();
     injectV21Style();
     ensureV21SaveState();
     decorateV21Switches();
