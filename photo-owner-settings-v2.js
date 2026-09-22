@@ -2,7 +2,7 @@
   "use strict";
 
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
-  const VERSION = "DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-5-SETTINGS-POLISH-UI-20260919";
+  const VERSION = "DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-10-V21-EVERGREEN-20260922";
   if (!C || !document.getElementById("view-settings")) return;
 
   const view = document.getElementById("view-settings");
@@ -526,15 +526,256 @@
     if (button) window.setTimeout(() => button.click(), 80);
   }
 
+
+  /* DPRO PHOTO BRUSHUP-10 / V2.1 EVERGREEN UX HARDENING */
+  let v21SettingsDirty = false;
+  let v21SettingsBound = false;
+  let v21DependencyBound = false;
+
+  const V21_FOLLOWUP_DEPENDENTS = Object.freeze([
+    "featureLifecycleSearch",
+    "featureBirthdaySearch",
+    "featureReturnCycleSearch",
+    "featureLineSegment",
+  ]);
+
+  const V21_FEATURE_EFFECTS = Object.freeze({
+    featureCustomerFollowup: "ON：顧客フォロー画面を表示します。",
+    featureSubjectHistory: "ON：撮影対象者ごとの履歴を顧客運用で利用します。",
+    featureLifecycleSearch: "ON：年齢・ライフイベント検索を顧客フォロー画面で利用します。顧客フォローが必須です。",
+    featureBirthdaySearch: "ON：誕生日検索を顧客フォロー画面で利用します。顧客フォローが必須です。",
+    featureReturnCycleSearch: "ON：再来店時期検索を顧客フォロー画面で利用します。顧客フォローが必須です。",
+    featureLineSegment: "ON：顧客フォロー画面にLINEセグメント配信を表示します。顧客フォローが必須です。本番送信はLINE契約設定が必要です。",
+    featureCsvMigration: "ON：顧客・CRM設定にCSVデータ移行を表示します。",
+    featureLineCustomerLink: "ON：顧客・CRM設定に既存顧客とLINE再紐付けを表示します。本人確認・最終確認を必須にします。",
+  });
+
+  function injectV21Style() {
+    if (document.getElementById("photoOwnerV21EvergreenStyle")) return;
+    const style = document.createElement("style");
+    style.id = "photoOwnerV21EvergreenStyle";
+    style.textContent = `
+      .v21-save-state{margin:10px 0 0;padding:8px 10px;border:1px solid #cfded9;border-radius:10px;background:#f7faf9;color:var(--muted,#647b78);font-size:11px;line-height:1.5}
+      .v21-save-state.is-dirty{border-color:#e2c078;background:#fff8e8;color:#795510;font-weight:800}
+      .v21-switch-label{display:flex!important;align-items:center;gap:9px;min-height:44px;padding:5px 2px;cursor:pointer}
+      .v21-switch-input{appearance:none;-webkit-appearance:none;width:42px!important;height:24px!important;min-width:42px;margin:0!important;border:1px solid #a9bbb6!important;border-radius:999px!important;background:#dfe8e5!important;position:relative;cursor:pointer;transition:.18s}
+      .v21-switch-input::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.22);transition:.18s}
+      .v21-switch-input:checked{background:#0f7562!important;border-color:#0f7562!important}
+      .v21-switch-input:checked::after{transform:translateX(18px)}
+      .v21-switch-input:focus-visible{outline:3px solid rgba(15,117,98,.22);outline-offset:2px}
+      .v21-dependency-box{margin-top:10px;padding:11px 12px;border:1px solid #cfded9;border-radius:12px;background:#f7faf9}
+      .v21-dependency-box strong{display:block;font-size:12px;margin-bottom:5px}
+      .v21-dependency-list{display:grid;gap:5px;color:var(--muted,#647b78);font-size:11px;line-height:1.55}
+      .v21-dependency-message{margin-top:8px;padding:7px 9px;border-radius:9px;background:#eef7f4;color:#225f54;font-size:11px;font-weight:750}
+      .v21-dependency-message.warn{background:#fff5e8;color:#825b11}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureV21SaveState() {
+    const nav = document.querySelector("#settingsV2Workspace .settings-v2-nav");
+    if (!nav) return null;
+    let el = document.getElementById("settingsV2SaveState");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "settingsV2SaveState";
+      el.className = "v21-save-state";
+      nav.appendChild(el);
+    }
+    return el;
+  }
+
+  function setV21Dirty(dirty) {
+    v21SettingsDirty = Boolean(dirty);
+    const el = ensureV21SaveState();
+    if (!el) return;
+    el.classList.toggle("is-dirty", v21SettingsDirty);
+    el.textContent = v21SettingsDirty
+      ? "● 未保存の変更があります。画面を移動する前に保存してください。"
+      : "✓ 現在の設定は保存済みです。";
+  }
+
+  function decorateV21Switches() {
+    const content = document.getElementById("settingsV2Content");
+    if (!content) return;
+
+    content.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      if (input.closest(".staff-v2-modal")) return;
+      input.classList.add("v21-switch-input");
+      const label = input.closest("label");
+      if (label) label.classList.add("v21-switch-label");
+    });
+  }
+
+  function ensureV21DependencyBox() {
+    const anchor = document.getElementById("featureLineCustomerLink");
+    const panel = anchor?.closest("section.panel");
+    if (!panel) return null;
+
+    let box = document.getElementById("settingsV2DependencyBox");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "settingsV2DependencyBox";
+      box.className = "v21-dependency-box";
+      box.innerHTML = `
+        <strong>機能の依存関係・影響</strong>
+        <div class="v21-dependency-list">
+          <span>・年齢/誕生日/再来店時期検索 → 「顧客フォロー」が必要</span>
+          <span>・LINEセグメント配信 → 「顧客フォロー」が必要。本番送信はLINE契約設定も必要</span>
+          <span>・CSV移行 → 顧客・CRM設定に安全な事前検査/本登録画面を表示</span>
+          <span>・LINE再紐付け → 顧客・CRM設定に本人確認/最終確認画面を表示</span>
+        </div>
+        <div id="settingsV2DependencyMessage" class="v21-dependency-message">現在のON/OFFを確認しています。</div>
+      `;
+      const head = panel.querySelector(".panel-head");
+      if (head) head.insertAdjacentElement("afterend", box);
+      else panel.prepend(box);
+    }
+    return box;
+  }
+
+  function renderV21DependencyState(message = "") {
+    ensureV21DependencyBox();
+    const follow = document.getElementById("featureCustomerFollowup");
+    const active = V21_FOLLOWUP_DEPENDENTS
+      .map((id) => document.getElementById(id))
+      .filter((x) => x?.checked);
+
+    const el = document.getElementById("settingsV2DependencyMessage");
+    if (!el) return;
+
+    if (message) {
+      el.textContent = message;
+      el.classList.toggle("warn", /OFF|解除|必須/.test(message));
+      return;
+    }
+
+    if (active.length && !follow?.checked) {
+      el.textContent = "依存矛盾があります。顧客フォローをONにしてください。";
+      el.classList.add("warn");
+      return;
+    }
+
+    el.classList.remove("warn");
+    el.textContent = active.length
+      ? `依存関係OK｜顧客フォロー連動機能 ${active.length}件がONです。`
+      : "依存関係OK｜必要な機能だけONにできます。";
+  }
+
+  function bindV21Dependencies() {
+    if (v21DependencyBound) return;
+    v21DependencyBound = true;
+
+    view.addEventListener("change", (event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") return;
+
+      const follow = document.getElementById("featureCustomerFollowup");
+      if (V21_FOLLOWUP_DEPENDENTS.includes(input.id) && input.checked && follow && !follow.checked) {
+        follow.checked = true;
+        setV21Dirty(true);
+        renderV21DependencyState("依存する機能をONにしたため、「顧客フォロー」も自動でONにしました。");
+        return;
+      }
+
+      if (input.id === "featureCustomerFollowup" && !input.checked) {
+        const active = V21_FOLLOWUP_DEPENDENTS
+          .map((id) => document.getElementById(id))
+          .filter((x) => x?.checked);
+
+        if (active.length) {
+          const names = active.map((x) => x.closest("label")?.textContent?.trim() || x.id).join("、");
+          const ok = window.confirm(
+            `「顧客フォロー」をOFFにすると、次の連動機能もOFFになります。\n\n${names}\n\nOFFにしますか？`
+          );
+          if (!ok) {
+            input.checked = true;
+            renderV21DependencyState("OFFを取り消しました。連動機能はそのまま利用できます。");
+            return;
+          }
+          active.forEach((x) => { x.checked = false; });
+          renderV21DependencyState("顧客フォローと連動機能をOFFにしました。保存すると反映されます。");
+          return;
+        }
+      }
+
+      renderV21DependencyState();
+    });
+  }
+
+  function addV21FeatureEffects() {
+    Object.entries(V21_FEATURE_EFFECTS).forEach(([id, text]) => {
+      const input = document.getElementById(id);
+      const label = input?.closest("label");
+      if (!label || label.dataset.v21Effect === "1") return;
+      label.dataset.v21Effect = "1";
+      label.title = text;
+      const note = document.createElement("small");
+      note.style.cssText = "display:block;margin-left:51px;margin-top:-2px;margin-bottom:4px;color:var(--muted,#647b78);font-size:10px;line-height:1.4";
+      note.textContent = text;
+      label.insertAdjacentElement("afterend", note);
+    });
+  }
+
+  function bindV21DirtyTracking() {
+    if (v21SettingsBound) return;
+    v21SettingsBound = true;
+
+    const content = document.getElementById("settingsV2Content");
+    if (!content) return;
+
+    const mark = (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)) return;
+      if (target.closest(".staff-v2-modal")) return;
+      setV21Dirty(true);
+    };
+
+    content.addEventListener("input", mark);
+    content.addEventListener("change", mark);
+
+    window.addEventListener("beforeunload", (event) => {
+      if (!v21SettingsDirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+  }
+
+  function hardenV21ManagementCodeInput() {
+    const input = document.getElementById("adminCodeInput");
+    if (!input) return;
+    input.setAttribute("autocomplete", "new-password");
+    input.setAttribute("autocapitalize", "off");
+    input.setAttribute("spellcheck", "false");
+    input.setAttribute("data-1p-ignore", "true");
+    input.setAttribute("data-lpignore", "true");
+    input.setAttribute("name", "dpro_photo_owner_management_code");
+  }
+
+  function setupV21Brushup() {
+    injectV21Style();
+    ensureV21SaveState();
+    decorateV21Switches();
+    addV21FeatureEffects();
+    ensureV21DependencyBox();
+    bindV21Dependencies();
+    bindV21DirtyTracking();
+    hardenV21ManagementCodeInput();
+    renderV21DependencyState();
+  }
+
   function boot() {
     injectStyle();
     ensureWorkspace();
     syncPanels();
     ensureStaffModal();
+    setupV21Brushup();
 
     window.addEventListener("dpro:photo-settings-rendered", () => {
       window.setTimeout(() => {
         syncPanels();
+        setupV21Brushup();
+        setV21Dirty(false);
         if (activeGroup === "staff") loadStaff(true);
       }, 0);
     });
