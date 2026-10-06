@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "DPRO-PHOTO-FEATURE-SWITCH-UI-V2-20261006";
+  const VERSION = "DPRO-PHOTO-FEATURE-SWITCH-UI-V2-HOTFIX1-20261006";
   const $ = (id) => document.getElementById(id);
 
   const DESCRIPTIONS = Object.freeze({
@@ -36,8 +36,7 @@
       }
       .feature-simple-main-copy strong{display:block;font-size:16px;color:#12312e}
       .feature-simple-main-copy span{display:block;margin-top:5px;color:#607773;font-size:12px;line-height:1.6}
-      .feature-simple-main .v21-switch-label{padding:0!important;min-height:0!important}
-      .feature-simple-main .v21-switch-label{font-size:0}
+      .feature-simple-main .v21-switch-label{padding:0!important;min-height:0!important;font-size:0}
       .feature-simple-main .v21-switch-input{margin:0!important}
       .feature-simple-details{
         border:1px solid #d8e4e1;border-radius:14px;background:#fff;overflow:hidden
@@ -50,8 +49,7 @@
       .feature-simple-details>summary::after{content:"＋";font-size:18px;color:#49736b}
       .feature-simple-details[open]>summary::after{content:"－"}
       .feature-simple-detail-grid{
-        display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;
-        padding:0 13px 13px
+        display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;padding:0 13px 13px
       }
       .feature-simple-card{
         min-width:0;padding:13px;border:1px solid #dfe8e5;border-radius:12px;background:#fbfcfc
@@ -93,15 +91,14 @@
   function cleanEffectNotes(panel) {
     panel.querySelectorAll("small").forEach((node) => {
       const style = String(node.getAttribute("style") || "");
-      if (style.includes("margin-left:51px")) {
+      if (style.includes("margin-left:51px") && !node.classList.contains("feature-simple-hidden-effect")) {
         node.classList.add("feature-simple-hidden-effect");
       }
     });
   }
 
   function takeLabel(id) {
-    const input = $(id);
-    return input?.closest("label") || null;
+    return $(id)?.closest("label") || null;
   }
 
   function makeCard(id) {
@@ -122,7 +119,7 @@
     return card;
   }
 
-  function simplifyDependency(panel) {
+  function simplifyDependency() {
     const box = $("settingsV2DependencyBox");
     if (!box || box.dataset.simpleUi === "1") return;
 
@@ -144,27 +141,37 @@
 
     const anchor = $("featureCustomerFollowup");
     const panel = anchor?.closest("section.panel");
-    if (!panel) return;
+    if (!panel) return false;
 
     panel.classList.add("feature-simple-panel");
 
     const title = panel.querySelector(".panel-head h3");
     const subtitle = panel.querySelector(".panel-head p");
-    if (title) title.textContent = "使う機能";
-    if (subtitle) subtitle.textContent = "この店舗で使うものだけONにしてください。OFFの機能は日常画面から隠れます。";
+
+    if (title && title.textContent !== "使う機能") {
+      title.textContent = "使う機能";
+    }
+    const subtitleText = "この店舗で使うものだけONにしてください。OFFの機能は日常画面から隠れます。";
+    if (subtitle && subtitle.textContent !== subtitleText) {
+      subtitle.textContent = subtitleText;
+    }
 
     cleanEffectNotes(panel);
-    simplifyDependency(panel);
+    simplifyDependency();
 
     if (decorated || $("featureSimpleLayout")) {
       decorated = true;
-      return;
+      return true;
     }
 
     const formGrid = panel.querySelector(".form-grid");
-    if (!formGrid) return;
+    if (!formGrid) return false;
 
-    [...formGrid.children].forEach((field) => field.classList.add("feature-simple-source-field"));
+    [...formGrid.children].forEach((field) => {
+      if (!field.classList.contains("feature-simple-source-field")) {
+        field.classList.add("feature-simple-source-field");
+      }
+    });
 
     const layout = document.createElement("div");
     layout.id = "featureSimpleLayout";
@@ -203,6 +210,7 @@
     formGrid.insertAdjacentElement("afterend", layout);
 
     decorated = true;
+    return true;
   }
 
   function boot() {
@@ -211,14 +219,13 @@
     window.addEventListener("dpro:photo-settings-rendered", () => {
       setTimeout(() => {
         decorate();
-        simplifyDependency($("featureCustomerFollowup")?.closest("section.panel"));
+        simplifyDependency();
       }, 0);
     });
 
-    const observer = new MutationObserver(() => {
-      if ($("featureCustomerFollowup")) decorate();
-    });
-    if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+    // HOTFIX1:
+    // Global MutationObserver was removed because changing title/subtitle
+    // could trigger an endless childList mutation loop and block auth/API tasks.
   }
 
   if (document.readyState === "loading") {
@@ -227,5 +234,8 @@
     boot();
   }
 
-  window.DPRO_PHOTO_FEATURE_SWITCH_UI_V2 = Object.freeze({ version: VERSION, decorate });
+  window.DPRO_PHOTO_FEATURE_SWITCH_UI_V2 = Object.freeze({
+    version: VERSION,
+    decorate
+  });
 })();
