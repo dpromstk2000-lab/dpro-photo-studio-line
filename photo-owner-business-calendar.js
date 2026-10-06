@@ -7,7 +7,29 @@
   const API = C.CALENDAR_API_BASE_URL;
   const esc = (v) => C.escapeHtml(v ?? "");
   const token = () => String(C.getSessionToken("owner") || "").trim();
+  let ownerSessionPromise = null;
   const state = { rows: [], editingId: "", filterMonth: "" };
+
+  async function ensureOwnerSession() {
+    const current = token();
+    if (current) return current;
+
+    if (!C.isDemoMode?.()) return "";
+    if (ownerSessionPromise) return ownerSessionPromise;
+
+    ownerSessionPromise = (async () => {
+      const code = String(C.getAdminCode?.() || C.DEFAULT_ADMIN_CODE || "1234").trim();
+      if (!code) return "";
+      await C.verifyAdminCode(code);
+      return token();
+    })();
+
+    try {
+      return await ownerSessionPromise;
+    } finally {
+      ownerSessionPromise = null;
+    }
+  }
 
   function ymd(d) {
     const x = new Date(d);
@@ -186,13 +208,20 @@
 
   async function load(){
     ensurePanel();
-    if(!token()){setMessage("オーナーログイン後に営業カレンダーを読み込めます。");return}
+    let sessionToken = "";
+    try {
+      sessionToken = await ensureOwnerSession();
+    } catch (e) {
+      setMessage(e?.message || "オーナー認証に失敗しました。", true);
+      return;
+    }
+    if(!sessionToken){setMessage("オーナーログイン後に営業カレンダーを読み込めます。");return}
     const from=today(),to=addDays(from,365);
     setMessage("営業カレンダーを読み込んでいます...");
     try{
       const u=new URL(`${API}/api/admin/calendar-overrides`);
       u.searchParams.set("from",from);u.searchParams.set("to",to);
-      const response=await fetch(u,{headers:{Accept:"application/json","X-Owner-Session":token()},cache:"no-store"});
+      const response=await fetch(u,{headers:{Accept:"application/json","X-Owner-Session":sessionToken},cache:"no-store"});
       const payload=await response.json().catch(()=>null);
       if(!response.ok||payload?.ok===false) throw new Error(payload?.error||`HTTP ${response.status}`);
       state.rows=(Array.isArray(payload.rows)?payload.rows:[]).filter(r=>["closed","special_open","event_label"].includes(r.override_type)&&r.is_active!==false);
