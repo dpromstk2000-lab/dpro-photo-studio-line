@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "DPRO-PHOTO-CRM-BRUSHUP-5-UI-POLISH1-20260918";
+  const VERSION = "DPRO-PHOTO-FEATURE-SWITCH-PHASE0-SEGMENT-FIX2-20261006";
   const API_BASE = "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v5";
   const state = {
     selected: new Set(),
@@ -58,9 +58,12 @@
     return payload;
   }
 
-  function linePanel() {
-    return $("lineSegmentMount");
-  }
+  function linePanel() { return $("lineSegmentMount"); }
+function featureEnabled() {
+  const features = window.DPRO_PHOTO_FEATURES;
+  if (features && typeof features.isEnabled === "function") return features.isEnabled("line_segment", false);
+  return $("featureLineSegment")?.checked === true;
+}
 
   function currentRows() {
     return [...document.querySelectorAll("#followupResults .customer-row")];
@@ -462,8 +465,7 @@
     return `<span class="badge ${tone}">${esc(label)}</span>`;
   }
 
-  async function loadRecent() {
-    if (!$("segmentRecentList")) return;
+  async function loadRecent() { if (!featureEnabled()) return; if (!$("segmentRecentList")) return;
     try {
       const result = await api("/api/admin/segments/recent?limit=10");
       const rows = result.campaigns || [];
@@ -480,8 +482,7 @@
     }
   }
 
-  async function loadCapability() {
-    try {
+  async function loadCapability() { if (!featureEnabled()) return; try {
       const result = await api("/api/admin/segments/capability");
       state.capability = result.capability || null;
       if ($("segmentCapabilityBadge")) $("segmentCapabilityBadge").innerHTML = capabilityBadge(state.capability);
@@ -510,10 +511,7 @@
     $("segmentMessageBody")?.addEventListener("input", updateCharCount);
     $("segmentRecentRefreshBtn")?.addEventListener("click", loadRecent);
 
-    const refreshSegmentSoon = () => setTimeout(() => {
-      loadCapability();
-      loadRecent();
-    }, 350);
+    const refreshSegmentSoon = () => setTimeout(() => { if (featureEnabled()) { loadCapability(); loadRecent(); } }, 350);
 
     $("refreshAllBtn")?.addEventListener("click", refreshSegmentSoon);
     $("followupRefreshBtn")?.addEventListener("click", refreshSegmentSoon);
@@ -542,9 +540,11 @@
       injectSelectionControls();
     }
 
-    loadCapability();
-    loadRecent();
-    updateCharCount();
+    if (featureEnabled()) { loadCapability(); loadRecent(); }
+window.addEventListener("dpro:photo-features-applied", (event) => {
+  if (event?.detail?.flags?.line_segment === true) { loadCapability(); loadRecent(); }
+});
+updateCharCount();
   }
 
   function boot() {

@@ -8,6 +8,7 @@
   <title>DPROフォトスタジオ｜写真館PC管理</title>
   <!-- Version: STUDIO-11-OWNER-FINAL-INTEGRATION-20260715 -->
   <script src="./config.js?v=DPRO-TUTORIAL-PHOTO-V1.1-20260828"></script>
+  <script src="./photo-feature-switch-master.js?v=DPRO-PHOTO-FEATURE-SWITCH-PHASE0-FIX2-20261006"></script>
   <style>
     :root {
       --green-950: #073f39;
@@ -1359,12 +1360,7 @@
       $("featureLineSegment").checked = flags.line_segment === true;
       $("featureCsvMigration").checked = flags.csv_migration === true;
       $("featureLineCustomerLink").checked = flags.line_customer_link === true;
-      window.dispatchEvent(new CustomEvent("dpro:photo-settings-rendered", {
-        detail: {
-          csvMigration: flags.csv_migration === true,
-          lineCustomerLink: flags.line_customer_link === true
-        }
-      }));
+      window.dispatchEvent(new CustomEvent("dpro:photo-settings-rendered", { detail: { featureFlags: { ...flags }, csvMigration: flags.csv_migration === true, lineCustomerLink: flags.line_customer_link === true } }));
       $("followupNavBtn").hidden = flags.customer_followup !== true;
       if (!$("followupTargetYear").value) $("followupTargetYear").value = new Date().getFullYear();
       renderBusinessHours(data.business_hours || []);

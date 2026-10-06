@@ -2,7 +2,7 @@
   "use strict";
 
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
-  const VERSION = "DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-10-HOTFIX2-V21-20260922";
+  const VERSION = "DPRO-PHOTO-FEATURE-SWITCH-PHASE0-FIX2-20261006";
   if (!C || !document.getElementById("view-settings")) return;
 
   const view = document.getElementById("view-settings");
@@ -11,11 +11,11 @@
 
   const GROUPS = [
     { id: "basic", label: "かんたん設定", note: "初回", desc: "店舗情報・営業時間" },
-    { id: "reservation", label: "予約設定", note: "日常", desc: "受付条件・予約ルール" },
+    { id: "reservation", label: "予約設定", note: "日常", desc: "受付条件・予約ルール" }, { id: "features", label: "使う機能", note: "かんたん", desc: "必要な機能だけON" },
     { id: "staff", label: "スタッフ管理", note: "日常", desc: "追加・編集・停止" },
     { id: "plans", label: "撮影プラン管理", note: "日常", desc: "撮影スペース・プラン" },
     { id: "public", label: "公開・連携設定", note: "必要時", desc: "HP・ブランド・LINE予約" },
-    { id: "crm", label: "顧客・CRM設定", note: "必要時", desc: "フォロー・CSV・LINE" },
+    { id: "crm", label: "顧客・LINE詳細", note: "必要時", desc: "CSV移行・再紐付け" },
     { id: "advanced", label: "詳細設定", note: "詳細", desc: "文面・その他" },
   ];
 
@@ -115,7 +115,7 @@
     if (/予約受付設定/.test(h)) return "reservation";
     if (/スタッフ・撮影スペース・プラン|撮影スペース・プラン/.test(h)) return "plans";
     if (/予約画面・既存ホームページ連携/.test(h)) return "public";
-    if (/顧客フォロー機能|顧客・CRM機能|CSVデータ移行|LINE友だち・既存顧客/.test(h)) return "crm";
+    if (/顧客・CRM機能/.test(h)) return "features"; if (/顧客フォロー機能|CSVデータ移行|LINE友だち・既存顧客/.test(h)) return "crm";
     if (/文面テンプレート/.test(h)) return "advanced";
     return "advanced";
   }
