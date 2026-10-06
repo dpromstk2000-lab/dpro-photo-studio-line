@@ -1,0 +1,58 @@
+name: DPRO Photo Business Calendar Demo Auth Fix
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch demo owner session bootstrap
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64
+          code = base64.b64decode("ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwYXRoID0gUGF0aCgicGhvdG8tb3duZXItYnVzaW5lc3MtY2FsZW5kYXIuanMiKQppZiBub3QgcGF0aC5leGlzdHMoKToKICAgIHJhaXNlIFN5c3RlbUV4aXQoIkVSUk9SOiBwaG90by1vd25lci1idXNpbmVzcy1jYWxlbmRhci5qcyBub3QgZm91bmQiKQoKcyA9IHBhdGgucmVhZF90ZXh0KGVuY29kaW5nPSJ1dGYtOCIpCgpvbGQxID0gJyAgY29uc3QgdG9rZW4gPSAoKSA9PiBTdHJpbmcoQy5nZXRTZXNzaW9uVG9rZW4oIm93bmVyIikgfHwgIiIpLnRyaW0oKTtcbiAgY29uc3Qgc3RhdGUgPSB7IHJvd3M6IFtdLCBlZGl0aW5nSWQ6ICIiLCBmaWx0ZXJNb250aDogIiIgfTsnCm5ldzEgPSAnICBjb25zdCB0b2tlbiA9ICgpID0+IFN0cmluZyhDLmdldFNlc3Npb25Ub2tlbigib3duZXIiKSB8fCAiIikudHJpbSgpO1xuICBsZXQgb3duZXJTZXNzaW9uUHJvbWlzZSA9IG51bGw7XG4gIGNvbnN0IHN0YXRlID0geyByb3dzOiBbXSwgZWRpdGluZ0lkOiAiIiwgZmlsdGVyTW9udGg6ICIiIH07XG5cbiAgYXN5bmMgZnVuY3Rpb24gZW5zdXJlT3duZXJTZXNzaW9uKCkge1xuICAgIGNvbnN0IGN1cnJlbnQgPSB0b2tlbigpO1xuICAgIGlmIChjdXJyZW50KSByZXR1cm4gY3VycmVudDtcblxuICAgIGlmICghQy5pc0RlbW9Nb2RlPy4oKSkgcmV0dXJuICIiO1xuICAgIGlmIChvd25lclNlc3Npb25Qcm9taXNlKSByZXR1cm4gb3duZXJTZXNzaW9uUHJvbWlzZTtcblxuICAgIG93bmVyU2Vzc2lvblByb21pc2UgPSAoYXN5bmMgKCkgPT4ge1xuICAgICAgY29uc3QgY29kZSA9IFN0cmluZyhDLmdldEFkbWluQ29kZT8uKCkgfHwgQy5ERUZBVUxUX0FETUlOX0NPREUgfHwgIjEyMzQiKS50cmltKCk7XG4gICAgICBpZiAoIWNvZGUpIHJldHVybiAiIjtcbiAgICAgIGF3YWl0IEMudmVyaWZ5QWRtaW5Db2RlKGNvZGUpO1xuICAgICAgcmV0dXJuIHRva2VuKCk7XG4gICAgfSkoKTtcblxuICAgIHRyeSB7XG4gICAgICByZXR1cm4gYXdhaXQgb3duZXJTZXNzaW9uUHJvbWlzZTtcbiAgICB9IGZpbmFsbHkge1xuICAgICAgb3duZXJTZXNzaW9uUHJvbWlzZSA9IG51bGw7XG4gICAgfVxuICB9JwppZiBvbGQxIG5vdCBpbiBzOgogICAgcmFpc2UgU3lzdGVtRXhpdCgiRVJST1I6IHRva2VuL3N0YXRlIGFuY2hvciBub3QgZm91bmQiKQpzID0gcy5yZXBsYWNlKG9sZDEsIG5ldzEsIDEpCgpvbGQyID0gJyAgYXN5bmMgZnVuY3Rpb24gbG9hZCgpe1xuICAgIGVuc3VyZVBhbmVsKCk7XG4gICAgaWYoIXRva2VuKCkpe3NldE1lc3NhZ2UoIuOCquODvOODiuODvOODreOCsOOCpOODs+W+jOOBq+WWtualreOCq+ODrOODs+ODgOODvOOCkuiqreOBv+i+vOOCgeOBvuOBmeOAgiIpO3JldHVybn1cbiAgICBjb25zdCBmcm9tPXRvZGF5KCksdG89YWRkRGF5cyhmcm9tLDM2NSk7JwpuZXcyID0gJyAgYXN5bmMgZnVuY3Rpb24gbG9hZCgpe1xuICAgIGVuc3VyZVBhbmVsKCk7XG4gICAgbGV0IHNlc3Npb25Ub2tlbiA9ICIiO1xuICAgIHRyeSB7XG4gICAgICBzZXNzaW9uVG9rZW4gPSBhd2FpdCBlbnN1cmVPd25lclNlc3Npb24oKTtcbiAgICB9IGNhdGNoIChlKSB7XG4gICAgICBzZXRNZXNzYWdlKGU/Lm1lc3NhZ2UgfHwgIuOCquODvOODiuODvOiqjeiovOOBq+WkseaVl+OBl+OBvuOBl+OBn+OAgiIsIHRydWUpO1xuICAgICAgcmV0dXJuO1xuICAgIH1cbiAgICBpZighc2Vzc2lvblRva2VuKXtzZXRNZXNzYWdlKCLjgqrjg7zjg4rjg7zjg63jgrDjgqTjg7Plvozjgavllrbmpa3jgqvjg6zjg7Pjg4Djg7zjgpLoqq3jgb/ovrzjgoHjgb7jgZnjgIIiKTtyZXR1cm59XG4gICAgY29uc3QgZnJvbT10b2RheSgpLHRvPWFkZERheXMoZnJvbSwzNjUpOycKaWYgb2xkMiBub3QgaW4gczoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIkVSUk9SOiBsb2FkIGFuY2hvciBub3QgZm91bmQiKQpzID0gcy5yZXBsYWNlKG9sZDIsIG5ldzIsIDEpCgpvbGQzID0gJyAgICAgIGNvbnN0IHJlc3BvbnNlPWF3YWl0IGZldGNoKHUse2hlYWRlcnM6e0FjY2VwdDoiYXBwbGljYXRpb24vanNvbiIsIlgtT3duZXItU2Vzc2lvbiI6dG9rZW4oKX0sY2FjaGU6Im5vLXN0b3JlIn0pOycKbmV3MyA9ICcgICAgICBjb25zdCByZXNwb25zZT1hd2FpdCBmZXRjaCh1LHtoZWFkZXJzOntBY2NlcHQ6ImFwcGxpY2F0aW9uL2pzb24iLCJYLU93bmVyLVNlc3Npb24iOnNlc3Npb25Ub2tlbn0sY2FjaGU6Im5vLXN0b3JlIn0pOycKaWYgb2xkMyBub3QgaW4gczoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIkVSUk9SOiBjYWxlbmRhciBmZXRjaCB0b2tlbiBhbmNob3Igbm90IGZvdW5kIikKcyA9IHMucmVwbGFjZShvbGQzLCBuZXczLCAxKQoKcGF0aC53cml0ZV90ZXh0KHMsIGVuY29kaW5nPSJ1dGYtOCIpCnByaW50KCJQYXRjaGVkOiIsIHBhdGgpCg==").decode("utf-8")
+          exec(compile(code, "<patch>", "exec"))
+          PY
+
+      - name: Validate
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s = Path("photo-owner-business-calendar.js").read_text(encoding="utf-8")
+          required = [
+              "async function ensureOwnerSession()",
+              "C.isDemoMode?.()",
+              "C.verifyAdminCode(code)",
+              "sessionToken = await ensureOwnerSession()",
+              '"X-Owner-Session":sessionToken',
+          ]
+          missing = [x for x in required if x not in s]
+          if missing:
+              raise SystemExit("ERROR: auth fix validation failed: " + repr(missing))
+          if s.count("async function ensureOwnerSession()") != 1:
+              raise SystemExit("ERROR: duplicate ensureOwnerSession")
+          print("Validation OK")
+          PY
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add photo-owner-business-calendar.js
+          git commit -m "Fix demo owner session for business calendar"
+          git push
