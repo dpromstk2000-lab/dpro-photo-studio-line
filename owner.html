@@ -690,7 +690,7 @@
           <section class="panel">
             <div class="panel-head"><div><h3>予約受付設定</h3><p>予約枠は30分単位で固定されています。</p></div></div>
             <div class="form-grid three">
-              <div class="field"><label for="settingOpenDays">何日先まで受付</label><input id="settingOpenDays" class="input" type="number" min="1" max="730" /></div>
+              <div class="field"><label for="settingOpenDays">予約受付期間</label><select id="settingOpenDays" class="input"><option value="60">2か月先まで</option><option value="90">3か月先まで</option><option value="120">4か月先まで</option><option value="150">5か月先まで</option><option value="180">6か月先まで</option></select><div class="field-help">DPRO標準：2〜6か月。初期推奨は3か月、店舗運用に合わせて変更できます。</div></div>
               <div class="field"><label for="settingAdvanceHours">受付締切（時間前）</label><input id="settingAdvanceHours" class="input" type="number" min="0" max="720" /></div>
               <div class="field"><label for="settingCancelHours">変更・取消目安（時間前）</label><input id="settingCancelHours" class="input" type="number" min="0" max="720" /></div>
               <div class="field"><label for="settingMaxSubjects">1予約の撮影対象上限</label><input id="settingMaxSubjects" class="input" type="number" min="1" max="50" /></div>
@@ -1951,5 +1951,6 @@
   <script src="./photo-owner-settings-v2.js?v=DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-5-SETTINGS-POLISH-UI-20260919"></script>
   <script src="./photo-owner-plan-resource.js?v=DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-3-1-PRICE-LABEL-20260919"></script>
   <script src="./photo-owner-setup-checklist.js?v=DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-4-SETUP-CHECKLIST-UI-20260919"></script>
+<script src="./photo-owner-business-calendar.js?v=DPRO-PHOTO-LINKAGE-STANDARD-R1-FIX-20261006"></script>
 </body>
 </html>

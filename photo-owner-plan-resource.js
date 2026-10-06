@@ -332,7 +332,7 @@
         <div class="field"><label for="prPlanPrice">基本料金（税込表示用）</label><input id="prPlanPrice" class="input" type="number" min="0" step="100" value="${Number(row?.base_price || 0)}" /></div>
         <div class="field"><label for="prPlanPriceLabel">料金表示</label><input id="prPlanPriceLabel" class="input" maxlength="80" placeholder="例：33,000円〜" value="${esc(row?.price_label || "")}" /></div>
         <div class="field"><label for="prPlanLead">何日前まで予約可</label><input id="prPlanLead" class="input" type="number" min="0" max="365" value="${Number(row?.booking_lead_days ?? 1)}" /></div>
-        <div class="field"><label for="prPlanOpenDays">何日先まで公開</label><input id="prPlanOpenDays" class="input" type="number" min="1" max="730" value="${Number(row?.booking_open_days ?? 180)}" /></div>
+        <div class="field"><label for="prPlanOpenDays">予約公開期間</label><select id="prPlanOpenDays" class="input">${[60,90,120,150,180].map((v) => `<option value="${v}" ${Number(row?.booking_open_days ?? 180)===v ? "selected" : ""}>${v/30}か月先まで</option>`).join("")}</select><div class="pr-v2-help">DPRO標準：2〜6か月。店舗全体の受付期間より長い値は店舗設定側で自動制限されます。</div></div>
         <div class="field"><label for="prPlanMax">最大参加人数</label><input id="prPlanMax" class="input" type="number" min="1" max="100" value="${Number(row?.max_participants ?? 10)}" /></div>
         <div class="field"><label for="prPlanOrder">表示順</label><input id="prPlanOrder" class="input" type="number" min="0" max="9999" value="${Number(row?.display_order ?? 100)}" /></div>
         <div class="field wide">
