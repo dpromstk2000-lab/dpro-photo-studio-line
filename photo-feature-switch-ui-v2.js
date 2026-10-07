@@ -14,7 +14,8 @@
     featureCsvMigration: "他システムの顧客データを安全確認して取り込みます。",
     featureLineCustomerLink: "既存顧客とLINE利用者を確認しながら紐付けます。",
     featureReservationAutoReminder: "撮影前の案内を自動で準備し、LINE未連携時は確認タスクへ切り替えます。",
-    featureReservationWaitlist: "希望日・時間帯を記録し、空きが出た時の案内状況を管理します。"
+    featureReservationWaitlist: "希望日・時間帯を記録し、空きが出た時の案内状況を管理します。",
+    featureReservationEventCapacity: "撮影会などで、撮影スペースごとの同時受付数まで予約を受け付けます。"
   });
 
   let decorated = false;
@@ -205,7 +206,7 @@
 
     const extra = document.createElement("div");
     extra.className = "feature-simple-extra-grid";
-    ["featureLineSegment","featureCsvMigration","featureLineCustomerLink","featureReservationAutoReminder","featureReservationWaitlist"]
+    ["featureLineSegment","featureCsvMigration","featureLineCustomerLink","featureReservationAutoReminder","featureReservationWaitlist","featureReservationEventCapacity"]
       .map(makeCard).filter(Boolean).forEach((card) => extra.appendChild(card));
 
     layout.append(main, details, extraTitle, extra);
