@@ -4,7 +4,7 @@
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
   if (!C) return;
 
-  const VERSION = "DPRO-PHOTO-INTEGRATIONS-UI-V1-20261007";
+  const VERSION = "DPRO-PHOTO-INTEGRATIONS-UI-V1.1-PAYMENT-CANCEL-20261007";
   const API = C.INTEGRATIONS_API_BASE_URL || "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-integrations-v1";
   const OAUTH_ORIGIN = "https://cbknucemarcpbscirzyv.supabase.co";
   const $ = (id) => document.getElementById(id);
@@ -179,6 +179,18 @@
     </article>`;
   }
 
+  function paymentStatusLabel(status) {
+    const map = {
+      creating: "作成中",
+      ready: "支払待ち",
+      pending: "支払待ち",
+      paid: "支払済み",
+      cancelled: "無効化済み",
+      failed: "失敗",
+    };
+    return map[String(status || "")] || String(status || "—");
+  }
+
   function renderPaymentHistory() {
     const box = $("piPaymentHistory");
     if (!box) return;
@@ -193,23 +205,23 @@
       return;
     }
 
-    const label = {
-      creating: "作成中",
-      ready: "支払待ち",
-      pending: "支払待ち",
-      paid: "支払済み",
-      cancelled: "取消",
-      failed: "失敗",
-    };
-
     box.innerHTML = `
       <h4 style="margin:0 0 8px;">最近の決済</h4>
       <div class="pi-payment-list">
         ${rows.slice(0, 8).map(row => `
           <div class="pi-payment-row">
-            <div><strong>¥${Number(row.amount || 0).toLocaleString("ja-JP")}｜${esc(label[row.status] || row.status || "—")}</strong>
-            <small>${esc(String(row.created_at || "").replace("T", " ").slice(0,16))}</small></div>
-            ${row.checkout_url ? `<button class="btn btn-neutral btn-small" data-pi-url="${esc(row.checkout_url)}" type="button">開く</button>` : ""}
+            <div>
+              <strong>¥${Number(row.amount || 0).toLocaleString("ja-JP")}｜${esc(paymentStatusLabel(row.status))}</strong>
+              <small>${esc(String(row.created_at || "").replace("T", " ").slice(0,16))}</small>
+            </div>
+            <div class="pi-link-actions">
+              ${row.checkout_url && ["ready","pending"].includes(String(row.status || ""))
+                ? `<button class="btn btn-neutral btn-small" data-pi-url="${esc(row.checkout_url)}" type="button">開く</button>`
+                : ""}
+              ${["ready","pending"].includes(String(row.status || ""))
+                ? `<button class="btn btn-secondary btn-small" data-pi-action="payment-cancel" data-payment-request-id="${esc(row.id)}" type="button">無効化</button>`
+                : ""}
+            </div>
           </div>`).join("")}
       </div>`;
   }
@@ -321,8 +333,14 @@
     }
 
     const recentHtml = recent
-      ? `<div class="pi-res-result">最新：<strong>¥${Number(recent.amount || 0).toLocaleString("ja-JP")}</strong>｜${esc(recent.status || "")}
-          ${recent.checkout_url ? `<div class="pi-link-actions"><button class="btn btn-secondary btn-small" data-pi-copy="${esc(recent.checkout_url)}" type="button">リンクをコピー</button><button class="btn btn-neutral btn-small" data-pi-url="${esc(recent.checkout_url)}" type="button">決済ページを開く</button></div>` : ""}
+      ? `<div class="pi-res-result">最新：<strong>¥${Number(recent.amount || 0).toLocaleString("ja-JP")}</strong>｜${esc(paymentStatusLabel(recent.status))}
+          ${recent.checkout_url && ["ready","pending"].includes(String(recent.status || ""))
+            ? `<div class="pi-link-actions">
+                <button class="btn btn-secondary btn-small" data-pi-copy="${esc(recent.checkout_url)}" type="button">リンクをコピー</button>
+                <button class="btn btn-neutral btn-small" data-pi-url="${esc(recent.checkout_url)}" type="button">決済ページを開く</button>
+                <button class="btn btn-secondary btn-small" data-pi-action="payment-cancel" data-payment-request-id="${esc(recent.id)}" type="button">リンクを無効化</button>
+              </div>`
+            : ""}
         </div>` : "";
 
     card.innerHTML = `
@@ -333,7 +351,7 @@
           <select id="piPaymentType"><option value="deposit">内金</option><option value="full">全額</option><option value="other">その他</option></select>
         </label>
         <label>金額（税込）
-          <input id="piPaymentAmount" class="input" type="number" min="1" step="1000" placeholder="5000">
+          <input id="piPaymentAmount" class="input" type="number" min="1" step="100" placeholder="金額を入力">
         </label>
         <button class="btn btn-primary" data-pi-action="payment-create" type="button">決済リンクを発行</button>
       </div>
@@ -372,6 +390,32 @@
     }
   }
 
+  async function cancelPaymentLink(paymentRequestId) {
+    const id = String(paymentRequestId || "").trim();
+    if (!id) return;
+    if (!window.confirm("この決済リンクを無効化しますか？\n無効化すると、このリンクからは支払えなくなります。")) return;
+
+    const buttons = document.querySelectorAll('[data-pi-action="payment-cancel"]');
+    buttons.forEach(button => {
+      if (button.dataset.paymentRequestId === id) button.disabled = true;
+    });
+
+    try {
+      await request("/api/admin/payment-links/cancel", {
+        method: "POST",
+        body: { payment_request_id: id },
+      });
+      flash("決済リンクを無効化しました。");
+      await load(true);
+    } catch (error) {
+      flash(error.message || "決済リンクを無効化できませんでした。", true);
+    } finally {
+      buttons.forEach(button => {
+        if (button.dataset.paymentRequestId === id) button.disabled = false;
+      });
+    }
+  }
+
   function bindEvents() {
     document.addEventListener("click", (event) => {
       const action = event.target.closest("[data-pi-action]")?.dataset.piAction;
@@ -380,6 +424,7 @@
       if (action === "square-location-save") saveSquareLocation().catch(e => flash(e.message, true));
       if (action === "google-sync") syncGoogle();
       if (action === "payment-create") createPaymentLink();
+      if (action === "payment-cancel") cancelPaymentLink(event.target.closest("[data-payment-request-id]")?.dataset.paymentRequestId);
 
       const urlButton = event.target.closest("[data-pi-url]");
       if (urlButton?.dataset.piUrl) window.open(urlButton.dataset.piUrl, "_blank", "noopener");
