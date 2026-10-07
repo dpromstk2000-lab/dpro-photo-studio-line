@@ -11,7 +11,8 @@
 
   const GROUPS = [
     { id: "basic", label: "かんたん設定", note: "初回", desc: "店舗情報・営業時間" },
-    { id: "reservation", label: "予約設定", note: "日常", desc: "受付条件・予約ルール" }, { id: "features", label: "使う機能", note: "かんたん", desc: "必要な機能だけON" },
+    { id: "reservation", label: "予約設定", note: "日常", desc: "受付条件・予約ルール" },
+    { id: "automation", label: "予約自動化", note: "自動", desc: "リマインド・キャンセル待ち" }, { id: "features", label: "使う機能", note: "かんたん", desc: "必要な機能だけON" },
     { id: "staff", label: "スタッフ管理", note: "日常", desc: "追加・編集・停止" },
     { id: "plans", label: "撮影プラン管理", note: "日常", desc: "撮影スペース・プラン" },
     { id: "public", label: "公開・連携設定", note: "必要時", desc: "HP・ブランド・LINE予約" },
@@ -239,7 +240,7 @@
     }
 
     const legacySave = document.getElementById("settingsSaveBtn");
-    if (legacySave) legacySave.hidden = ["staff", "plans", "public"].includes(groupId);
+    if (legacySave) legacySave.hidden = ["staff", "plans", "public", "automation"].includes(groupId);
 
     if (shouldScroll) {
       document.getElementById("settingsV2Workspace")?.scrollIntoView({ behavior: "smooth", block: "start" });

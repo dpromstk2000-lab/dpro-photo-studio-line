@@ -37,7 +37,7 @@
   const API_BASE_URL =
     "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v3";
   const CALENDAR_API_BASE_URL =
-    "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v8";
+    "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v9";
   const SITE_BASE_URL =
     "https://dpromstk2000-lab.github.io/dpro-photo-studio-line";
   const REPOSITORY_URL =
