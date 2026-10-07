@@ -1,0 +1,74 @@
+name: DPRO Photo Event Capacity UI FIX
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply event capacity UI FIX
+        shell: bash
+        run: |
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpORVdfTE9BRCA9ICcgICAgYXN5bmMgZnVuY3Rpb24gbG9hZE1hbnVhbFNsb3RzKCkge1xuICAgICAgY2xlYXJNYW51YWxDb25mbGljdCgpO1xuICAgICAgY29uc3QgcGxhbklkID0gJCgibWFudWFsUGxhbiIpLnZhbHVlO1xuICAgICAgY29uc3QgZGF0ZSA9ICQoIm1hbnVhbERhdGUiKS52YWx1ZTtcbiAgICAgIGNvbnN0IHN0YWZmSWQgPSAkKCJtYW51YWxTdGFmZiIpLnZhbHVlO1xuICAgICAgY29uc3QgcmVzb3VyY2VJZCA9ICQoIm1hbnVhbFJlc291cmNlIikudmFsdWU7XG4gICAgICBzdGF0ZS5tYW51YWxTZWxlY3RlZFNsb3QgPSBudWxsO1xuICAgICAgcG9wdWxhdGVPd25lclJlZ2lzdGVyZWRTdWJqZWN0cygpO1xuICAgICAgaWYgKCFwbGFuSWQgfHwgIWRhdGUpIHtcbiAgICAgICAgJCgibWFudWFsU2xvdHMiKS5pbm5lckhUTUwgPSBcJzxkaXYgY2xhc3M9ImVtcHR5IHNwYW4tMiI+44OX44Op44Oz44Go5pel5LuY44KS6YG45oqe44GX44Gm44GP44Gg44GV44GE44CCPC9kaXY+XCc7XG4gICAgICAgIHJldHVybjtcbiAgICAgIH1cbiAgICAgIHRyeSB7XG4gICAgICAgIGNvbnN0IHVybCA9IG5ldyBVUkwoYCR7Qy5DQUxFTkRBUl9BUElfQkFTRV9VUkx9JHtDLkVORFBPSU5UUy5QVUJMSUNfQVZBSUxBQklMSVRZfWApO1xuICAgICAgICB1cmwuc2VhcmNoUGFyYW1zLnNldCgicGxhbl9pZCIsIHBsYW5JZCk7XG4gICAgICAgIHVybC5zZWFyY2hQYXJhbXMuc2V0KCJkYXRlIiwgZGF0ZSk7XG4gICAgICAgIGlmIChzdGFmZklkKSB1cmwuc2VhcmNoUGFyYW1zLnNldCgic3RhZmZfaWQiLCBzdGFmZklkKTtcbiAgICAgICAgaWYgKHJlc291cmNlSWQpIHVybC5zZWFyY2hQYXJhbXMuc2V0KCJyZXNvdXJjZV9pZCIsIHJlc291cmNlSWQpO1xuXG4gICAgICAgIGNvbnN0IHJlc3VsdCA9IGF3YWl0IHJ1bkJ1c3koIuepuuOBjeaZgumWk+OCkueiuuiqjeOBl+OBpuOBhOOBvuOBmS4uLiIsIGFzeW5jICgpID0+IHtcbiAgICAgICAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IGZldGNoKHVybC50b1N0cmluZygpLCB7XG4gICAgICAgICAgICBtZXRob2Q6ICJHRVQiLFxuICAgICAgICAgICAgaGVhZGVyczogeyBBY2NlcHQ6ICJhcHBsaWNhdGlvbi9qc29uIiB9LFxuICAgICAgICAgICAgY2FjaGU6ICJuby1zdG9yZSIsXG4gICAgICAgICAgfSk7XG4gICAgICAgICAgY29uc3QgcGF5bG9hZCA9IGF3YWl0IHJlc3BvbnNlLmpzb24oKS5jYXRjaCgoKSA9PiBudWxsKTtcbiAgICAgICAgICBpZiAoIXJlc3BvbnNlLm9rIHx8IHBheWxvYWQ/Lm9rID09PSBmYWxzZSkge1xuICAgICAgICAgICAgY29uc3QgZXJyb3IgPSBuZXcgRXJyb3IocGF5bG9hZD8uZXJyb3IgfHwgcGF5bG9hZD8ubWVzc2FnZSB8fCBgSFRUUCAke3Jlc3BvbnNlLnN0YXR1c31gKTtcbiAgICAgICAgICAgIGVycm9yLmNvZGUgPSBwYXlsb2FkPy5jb2RlIHx8IGBIVFRQXyR7cmVzcG9uc2Uuc3RhdHVzfWA7XG4gICAgICAgICAgICBlcnJvci5wYXlsb2FkID0gcGF5bG9hZDtcbiAgICAgICAgICAgIHRocm93IGVycm9yO1xuICAgICAgICAgIH1cbiAgICAgICAgICByZXR1cm4gcGF5bG9hZDtcbiAgICAgICAgfSk7XG5cbiAgICAgICAgY29uc3Qgc2xvdHMgPSAocmVzdWx0LnNsb3RzIHx8IFtdKS5maWx0ZXIoKHMpID0+IHMuYXZhaWxhYmxlKTtcbiAgICAgICAgY29uc3Qgc2hvd1JlbWFpbmluZyA9IHJlc3VsdC5jYXBhY2l0eV9lbmFibGVkID09PSB0cnVlO1xuICAgICAgICAkKCJtYW51YWxTbG90cyIpLmlubmVySFRNTCA9IHNsb3RzLmxlbmd0aFxuICAgICAgICAgID8gc2xvdHMubWFwKChzKSA9PiB7XG4gICAgICAgICAgICAgIGNvbnN0IHJlbWFpbmluZyA9IE51bWJlcihzLnJlc291cmNlX3JlbWFpbmluZyk7XG4gICAgICAgICAgICAgIGNvbnN0IHJlbWFpbiA9IHNob3dSZW1haW5pbmcgJiYgTnVtYmVyLmlzRmluaXRlKHJlbWFpbmluZylcbiAgICAgICAgICAgICAgICA/IGA8c21hbGwgY2xhc3M9InNsb3QtcmVtYWluaW5nIj7mrovjgooke01hdGgubWF4KDAsIHJlbWFpbmluZyl95p6gPC9zbWFsbD5gXG4gICAgICAgICAgICAgICAgOiAiIjtcbiAgICAgICAgICAgICAgcmV0dXJuIGA8YnV0dG9uIGNsYXNzPSJzbG90LWJ0biIgZGF0YS1tYW51YWwtc2xvdD0iJHtlc2Mocy5zdGFydF9hdCl9IiB0eXBlPSJidXR0b24iPjxzcGFuPiR7ZXNjKHMudGltZSl9JHtyZW1haW59PC9zcGFuPjwvYnV0dG9uPmA7XG4gICAgICAgICAgICB9KS5qb2luKCIiKVxuICAgICAgICAgIDogYDxkaXYgY2xhc3M9ImVtcHR5IHNwYW4tMiI+JHtlc2MocmVzdWx0LnJlYXNvbiB8fCAi56m644GE44Gm44GE44KL5pmC6ZaT44GM44GC44KK44G+44Gb44KT44CCIil9PC9kaXY+YDtcbiAgICAgIH0gY2F0Y2ggKGVycm9yKSB7XG4gICAgICAgICQoIm1hbnVhbFNsb3RzIikuaW5uZXJIVE1MID0gYDxkaXYgY2xhc3M9ImVtcHR5IHNwYW4tMiI+JHtlc2MoZXJyb3JNZXNzYWdlKGVycm9yKSl9PC9kaXY+YDtcbiAgICAgIH1cbiAgICB9XG5cbicKCmRlZiByZXBsYWNlX29uY2UodGV4dCwgb2xkLCBuZXcsIG5hbWUpOgogICAgaWYgbmV3IGluIHRleHQ6CiAgICAgICAgcmV0dXJuIHRleHQKICAgIGNvdW50ID0gdGV4dC5jb3VudChvbGQpCiAgICBpZiBjb3VudCAhPSAxOgogICAgICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJFUlJPUjoge25hbWV9IG1hdGNoZWQge2NvdW50fSB0aW1lcyIpCiAgICByZXR1cm4gdGV4dC5yZXBsYWNlKG9sZCwgbmV3LCAxKQoKIyBvd25lci5odG1sCnAgPSBQYXRoKCJvd25lci5odG1sIikKcyA9IHAucmVhZF90ZXh0KGVuY29kaW5nPSJ1dGYtOCIpCgp3YWl0X2xhYmVsID0gJyAgICAgICAgICAgICAgICA8bGFiZWw+PGlucHV0IGlkPSJmZWF0dXJlUmVzZXJ2YXRpb25XYWl0bGlzdCIgdHlwZT0iY2hlY2tib3giIC8+IOOCreODo+ODs+OCu+ODq+W+heOBoTwvbGFiZWw+JwpldmVudF9sYWJlbCA9ICcgICAgICAgICAgICAgICAgPGxhYmVsPjxpbnB1dCBpZD0iZmVhdHVyZVJlc2VydmF0aW9uRXZlbnRDYXBhY2l0eSIgdHlwZT0iY2hlY2tib3giIC8+IOaSruW9seS8muODu+WumuWToeS6iOe0hDwvbGFiZWw+JwppZiAnaWQ9ImZlYXR1cmVSZXNlcnZhdGlvbkV2ZW50Q2FwYWNpdHkiJyBub3QgaW4gczoKICAgIHMgPSByZXBsYWNlX29uY2Uocywgd2FpdF9sYWJlbCwgd2FpdF9sYWJlbCArIGNocigxMCkgKyBldmVudF9sYWJlbCwgImV2ZW50IGNhcGFjaXR5IHN3aXRjaCIpCgpyZW5kZXJfd2FpdCA9ICcgICAgICAkKCJmZWF0dXJlUmVzZXJ2YXRpb25XYWl0bGlzdCIpLmNoZWNrZWQgPSBmbGFncy5yZXNlcnZhdGlvbl93YWl0bGlzdCA9PT0gdHJ1ZTsnCnJlbmRlcl9ldmVudCA9ICcgICAgICAkKCJmZWF0dXJlUmVzZXJ2YXRpb25FdmVudENhcGFjaXR5IikuY2hlY2tlZCA9IGZsYWdzLnJlc2VydmF0aW9uX2V2ZW50X2NhcGFjaXR5ID09PSB0cnVlOycKaWYgJyQoImZlYXR1cmVSZXNlcnZhdGlvbkV2ZW50Q2FwYWNpdHkiKS5jaGVja2VkJyBub3QgaW4gczoKICAgIHMgPSByZXBsYWNlX29uY2UocywgcmVuZGVyX3dhaXQsIHJlbmRlcl93YWl0ICsgY2hyKDEwKSArIHJlbmRlcl9ldmVudCwgImV2ZW50IGNhcGFjaXR5IHJlbmRlciIpCgpzYXZlX3dhaXQgPSAncmVzZXJ2YXRpb25fd2FpdGxpc3Q6ICQoImZlYXR1cmVSZXNlcnZhdGlvbldhaXRsaXN0IikuY2hlY2tlZCwgY3JtX3VpX3ZlcnNpb246IENSTV9WRVJTSU9OJwpzYXZlX2V2ZW50ID0gJ3Jlc2VydmF0aW9uX3dhaXRsaXN0OiAkKCJmZWF0dXJlUmVzZXJ2YXRpb25XYWl0bGlzdCIpLmNoZWNrZWQsIHJlc2VydmF0aW9uX2V2ZW50X2NhcGFjaXR5OiAkKCJmZWF0dXJlUmVzZXJ2YXRpb25FdmVudENhcGFjaXR5IikuY2hlY2tlZCwgY3JtX3VpX3ZlcnNpb246IENSTV9WRVJTSU9OJwppZiAncmVzZXJ2YXRpb25fZXZlbnRfY2FwYWNpdHk6ICQoImZlYXR1cmVSZXNlcnZhdGlvbkV2ZW50Q2FwYWNpdHkiKS5jaGVja2VkJyBub3QgaW4gczoKICAgIHMgPSByZXBsYWNlX29uY2Uocywgc2F2ZV93YWl0LCBzYXZlX2V2ZW50LCAiZXZlbnQgY2FwYWNpdHkgc2F2ZSIpCgpzdGFydF9hbmNob3IgPSAnICAgIGFzeW5jIGZ1bmN0aW9uIGxvYWRNYW51YWxTbG90cygpIHsnCmVuZF9hbmNob3IgPSAnICAgIGFzeW5jIGZ1bmN0aW9uIHN1Ym1pdE1hbnVhbEJvb2tpbmcnCnN0YXJ0ID0gcy5maW5kKHN0YXJ0X2FuY2hvcikKZW5kID0gcy5maW5kKGVuZF9hbmNob3IsIHN0YXJ0ICsgMSBpZiBzdGFydCA+PSAwIGVsc2UgMCkKaWYgc3RhcnQgPCAwIG9yIGVuZCA8IDAgb3IgZW5kIDw9IHN0YXJ0OgogICAgcmFpc2UgU3lzdGVtRXhpdCgiRVJST1I6IGxvYWRNYW51YWxTbG90cyBibG9jayBub3QgZm91bmQiKQpzID0gc1s6c3RhcnRdICsgTkVXX0xPQUQgKyBzW2VuZDpdCgpzdGFmZl9saXN0ZW5lciA9ICcgICAgICAkKCJtYW51YWxTdGFmZiIpLmFkZEV2ZW50TGlzdGVuZXIoImNoYW5nZSIsICgpID0+IGxvYWRNYW51YWxTbG90cygpLmNhdGNoKCgpID0+IHt9KSk7JwpyZXNvdXJjZV9saXN0ZW5lciA9ICcgICAgICAkKCJtYW51YWxSZXNvdXJjZSIpLmFkZEV2ZW50TGlzdGVuZXIoImNoYW5nZSIsICgpID0+IGxvYWRNYW51YWxTbG90cygpLmNhdGNoKCgpID0+IHt9KSk7JwppZiAnJCgibWFudWFsUmVzb3VyY2UiKS5hZGRFdmVudExpc3RlbmVyKCJjaGFuZ2UiJyBub3QgaW4gczoKICAgIHMgPSByZXBsYWNlX29uY2Uocywgc3RhZmZfbGlzdGVuZXIsIHN0YWZmX2xpc3RlbmVyICsgY2hyKDEwKSArIHJlc291cmNlX2xpc3RlbmVyLCAicmVzb3VyY2UgbGlzdGVuZXIiKQoKc2xvdF9jc3MgPSAnICAgIC5zbG90LWJ0bi5zZWxlY3RlZCB7IGNvbG9yOiAjZmZmOyBib3JkZXItY29sb3I6IHZhcigtLWdyZWVuLTgwMCk7IGJhY2tncm91bmQ6IHZhcigtLWdyZWVuLTgwMCk7IH0nCnNsb3RfY3NzX25ldyA9IHNsb3RfY3NzICsgY2hyKDEwKSArICcgICAgLnNsb3QtYnRuIC5zbG90LXJlbWFpbmluZyB7IGRpc3BsYXk6IGJsb2NrOyBtYXJnaW4tdG9wOiAycHg7IGZvbnQtc2l6ZTogOXB4OyBmb250LXdlaWdodDogODAwOyBvcGFjaXR5OiAuNzY7IH0nCmlmICIuc2xvdC1idG4gLnNsb3QtcmVtYWluaW5nIiBub3QgaW4gczoKICAgIHMgPSByZXBsYWNlX29uY2Uocywgc2xvdF9jc3MsIHNsb3RfY3NzX25ldywgInNsb3QgcmVtYWluaW5nIGNzcyIpCgpwLndyaXRlX3RleHQocywgZW5jb2Rpbmc9InV0Zi04IikKCiMgcGhvdG8tZmVhdHVyZS1zd2l0Y2gtdWktdjIuanMKcCA9IFBhdGgoInBob3RvLWZlYXR1cmUtc3dpdGNoLXVpLXYyLmpzIikKcyA9IHAucmVhZF90ZXh0KGVuY29kaW5nPSJ1dGYtOCIpCgpkZXNjX3dhaXQgPSAnICAgIGZlYXR1cmVSZXNlcnZhdGlvbldhaXRsaXN0OiAi5biM5pyb5pel44O75pmC6ZaT5biv44KS6KiY6Yyy44GX44CB56m644GN44GM5Ye644Gf5pmC44Gu5qGI5YaF54q25rOB44KS566h55CG44GX44G+44GZ44CCIicKZGVzY19ldmVudCA9ICcgICAgZmVhdHVyZVJlc2VydmF0aW9uRXZlbnRDYXBhY2l0eTogIuaSruW9seS8muOBquOBqeOBp+OAgeaSruW9seOCueODmuODvOOCueOBlOOBqOOBruWQjOaZguWPl+S7mOaVsOOBvuOBp+S6iOe0hOOCkuWPl+OBkeS7mOOBkeOBvuOBmeOAgiInCmlmICJmZWF0dXJlUmVzZXJ2YXRpb25FdmVudENhcGFjaXR5OiIgbm90IGluIHM6CiAgICBzID0gcmVwbGFjZV9vbmNlKHMsIGRlc2Nfd2FpdCwgZGVzY193YWl0ICsgIiwiICsgY2hyKDEwKSArIGRlc2NfZXZlbnQsICJmZWF0dXJlIGV2ZW50IGRlc2NyaXB0aW9uIikKCm9sZF9saXN0ID0gJ1siZmVhdHVyZUxpbmVTZWdtZW50IiwiZmVhdHVyZUNzdk1pZ3JhdGlvbiIsImZlYXR1cmVMaW5lQ3VzdG9tZXJMaW5rIiwiZmVhdHVyZVJlc2VydmF0aW9uQXV0b1JlbWluZGVyIiwiZmVhdHVyZVJlc2VydmF0aW9uV2FpdGxpc3QiXScKbmV3X2xpc3QgPSAnWyJmZWF0dXJlTGluZVNlZ21lbnQiLCJmZWF0dXJlQ3N2TWlncmF0aW9uIiwiZmVhdHVyZUxpbmVDdXN0b21lckxpbmsiLCJmZWF0dXJlUmVzZXJ2YXRpb25BdXRvUmVtaW5kZXIiLCJmZWF0dXJlUmVzZXJ2YXRpb25XYWl0bGlzdCIsImZlYXR1cmVSZXNlcnZhdGlvbkV2ZW50Q2FwYWNpdHkiXScKaWYgbmV3X2xpc3Qgbm90IGluIHM6CiAgICBzID0gcmVwbGFjZV9vbmNlKHMsIG9sZF9saXN0LCBuZXdfbGlzdCwgImZlYXR1cmUgb3B0aW9uYWwgY2FyZHMiKQoKcC53cml0ZV90ZXh0KHMsIGVuY29kaW5nPSJ1dGYtOCIpCgpwcmludCgiRFBSTyBQaG90byBFdmVudCBDYXBhY2l0eSBVSSBGSVggc291cmNlIHBhdGNoIGNvbXBsZXRlIikK' | base64 -d > /tmp/dpro_photo_capacity_ui_fix.py
+          python /tmp/dpro_photo_capacity_ui_fix.py
+
+      - name: Validate
+        shell: bash
+        run: |
+          node --check photo-feature-switch-ui-v2.js
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          owner = Path("owner.html").read_text(encoding="utf-8")
+          feature = Path("photo-feature-switch-ui-v2.js").read_text(encoding="utf-8")
+
+          checks = {
+              "event_switch": 'id="featureReservationEventCapacity"' in owner,
+              "event_render": '$("featureReservationEventCapacity").checked = flags.reservation_event_capacity === true;' in owner,
+              "event_save": 'reservation_event_capacity: $("featureReservationEventCapacity").checked' in owner,
+              "v9_availability": 'C.CALENDAR_API_BASE_URL' in owner and 'C.ENDPOINTS.PUBLIC_AVAILABILITY' in owner,
+              "resource_query": 'url.searchParams.set("resource_id", resourceId)' in owner,
+              "resource_listener": '$("manualResource").addEventListener("change"' in owner,
+              "remaining_ui": 'slot-remaining' in owner and 'resource_remaining' in owner,
+              "event_card": "featureReservationEventCapacity" in feature,
+              "no_literal_backslash_n_bug": '管理します."\\n' not in feature,
+          }
+          print(checks)
+          failed = [k for k, v in checks.items() if not v]
+          if failed:
+              raise SystemExit("ERROR: validation failed: " + ", ".join(failed))
+
+          scripts = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', owner, flags=re.S|re.I)
+          for i, script in enumerate(scripts):
+              Path(f"/tmp/owner-inline-{i}.js").write_text(script, encoding="utf-8")
+          print("inline_scripts", len(scripts))
+          PY
+
+          for f in /tmp/owner-inline-*.js; do
+            [ -e "$f" ] || continue
+            node --check "$f"
+          done
+
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add owner.html photo-feature-switch-ui-v2.js
+          if git diff --cached --quiet; then
+            echo "No staged changes."
+            exit 0
+          fi
+          git commit -m "Fix DPRO Photo event capacity UI"
+          git push
