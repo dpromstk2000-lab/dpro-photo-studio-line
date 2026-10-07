@@ -4,7 +4,7 @@
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
   if (!C) return;
 
-  const VERSION = "DPRO-PHOTO-INTEGRATIONS-UI-V1.1-PAYMENT-CANCEL-20261007";
+  const VERSION = "DPRO-PHOTO-INTEGRATIONS-UI-V1.2-GOOGLE-SYNC-STATUS-20261007";
   const API = C.INTEGRATIONS_API_BASE_URL || "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-integrations-v1";
   const OAUTH_ORIGIN = "https://cbknucemarcpbscirzyv.supabase.co";
   const $ = (id) => document.getElementById(id);
@@ -116,6 +116,26 @@
     return `<span class="pi-status ${tone}">${esc(label)}</span>`;
   }
 
+  function formatSyncTime(value) {
+    if (!value) return "未実行";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "未実行";
+    try {
+      return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
+    } catch (_) { return d.toLocaleString("ja-JP"); }
+  }
+
+  function googleSyncSummaryHtml(gc) {
+    if (!gc || gc.connection_status !== "connected") return "";
+    const x = gc.sync_summary || {};
+    const synced = Number(x.synced || 0);
+    const pending = Number(x.pending || 0);
+    const failed = Number(x.failed || 0);
+    const time = formatSyncTime(gc.last_sync_at || x.last_event_sync_at);
+    const tone = failed > 0 ? " warn" : "";
+    return `<div class="pi-note${tone}" style="margin-top:8px;"><strong>同期状況</strong>｜最終同期：${esc(time)}<br>同期済み <strong>${synced}件</strong>｜待機 <strong>${pending}件</strong>｜失敗 <strong>${failed}件</strong></div>`;
+  }
+
   function renderSquare() {
     const sq = state.square || {};
     const enabled = state.feature_flags?.online_payment === true;
@@ -167,6 +187,7 @@
     } else {
       body = `
         <div class="pi-note">同期先：<strong>${esc(gc.calendar_name || "メインカレンダー")}</strong><br>予約の作成・変更・取消をDPROから自動同期します。</div>
+        ${googleSyncSummaryHtml(gc)}
         <div class="pi-actions">
           <button class="btn btn-secondary btn-small" type="button" data-pi-action="google-sync">今すぐ同期</button>
           <button class="btn btn-neutral btn-small" type="button" data-pi-action="google-connect">再接続</button>
@@ -281,15 +302,20 @@
 
   async function syncGoogle() {
     const button = document.querySelector('[data-pi-action="google-sync"]');
-    if (button) button.disabled = true;
+    const original = button ? button.textContent : "";
+    if (button) { button.disabled = true; button.textContent = "同期中…"; }
     try {
       const result = await request("/api/admin/google/sync-now", { method: "POST", body: {} });
-      flash(`Googleカレンダー同期：${Number(result.processed || 0)}件を処理しました。`);
+      const s = result.summary || {};
+      const processed = Number(result.processed || 0);
+      const failed = Number(s.failed || 0);
+      const detail = `新規 ${Number(s.created || 0)}・更新 ${Number(s.updated || 0)}・取消 ${Number(s.deleted || 0)}・失敗 ${failed}`;
+      flash(`Googleカレンダー同期完了：${processed}件（${detail}）`, failed > 0);
       await load(true);
     } catch (error) {
       flash(error.message || "同期できませんでした。", true);
     } finally {
-      if (button) button.disabled = false;
+      if (button) { button.disabled = false; button.textContent = original || "今すぐ同期"; }
     }
   }
 
