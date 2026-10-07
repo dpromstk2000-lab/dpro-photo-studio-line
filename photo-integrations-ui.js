@@ -4,7 +4,7 @@
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
   if (!C) return;
 
-  const VERSION = "DPRO-PHOTO-INTEGRATIONS-UI-V1.2-GOOGLE-SYNC-STATUS-20261007";
+  const VERSION = "DPRO-PHOTO-INTEGRATIONS-UI-V1.3-GOOGLE-PRIVACY-NOTICE-20261007";
   const API = C.INTEGRATIONS_API_BASE_URL || "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-integrations-v1";
   const OAUTH_ORIGIN = "https://cbknucemarcpbscirzyv.supabase.co";
   const $ = (id) => document.getElementById(id);
@@ -197,6 +197,11 @@
     return `<article class="pi-card">
       <div class="pi-card-head"><div><h4>Googleカレンダー</h4><p>DPRO予約をGoogleカレンダーへ自動反映します。</p></div>${status}</div>
       ${body}
+      <div class="pi-note" style="margin-top:9px;">
+        Google連携では、DPRO予約に対応する予定の作成・変更・取消のためGoogle Calendar APIを利用します。
+        <a href="https://dpro-shop.com/privacy" target="_blank" rel="noopener">プライバシーポリシー</a>
+        ／ <a href="https://dpro-shop.com/connect/" target="_blank" rel="noopener">DPRO CONNECT</a>
+      </div>
     </article>`;
   }
 
