@@ -1,0 +1,43 @@
+name: DPRO Photo Google Privacy Notice UI V1.3
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply Google privacy notice
+        shell: bash
+        run: |
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpqcyA9IFBhdGgoInBob3RvLWludGVncmF0aW9ucy11aS5qcyIpCm93bmVyID0gUGF0aCgib3duZXIuaHRtbCIpCgpjID0ganMucmVhZF90ZXh0KGVuY29kaW5nPSJ1dGYtOCIpCm9sZF92ID0gJ2NvbnN0IFZFUlNJT04gPSAiRFBSTy1QSE9UTy1JTlRFR1JBVElPTlMtVUktVjEuMi1HT09HTEUtU1lOQy1TVEFUVVMtMjAyNjEwMDciOycKbmV3X3YgPSAnY29uc3QgVkVSU0lPTiA9ICJEUFJPLVBIT1RPLUlOVEVHUkFUSU9OUy1VSS1WMS4zLUdPT0dMRS1QUklWQUNZLU5PVElDRS0yMDI2MTAwNyI7JwppZiBvbGRfdiBub3QgaW4gYzoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIkVSUk9SOiBQSE9UTyBVSSB2ZXJzaW9uIG1hcmtlciBub3QgZm91bmQiKQpjID0gYy5yZXBsYWNlKG9sZF92LCBuZXdfdiwgMSkKCm9sZF9yZXR1cm4gPSAnJycgICAgcmV0dXJuIGA8YXJ0aWNsZSBjbGFzcz0icGktY2FyZCI+CiAgICAgIDxkaXYgY2xhc3M9InBpLWNhcmQtaGVhZCI+PGRpdj48aDQ+R29vZ2xl44Kr44Os44Oz44OA44O8PC9oND48cD5EUFJP5LqI57SE44KSR29vZ2xl44Kr44Os44Oz44OA44O844G46Ieq5YuV5Y+N5pig44GX44G+44GZ44CCPC9wPjwvZGl2PiR7c3RhdHVzfTwvZGl2PgogICAgICAke2JvZHl9CiAgICA8L2FydGljbGU+YDsKJycnCm5ld19yZXR1cm4gPSAnJycgICAgcmV0dXJuIGA8YXJ0aWNsZSBjbGFzcz0icGktY2FyZCI+CiAgICAgIDxkaXYgY2xhc3M9InBpLWNhcmQtaGVhZCI+PGRpdj48aDQ+R29vZ2xl44Kr44Os44Oz44OA44O8PC9oND48cD5EUFJP5LqI57SE44KSR29vZ2xl44Kr44Os44Oz44OA44O844G46Ieq5YuV5Y+N5pig44GX44G+44GZ44CCPC9wPjwvZGl2PiR7c3RhdHVzfTwvZGl2PgogICAgICAke2JvZHl9CiAgICAgIDxkaXYgY2xhc3M9InBpLW5vdGUiIHN0eWxlPSJtYXJnaW4tdG9wOjlweDsiPgogICAgICAgIEdvb2dsZemAo+aQuuOBp+OBr+OAgURQUk/kuojntITjgavlr77lv5zjgZnjgovkuojlrprjga7kvZzmiJDjg7vlpInmm7Tjg7vlj5bmtojjga7jgZ/jgoFHb29nbGUgQ2FsZW5kYXIgQVBJ44KS5Yip55So44GX44G+44GZ44CCCiAgICAgICAgPGEgaHJlZj0iaHR0cHM6Ly9kcHJvLXNob3AuY29tL3ByaXZhY3kiIHRhcmdldD0iX2JsYW5rIiByZWw9Im5vb3BlbmVyIj7jg5fjg6njgqTjg5Djgrfjg7zjg53jg6rjgrfjg7w8L2E+CiAgICAgICAg77yPIDxhIGhyZWY9Imh0dHBzOi8vZHByby1zaG9wLmNvbS9jb25uZWN0LyIgdGFyZ2V0PSJfYmxhbmsiIHJlbD0ibm9vcGVuZXIiPkRQUk8gQ09OTkVDVDwvYT4KICAgICAgPC9kaXY+CiAgICA8L2FydGljbGU+YDsKJycnCmlmIG9sZF9yZXR1cm4gbm90IGluIGM6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJFUlJPUjogR29vZ2xlIGNhcmQgcmV0dXJuIG1hcmtlciBub3QgZm91bmQiKQpjID0gYy5yZXBsYWNlKG9sZF9yZXR1cm4sIG5ld19yZXR1cm4sIDEpCmpzLndyaXRlX3RleHQoYywgZW5jb2Rpbmc9InV0Zi04IikKCm8gPSBvd25lci5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKb2xkX3RhZyA9ICc8c2NyaXB0IHNyYz0iLi9waG90by1pbnRlZ3JhdGlvbnMtdWkuanM/dj1EUFJPLVBIT1RPLUlOVEVHUkFUSU9OUy1VSS1WMS4yLUdPT0dMRS1TWU5DLVNUQVRVUy0yMDI2MTAwNyI+PC9zY3JpcHQ+JwpuZXdfdGFnID0gJzxzY3JpcHQgc3JjPSIuL3Bob3RvLWludGVncmF0aW9ucy11aS5qcz92PURQUk8tUEhPVE8tSU5URUdSQVRJT05TLVVJLVYxLjMtR09PR0xFLVBSSVZBQ1ktTk9USUNFLTIwMjYxMDA3Ij48L3NjcmlwdD4nCmlmIG9sZF90YWcgbm90IGluIG86CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJFUlJPUjogb3duZXIgY2FjaGUgbWFya2VyIG5vdCBmb3VuZCIpCm8gPSBvLnJlcGxhY2Uob2xkX3RhZywgbmV3X3RhZywgMSkKb3duZXIud3JpdGVfdGV4dChvLCBlbmNvZGluZz0idXRmLTgiKQoKcHJpbnQoIlBIT1RPX1BBVENIX09LIikK' | base64 -d > /tmp/dpro_photo_privacy_patch.py
+          python /tmp/dpro_photo_privacy_patch.py
+
+      - name: Validate
+        shell: bash
+        run: |
+          node --check photo-integrations-ui.js
+          grep -q 'DPRO-PHOTO-INTEGRATIONS-UI-V1.3-GOOGLE-PRIVACY-NOTICE-20261007' photo-integrations-ui.js
+          grep -q 'https://dpro-shop.com/privacy' photo-integrations-ui.js
+          grep -q 'https://dpro-shop.com/connect/' photo-integrations-ui.js
+          grep -q 'DPRO-PHOTO-INTEGRATIONS-UI-V1.3-GOOGLE-PRIVACY-NOTICE-20261007' owner.html
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add photo-integrations-ui.js owner.html
+          if git diff --cached --quiet; then
+            echo "No staged changes."
+            exit 0
+          fi
+          git commit -m "Add Google data privacy notice to DPRO PHOTO"
+          git push
