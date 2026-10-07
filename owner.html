@@ -398,6 +398,7 @@
     .slot-btn { min-height: 40px; border: 1px solid #bcd8d2; border-radius: 10px; background: #f2faf7; color: var(--green-900); font-weight: 850; }
     .slot-btn.selected { color: #fff; border-color: var(--green-800); background: var(--green-800); }
     .slot-btn .slot-remaining { display: block; margin-top: 2px; font-size: 9px; font-weight: 800; opacity: .76; }
+    .manual-date-guide { margin-top: 6px; color: #55716c; font-size: 11px; font-weight: 800; line-height: 1.5; }
 
     .inline-search { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
     .mini-results { display: grid; gap: 6px; margin-top: 8px; max-height: 180px; overflow: auto; }
@@ -762,7 +763,7 @@
           <div class="field"><label for="manualPlan">撮影プラン</label><select id="manualPlan"><option value="">選択してください</option></select></div>
           <div class="field"><label for="manualStaff">担当カメラマン</label><select id="manualStaff"><option value="">おまかせ</option></select></div>
           <div class="field"><label for="manualResource">撮影スペース</label><select id="manualResource"><option value="">プラン標準</option></select></div>
-          <div class="field"><label for="manualDate">撮影日</label><input id="manualDate" class="input" type="date" /></div>
+          <div class="field"><label for="manualDate">撮影日</label><input id="manualDate" class="input" type="date" /><div id="manualDateGuide" class="manual-date-guide"></div></div>
           <div class="field span-2"><label>空き時間</label><div id="manualSlots" class="slot-grid"><div class="empty span-2">プランと日付を選択してください。</div></div></div>
           <div class="field span-2" id="manualRegisteredSubjectField" hidden><label for="manualRegisteredSubject">登録済みの撮影対象者</label><select id="manualRegisteredSubject"><option value="">＋ 新しい撮影対象者を入力</option></select></div>
           <div class="field"><label for="manualSubjectName">主な撮影対象者</label><input id="manualSubjectName" class="input" type="text" placeholder="例：はると、ポチ、家族、商品名" /></div>
@@ -959,6 +960,16 @@
     function fmtDate(value) { return value ? C.formatDate(value, { weekday: "short" }) : "-"; }
     function fmtTime(value) { return value ? C.formatTime(value) : "-"; }
     function fmtDateTime(value) { return value ? C.formatDateTime(value) : "-"; }
+    function renderManualDateGuide() {
+      const el = $("manualDateGuide");
+      if (!el) return;
+      const value = $("manualDate")?.value || "";
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) { el.textContent = ""; return; }
+      const y = Number(match[1]), m = Number(match[2]), d = Number(match[3]);
+      const date = new Date(y, m - 1, d);
+      el.textContent = `${y}年${m}月${d}日（${WEEKDAYS[date.getDay()]}）`;
+    }
     function statusTone(value) {
       if (["confirmed","completed","delivered","done","selected","closed","accepted"].includes(value)) return "green";
       if (["cancel_requested","cancelled","no_show"].includes(value)) return "red";
@@ -1024,6 +1035,7 @@
       $("todayDate").value = C.todayYmd();
       $("manualDate").min = C.todayYmd();
       if (!$("manualDate").value) $("manualDate").value = C.todayYmd();
+      renderManualDateGuide();
       updateNavBadges();
     }
 
@@ -1612,7 +1624,7 @@
             throw error;
           }
           return payload;
-        });
+        }, { suppressErrorToast: true });
 
         const slots = (result.slots || []).filter((s) => s.available);
         const showRemaining = result.capacity_enabled === true;
@@ -1626,7 +1638,13 @@
             }).join("")
           : `<div class="empty span-2">${esc(result.reason || "空いている時間がありません。")}</div>`;
       } catch (error) {
-        $("manualSlots").innerHTML = `<div class="empty span-2">${esc(errorMessage(error))}</div>`;
+        const message = errorMessage(error);
+        if (message.includes("直前予約")) {
+          $("manualSlots").innerHTML = '<div class="empty span-2">本日は受付対象外です。別の日を選択してください。</div>';
+          return;
+        }
+        $("manualSlots").innerHTML = `<div class="empty span-2">${esc(message)}</div>`;
+        toast(message, "error", 5200);
       }
     }
 
@@ -1915,7 +1933,7 @@
       $("manualPlan").addEventListener("change", () => { populateOwnerRegisteredSubjects(); loadManualSlots().catch(() => {}); });
       $("manualStaff").addEventListener("change", () => loadManualSlots().catch(() => {}));
       $("manualResource").addEventListener("change", () => loadManualSlots().catch(() => {}));
-      $("manualDate").addEventListener("change", () => { clearManualConflict(); loadManualSlots().catch(() => {}); });
+      $("manualDate").addEventListener("change", () => { clearManualConflict(); renderManualDateGuide(); loadManualSlots().catch(() => {}); });
       $("manualRegisteredSubject").addEventListener("change", applyOwnerRegisteredSubject);
       $("manualSubjectName").addEventListener("input", clearManualConflict);
       $("manualConflictOpenBtn").addEventListener("click", () => {
