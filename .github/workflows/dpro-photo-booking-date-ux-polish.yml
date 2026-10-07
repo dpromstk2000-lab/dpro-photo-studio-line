@@ -1,0 +1,68 @@
+name: DPRO Photo Booking Date UX Polish
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply booking date UX polish
+        shell: bash
+        run: |
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpHVUlERV9GVU5DID0gJyAgICBmdW5jdGlvbiByZW5kZXJNYW51YWxEYXRlR3VpZGUoKSB7XG4gICAgICBjb25zdCBlbCA9ICQoIm1hbnVhbERhdGVHdWlkZSIpO1xuICAgICAgaWYgKCFlbCkgcmV0dXJuO1xuICAgICAgY29uc3QgdmFsdWUgPSAkKCJtYW51YWxEYXRlIik/LnZhbHVlIHx8ICIiO1xuICAgICAgY29uc3QgbWF0Y2ggPSB2YWx1ZS5tYXRjaCgvXihcXGR7NH0pLShcXGR7Mn0pLShcXGR7Mn0pJC8pO1xuICAgICAgaWYgKCFtYXRjaCkgeyBlbC50ZXh0Q29udGVudCA9ICIiOyByZXR1cm47IH1cbiAgICAgIGNvbnN0IHkgPSBOdW1iZXIobWF0Y2hbMV0pLCBtID0gTnVtYmVyKG1hdGNoWzJdKSwgZCA9IE51bWJlcihtYXRjaFszXSk7XG4gICAgICBjb25zdCBkYXRlID0gbmV3IERhdGUoeSwgbSAtIDEsIGQpO1xuICAgICAgZWwudGV4dENvbnRlbnQgPSBgJHt5feW5tCR7bX3mnIgke2R95pel77yIJHtXRUVLREFZU1tkYXRlLmdldERheSgpXX3vvIlgO1xuICAgIH0nCkNBVENIX05FVyA9ICcgICAgICB9IGNhdGNoIChlcnJvcikge1xuICAgICAgICBjb25zdCBtZXNzYWdlID0gZXJyb3JNZXNzYWdlKGVycm9yKTtcbiAgICAgICAgaWYgKG1lc3NhZ2UuaW5jbHVkZXMoIuebtOWJjeS6iOe0hCIpKSB7XG4gICAgICAgICAgJCgibWFudWFsU2xvdHMiKS5pbm5lckhUTUwgPSBcJzxkaXYgY2xhc3M9ImVtcHR5IHNwYW4tMiI+5pys5pel44Gv5Y+X5LuY5a++6LGh5aSW44Gn44GZ44CC5Yil44Gu5pel44KS6YG45oqe44GX44Gm44GP44Gg44GV44GE44CCPC9kaXY+XCc7XG4gICAgICAgICAgcmV0dXJuO1xuICAgICAgICB9XG4gICAgICAgICQoIm1hbnVhbFNsb3RzIikuaW5uZXJIVE1MID0gYDxkaXYgY2xhc3M9ImVtcHR5IHNwYW4tMiI+JHtlc2MobWVzc2FnZSl9PC9kaXY+YDtcbiAgICAgICAgdG9hc3QobWVzc2FnZSwgImVycm9yIiwgNTIwMCk7XG4gICAgICB9XG4gICAgfScKCmRlZiByZXBsYWNlX29uY2UodGV4dCwgb2xkLCBuZXcsIG5hbWUpOgogICAgaWYgbmV3IGluIHRleHQ6CiAgICAgICAgcmV0dXJuIHRleHQKICAgIGNvdW50ID0gdGV4dC5jb3VudChvbGQpCiAgICBpZiBjb3VudCAhPSAxOgogICAgICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJFUlJPUjoge25hbWV9IG1hdGNoZWQge2NvdW50fSB0aW1lcyIpCiAgICByZXR1cm4gdGV4dC5yZXBsYWNlKG9sZCwgbmV3LCAxKQoKcCA9IFBhdGgoIm93bmVyLmh0bWwiKQpzID0gcC5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKCmRhdGVfZmllbGQgPSAnPGRpdiBjbGFzcz0iZmllbGQiPjxsYWJlbCBmb3I9Im1hbnVhbERhdGUiPuaSruW9seaXpTwvbGFiZWw+PGlucHV0IGlkPSJtYW51YWxEYXRlIiBjbGFzcz0iaW5wdXQiIHR5cGU9ImRhdGUiIC8+PC9kaXY+JwpkYXRlX2ZpZWxkX25ldyA9ICc8ZGl2IGNsYXNzPSJmaWVsZCI+PGxhYmVsIGZvcj0ibWFudWFsRGF0ZSI+5pKu5b2x5pelPC9sYWJlbD48aW5wdXQgaWQ9Im1hbnVhbERhdGUiIGNsYXNzPSJpbnB1dCIgdHlwZT0iZGF0ZSIgLz48ZGl2IGlkPSJtYW51YWxEYXRlR3VpZGUiIGNsYXNzPSJtYW51YWwtZGF0ZS1ndWlkZSI+PC9kaXY+PC9kaXY+JwppZiAnaWQ9Im1hbnVhbERhdGVHdWlkZSInIG5vdCBpbiBzOgogICAgcyA9IHJlcGxhY2Vfb25jZShzLCBkYXRlX2ZpZWxkLCBkYXRlX2ZpZWxkX25ldywgIm1hbnVhbCBkYXRlIGd1aWRlIikKCmNzc19hbmNob3IgPSAnICAgIC5zbG90LWJ0biAuc2xvdC1yZW1haW5pbmcgeyBkaXNwbGF5OiBibG9jazsgbWFyZ2luLXRvcDogMnB4OyBmb250LXNpemU6IDlweDsgZm9udC13ZWlnaHQ6IDgwMDsgb3BhY2l0eTogLjc2OyB9Jwpjc3NfbmV3ID0gY3NzX2FuY2hvciArICdcbiAgICAubWFudWFsLWRhdGUtZ3VpZGUgeyBtYXJnaW4tdG9wOiA2cHg7IGNvbG9yOiAjNTU3MTZjOyBmb250LXNpemU6IDExcHg7IGZvbnQtd2VpZ2h0OiA4MDA7IGxpbmUtaGVpZ2h0OiAxLjU7IH0nCmlmICIubWFudWFsLWRhdGUtZ3VpZGUiIG5vdCBpbiBzOgogICAgcyA9IHJlcGxhY2Vfb25jZShzLCBjc3NfYW5jaG9yLCBjc3NfbmV3LCAibWFudWFsIGRhdGUgZ3VpZGUgY3NzIikKCmZtdF9hbmNob3IgPSAnICAgIGZ1bmN0aW9uIGZtdERhdGVUaW1lKHZhbHVlKSB7IHJldHVybiB2YWx1ZSA/IEMuZm9ybWF0RGF0ZVRpbWUodmFsdWUpIDogIi0iOyB9JwppZiAiZnVuY3Rpb24gcmVuZGVyTWFudWFsRGF0ZUd1aWRlKCkiIG5vdCBpbiBzOgogICAgcyA9IHJlcGxhY2Vfb25jZShzLCBmbXRfYW5jaG9yLCBmbXRfYW5jaG9yICsgIlxuIiArIEdVSURFX0ZVTkMsICJtYW51YWwgZGF0ZSBndWlkZSBmdW5jdGlvbiIpCgpkZWZhdWx0X2RhdGUgPSAnICAgICAgaWYgKCEkKCJtYW51YWxEYXRlIikudmFsdWUpICQoIm1hbnVhbERhdGUiKS52YWx1ZSA9IEMudG9kYXlZbWQoKTsnCmRlZmF1bHRfbmV3ID0gZGVmYXVsdF9kYXRlICsgJ1xuICAgICAgcmVuZGVyTWFudWFsRGF0ZUd1aWRlKCk7JwppZiAncmVuZGVyTWFudWFsRGF0ZUd1aWRlKCk7JyBub3QgaW4gc1tzLmZpbmQoZGVmYXVsdF9kYXRlKTpzLmZpbmQoZGVmYXVsdF9kYXRlKSsyMjBdOgogICAgcyA9IHJlcGxhY2Vfb25jZShzLCBkZWZhdWx0X2RhdGUsIGRlZmF1bHRfbmV3LCAibWFudWFsIGRhdGUgaW5pdGlhbCByZW5kZXIiKQoKYnVzeV9lbmQgPSAnICAgICAgICAgIHJldHVybiBwYXlsb2FkO1xuICAgICAgICB9KTtcblxuICAgICAgICBjb25zdCBzbG90cyA9IChyZXN1bHQuc2xvdHMgfHwgW10pLmZpbHRlcigocykgPT4gcy5hdmFpbGFibGUpOycKYnVzeV9uZXcgPSAnICAgICAgICAgIHJldHVybiBwYXlsb2FkO1xuICAgICAgICB9LCB7IHN1cHByZXNzRXJyb3JUb2FzdDogdHJ1ZSB9KTtcblxuICAgICAgICBjb25zdCBzbG90cyA9IChyZXN1bHQuc2xvdHMgfHwgW10pLmZpbHRlcigocykgPT4gcy5hdmFpbGFibGUpOycKYnVzeV9wb3MgPSBzLmZpbmQoJ2NvbnN0IHJlc3VsdCA9IGF3YWl0IHJ1bkJ1c3koIuepuuOBjeaZgumWk+OCkueiuuiqjeOBl+OBpuOBhOOBvuOBmS4uLiInKQpidXN5X3NsaWNlID0gc1tidXN5X3BvczpidXN5X3BvcysyMjAwXSBpZiBidXN5X3BvcyA+PSAwIGVsc2UgIiIKaWYgJ3sgc3VwcHJlc3NFcnJvclRvYXN0OiB0cnVlIH0nIG5vdCBpbiBidXN5X3NsaWNlOgogICAgcyA9IHJlcGxhY2Vfb25jZShzLCBidXN5X2VuZCwgYnVzeV9uZXcsICJtYW51YWwgYXZhaWxhYmlsaXR5IHN1cHByZXNzIHRvYXN0IikKCmNhdGNoX2FuY2hvciA9ICcgICAgICB9IGNhdGNoIChlcnJvcikge1xuICAgICAgICAkKCJtYW51YWxTbG90cyIpLmlubmVySFRNTCA9IGA8ZGl2IGNsYXNzPSJlbXB0eSBzcGFuLTIiPiR7ZXNjKGVycm9yTWVzc2FnZShlcnJvcikpfTwvZGl2PmA7XG4gICAgICB9XG4gICAgfScKaWYgJ+acrOaXpeOBr+WPl+S7mOWvvuixoeWkluOBp+OBmeOAguWIpeOBruaXpeOCkumBuOaKnuOBl+OBpuOBj+OBoOOBleOBhOOAgicgbm90IGluIHM6CiAgICBzID0gcmVwbGFjZV9vbmNlKHMsIGNhdGNoX2FuY2hvciwgQ0FUQ0hfTkVXLCAibWFudWFsIGF2YWlsYWJpbGl0eSBmcmllbmRseSBub3RpY2UiKQoKZGF0ZV9saXN0ZW5lciA9ICcgICAgICAkKCJtYW51YWxEYXRlIikuYWRkRXZlbnRMaXN0ZW5lcigiY2hhbmdlIiwgKCkgPT4geyBjbGVhck1hbnVhbENvbmZsaWN0KCk7IGxvYWRNYW51YWxTbG90cygpLmNhdGNoKCgpID0+IHt9KTsgfSk7JwpkYXRlX2xpc3RlbmVyX25ldyA9ICcgICAgICAkKCJtYW51YWxEYXRlIikuYWRkRXZlbnRMaXN0ZW5lcigiY2hhbmdlIiwgKCkgPT4geyBjbGVhck1hbnVhbENvbmZsaWN0KCk7IHJlbmRlck1hbnVhbERhdGVHdWlkZSgpOyBsb2FkTWFudWFsU2xvdHMoKS5jYXRjaCgoKSA9PiB7fSk7IH0pOycKaWYgJ3JlbmRlck1hbnVhbERhdGVHdWlkZSgpOyBsb2FkTWFudWFsU2xvdHMoKScgbm90IGluIHM6CiAgICBzID0gcmVwbGFjZV9vbmNlKHMsIGRhdGVfbGlzdGVuZXIsIGRhdGVfbGlzdGVuZXJfbmV3LCAibWFudWFsIGRhdGUgbGlzdGVuZXIiKQoKcC53cml0ZV90ZXh0KHMsIGVuY29kaW5nPSJ1dGYtOCIpCnByaW50KCJEUFJPIFBob3RvIGJvb2tpbmcgZGF0ZSBVWCBwb2xpc2ggcGF0Y2ggY29tcGxldGUiKQo=' | base64 -d > /tmp/dpro_photo_booking_date_ux.py
+          python /tmp/dpro_photo_booking_date_ux.py
+
+      - name: Validate
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          owner = Path("owner.html").read_text(encoding="utf-8")
+          checks = {
+              "date_guide": 'id="manualDateGuide"' in owner,
+              "date_guide_function": "function renderManualDateGuide()" in owner,
+              "date_guide_initial": 'renderManualDateGuide();' in owner,
+              "friendly_same_day_notice": "本日は受付対象外です。別の日を選択してください。" in owner,
+              "availability_toast_suppressed": '{ suppressErrorToast: true }' in owner,
+              "real_errors_still_toast": 'toast(message, "error", 5200);' in owner,
+              "date_change_refresh": 'renderManualDateGuide(); loadManualSlots()' in owner,
+          }
+          print(checks)
+          failed = [k for k,v in checks.items() if not v]
+          if failed:
+              raise SystemExit("ERROR: validation failed: " + ", ".join(failed))
+
+          scripts = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', owner, flags=re.S|re.I)
+          for i, script in enumerate(scripts):
+              Path(f"/tmp/owner-inline-{i}.js").write_text(script, encoding="utf-8")
+          print("inline_scripts", len(scripts))
+          PY
+
+          for f in /tmp/owner-inline-*.js; do
+            [ -e "$f" ] || continue
+            node --check "$f"
+          done
+
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add owner.html
+          if git diff --cached --quiet; then
+            echo "No staged changes."
+            exit 0
+          fi
+          git commit -m "Polish DPRO Photo booking date UX"
+          git push
