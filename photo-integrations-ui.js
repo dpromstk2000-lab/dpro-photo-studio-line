@@ -4,7 +4,7 @@
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG;
   if (!C) return;
 
-  const VERSION = "DPRO-PHOTO-INTEGRATIONS-UI-V1.3-GOOGLE-PRIVACY-NOTICE-20261007";
+  const VERSION = "DPRO-PHOTO-INTEGRATIONS-UI-V1.4-GOOGLE-SYNC-FEEDBACK-20261008";
   const API = C.INTEGRATIONS_API_BASE_URL || "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-integrations-v1";
   const OAUTH_ORIGIN = "https://cbknucemarcpbscirzyv.supabase.co";
   const $ = (id) => document.getElementById(id);
@@ -14,6 +14,8 @@
   let state = null;
   let currentReservationId = "";
   let loading = false;
+  let googleSyncing = false;
+  let googleSyncFeedback = null;
 
   async function request(path, options = {}) {
     const headers = {
@@ -55,6 +57,9 @@
       .pi-select{margin-top:10px;width:100%}
       .pi-note{margin-top:10px;padding:9px 10px;border-radius:10px;background:#f5f9f8;color:#4e6e68;font-size:10px;line-height:1.6}
       .pi-note.warn{background:#fff8ea;color:#7b5b25}
+      .pi-sync-result{margin-top:11px;padding:12px;border-radius:11px;border:1px solid #b9decf;background:#e8f7ef;color:#155c43;font-size:12px;font-weight:800;line-height:1.65;overflow-wrap:anywhere}
+      .pi-sync-result.busy{border-color:#b9d6e8;background:#edf7ff;color:#174b72}
+      .pi-sync-result.err{border-color:#edc6c6;background:#fff2f2;color:#933535}
       .pi-payment-list{display:grid;gap:7px;margin-top:10px}
       .pi-payment-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line,#dce7e4);border-radius:11px}
       .pi-payment-row strong{font-size:11px}
@@ -189,9 +194,10 @@
         <div class="pi-note">同期先：<strong>${esc(gc.calendar_name || "メインカレンダー")}</strong><br>予約の作成・変更・取消をDPROから自動同期します。</div>
         ${googleSyncSummaryHtml(gc)}
         <div class="pi-actions">
-          <button class="btn btn-secondary btn-small" type="button" data-pi-action="google-sync">今すぐ同期</button>
+          <button class="btn btn-secondary btn-small" type="button" data-pi-action="google-sync" ${googleSyncing ? 'disabled aria-busy="true"' : ""}>${googleSyncing ? "同期中…" : "今すぐ同期"}</button>
           <button class="btn btn-neutral btn-small" type="button" data-pi-action="google-connect">再接続</button>
-        </div>`;
+        </div>
+        ${googleSyncFeedback ? `<div class="pi-sync-result ${esc(googleSyncFeedback.kind)}" role="status" aria-live="polite">${esc(googleSyncFeedback.message)}</div>` : ""}`;
     }
 
     return `<article class="pi-card">
@@ -306,24 +312,30 @@
   }
 
   async function syncGoogle() {
-    const button = document.querySelector('[data-pi-action="google-sync"]');
-    const original = button ? button.textContent : "";
-    if (button) { button.disabled = true; button.textContent = "同期中…"; }
+    if (googleSyncing) return;
+    googleSyncing = true;
+    googleSyncFeedback = { kind: "busy", message: "Googleカレンダーへ同期しています。完了までお待ちください。" };
+    render();
     try {
       const result = await request("/api/admin/google/sync-now", { method: "POST", body: {} });
-      const s = result.summary || {};
+      const summary = result.summary || {};
       const processed = Number(result.processed || 0);
-      const failed = Number(s.failed || 0);
-      const detail = `新規 ${Number(s.created || 0)}・更新 ${Number(s.updated || 0)}・取消 ${Number(s.deleted || 0)}・失敗 ${failed}`;
-      flash(`Googleカレンダー同期完了：${processed}件（${detail}）`, failed > 0);
+      const failed = Number(summary.failed || 0);
+      const detail = `新規 ${Number(summary.created || 0)}件・更新 ${Number(summary.updated || 0)}件・取消 ${Number(summary.deleted || 0)}件・失敗 ${failed}件`;
+      const prefix = failed > 0 ? "同期結果に失敗があります" : processed > 0 ? "Googleカレンダー同期完了" : "同期処理完了（対象0件）";
+      const message = `${prefix}｜今回処理 ${processed}件（${detail}）`;
+      googleSyncFeedback = { kind: failed > 0 ? "err" : "ok", message };
+      flash(message, failed > 0);
       await load(true);
     } catch (error) {
-      flash(error.message || "同期できませんでした。", true);
+      const message = error.message || "同期できませんでした。";
+      googleSyncFeedback = { kind: "err", message: `Googleカレンダー同期失敗：${message}` };
+      flash(message, true);
     } finally {
-      if (button) { button.disabled = false; button.textContent = original || "今すぐ同期"; }
+      googleSyncing = false;
+      render();
     }
   }
-
   function ensureReservationCard() {
     let card = $("photoPaymentReservationCard");
     if (card) return card;
