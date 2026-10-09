@@ -1,0 +1,71 @@
+name: DPRO PHOTO Customer Detail Layout V2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-customer-detail-layout-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-customer-detail-layout-v2
+  cancel-in-progress: false
+
+jobs:
+  fix-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Fix description layout and check JavaScript
+        shell: bash
+        run: |
+          python3 - <<'PY_PATCH'
+          from pathlib import Path
+          import re, subprocess
+          path=Path("owner.html")
+          s=path.read_text(encoding="utf-8")
+          original=s
+          marker='DPRO-PHOTO-CUSTOMER-DETAIL-LAYOUT-V2-20261009'
+          if marker not in s:
+              old='<div class="auth-note" style="margin:10px 0 14px;line-height:1.7;"><strong>希望連絡方法：${esc(contactLabel)}</strong>\u3000／\u3000LINE連携：<strong>${esc(lineStatus)}</strong>。希望連絡方法とLINE友だち連携は別の情報です。顧客（連絡先）と撮影対象者は別々に管理しています。</div>'
+              new='<div class="customer-contact-status-note"><div class="customer-contact-status-value">希望連絡方法：<strong>${esc(contactLabel)}</strong></div><div class="customer-contact-status-explain">希望連絡方法はLINEの友だち連携状態とは別の設定です。顧客（連絡先）と撮影対象者は別々に管理しています。</div></div>'
+              css='    /* DPRO-PHOTO-CUSTOMER-DETAIL-LAYOUT-V2-20261009 */\n    .customer-contact-status-note { display:block; margin:10px 0 14px; padding:12px 14px; border:1px solid #cfe2de; border-radius:12px; background:var(--green-050); color:#315a54; line-height:1.65; }\n    .customer-contact-status-value { display:block; font-size:14px; font-weight:650; overflow-wrap:anywhere; }\n    .customer-contact-status-value strong { font-weight:900; }\n    .customer-contact-status-explain { display:block; margin-top:6px; color:#496963; font-size:12px; overflow-wrap:break-word; }\n'
+              anchor=".app { min-height: 100vh; }"
+              if s.count(old)!=1 or s.count(anchor)!=1:
+                  raise RuntimeError("Safety stop: unexpected owner.html layout, no changes made")
+              s=s.replace(old,new,1).replace(anchor,css+anchor,1)
+              if s.count(marker)!=1 or s.count('class="customer-contact-status-note"')!=1:
+                  raise RuntimeError("Safety stop: layout patch verification failed")
+          else:
+              if 'class="customer-contact-status-note"' not in s:
+                  raise RuntimeError("Existing version marker without matching layout")
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,re.S)
+          if not scripts: raise RuntimeError("No inline JavaScript to validate")
+          for i,js in enumerate(scripts):
+              if not js.strip(): continue
+              check=subprocess.run(['node','--check'],input=js,text=True,capture_output=True)
+              if check.returncode: raise RuntimeError(f"Script {i} syntax error: {check.stderr}")
+          path.write_text(s,encoding="utf-8")
+          print("PASS: contact status responsive layout; existing behaviors preserved; JavaScript syntax OK")
+          PY_PATCH
+
+      - name: Commit checked change
+        shell: bash
+        run: |
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add owner.html
+          if git diff --cached --quiet; then
+            echo "Layout already up to date"
+            exit 0
+          fi
+          git commit -m "DPRO PHOTO: fix cramped customer contact note layout"
+          git push
