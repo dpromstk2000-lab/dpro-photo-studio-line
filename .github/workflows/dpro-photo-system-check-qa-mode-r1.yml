@@ -1,0 +1,163 @@
+name: DPRO PHOTO System Check QA Data Mode R1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-system-check-qa-mode-r1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-system-check-qa-mode-r1
+  cancel-in-progress: false
+
+jobs:
+  update-system-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Apply guarded QA mode patch and validate JavaScript
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+
+          path = Path('system-check.html')
+          s = path.read_text(encoding='utf-8')
+          before = s
+          marker = 'DPRO-PHOTO-SYSTEM-CHECK-QA-DATA-MODE-R1-20261009'
+          if marker not in s:
+              def change(old, new):
+                  global s
+                  count = s.count(old)
+                  if count != 1:
+                      raise RuntimeError(f'PATCH SAFETY STOP: {count} matches for {old[:80]!r}')
+                  s = s.replace(old, new, 1)
+
+              change(
+                  '    .check-card[data-state="warn"] { border-color: #efd7a7; background: var(--warn-soft); }',
+                  '    .check-card[data-state="warn"] { border-color: #efd7a7; background: var(--warn-soft); }\n'
+                  '    /* ' + marker + ' */\n'
+                  '    .check-card[data-state="info"] { border-color: #b6d9eb; background: var(--info-soft); }'
+              )
+              change(
+                  '    .check-card[data-state="warn"] .check-icon { color: var(--warn); background: #fde9bd; }',
+                  '    .check-card[data-state="warn"] .check-icon { color: var(--warn); background: #fde9bd; }\n'
+                  '    .check-card[data-state="info"] .check-icon { color: var(--info); background: #dcecff; }'
+              )
+              change(
+                  '    .check-card[data-state="warn"] .state-pill { color: var(--warn); background: #fde9bd; }',
+                  '    .check-card[data-state="warn"] .state-pill { color: var(--warn); background: #fde9bd; }\n'
+                  '    .check-card[data-state="info"] .state-pill { color: var(--info); background: #dcecff; }'
+              )
+              change(
+                  'running: "↻", ok: "✓", warn: "!", error: "×"',
+                  'running: "↻", ok: "✓", warn: "!", info: "i", error: "×"'
+              )
+              change(
+                  'running: "確認中", ok: "OK", warn: "要確認", error: "エラー"',
+                  'running: "確認中", ok: "OK", warn: "要確認", info: "QA記録あり", error: "エラー"'
+              )
+              change(
+                  'const completed = values.filter((item) => ["ok", "warn", "error"].includes(item.state)).length;',
+                  'const completed = values.filter((item) => ["ok", "warn", "info", "error"].includes(item.state)).length;\n'
+                  '        const informational = values.filter((item) => item.state === "info").length;'
+              )
+              change(
+                  '''        if (okCount === values.length && manualDone) {''',
+                  '''        // In QA mode, extra test rows are informational, never a sales-ready confirmation.
+                  if (informational > 0) {
+                    elements.overallTitle.textContent = "本体チェック正常・QAデータ保持中";
+                    elements.overallMessage.textContent = `${okCount}件の本体チェック正常。追加の検証データを保持しています。営業デモ初期化は行っていません。`;
+                    elements.overallPill.textContent = "QAデータ保持";
+                    return;
+                  }
+
+                  if (okCount === values.length && manualDone) {'''
+              )
+              change(
+                  '''        return {
+                    state: ready ? "ok" : "warn",
+                    detail: ready
+                      ? "初期状態を確認しました。顧客4名・デモ予約4件・未完了タスク4件・今日の撮影1件・撮影後進捗2件・再注文1件です。"
+                      : `営業デモを完全初期化してください。現在：顧客${customerCount}名・デモ予約${demoReservationCount}件・未完了タスク${openTaskCount}件・今日${todayCount}件・一覧タスク${taskCount}件・撮影後${postCount}件・再注文${reorderCount}件です。`,
+                    payload: {''',
+                  '''        // Only explicit ?qa=1 on a DEMO studio distinguishes preserved QA data.
+                  // Normal sales-day URL keeps the strict initial-state warning unchanged.
+                  const qaMode = new URLSearchParams(window.location.search).get("qa") === "1"
+                    && health.database.is_demo === true;
+                  const retainedQaData = qaMode && !ready && customerCount >= 4
+                    && demoReservationCount >= 4 && openTaskCount >= 4;
+                  return {
+                    state: ready ? "ok" : (retainedQaData ? "info" : "warn"),
+                    detail: ready
+                      ? "初期状態を確認しました。顧客4名・デモ予約4件・未完了タスク4件・今日の撮影1件・撮影後進捗2件・再注文1件です。"
+                      : retainedQaData
+                        ? `開発QA中の検証データを保持しています。デモ初期化は不要です。現在：顧客${customerCount}名・デモ予約${demoReservationCount}件・未完了タスク${openTaskCount}件・今日${todayCount}件・一覧タスク${taskCount}件・撮影後${postCount}件・再注文${reorderCount}件。営業当日の初期状態とは異なります。`
+                        : `営業デモの初期状態ではありません。営業デモ開始前に必要な場合だけ初期化してください。現在：顧客${customerCount}名・デモ予約${demoReservationCount}件・未完了タスク${openTaskCount}件・今日${todayCount}件・一覧タスク${taskCount}件・撮影後${postCount}件・再注文${reorderCount}件。`,
+                    payload: {'''
+              )
+              change(
+                  '''            ready,
+                    },''',
+                  '''            ready,
+                      qa_mode: qaMode,
+                      qa_data_retained: retainedQaData,
+                    },'''
+              )
+
+              if s == before or s.count(marker) != 1:
+                  raise RuntimeError('PATCH SAFETY STOP: no changes or wrong marker count')
+
+          # Even on a repeat run verify the exact QA safeguards are present.
+          required = [
+              marker,
+              'info: "QA記録あり"',
+              'get("qa") === "1"',
+              'health.database.is_demo === true',
+              'state: ready ? "ok" : (retainedQaData ? "info" : "warn")',
+              '営業デモ初期化は行っていません',
+              'demoPrepareButton',
+              'async function runAllChecks(',
+          ]
+          for needle in required:
+              if needle not in s:
+                  raise RuntimeError('PATCH SAFETY STOP: missing expected QA guard: ' + needle)
+
+          scripts = re.findall(r'<script(?:\\s[^>]*)?>([\\s\\S]*?)</script>', s)
+          # More robust fall back if the quoted regex was delivered unescaped.
+          if not scripts:
+              scripts = re.findall(r'<script[^>]*>(.*?)</script>', s, re.S)
+          if not scripts:
+              raise RuntimeError('No inline scripts found')
+          for i, javascript in enumerate(scripts):
+              if javascript.strip():
+                  result = subprocess.run(['node','--check'], input=javascript, text=True, capture_output=True)
+                  if result.returncode:
+                      raise RuntimeError(f'JavaScript syntax error in script {i}: {result.stderr}')
+          path.write_text(s, encoding='utf-8')
+          print('PASS: DPRO PHOTO SYSTEM CHECK QA mode, sales mode preserved, JS syntax, idempotence')
+          PY
+
+      - name: Commit verified update
+        shell: bash
+        run: |
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add system-check.html
+          if git diff --cached --quiet; then
+            echo "System check QA mode already up to date"
+            exit 0
+          fi
+          git commit -m "DPRO PHOTO: distinguish QA data from sales demo freshness"
+          git push
