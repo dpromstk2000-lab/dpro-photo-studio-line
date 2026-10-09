@@ -1,0 +1,111 @@
+name: DPRO PHOTO Member Reservation Display V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-reservation-display-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-member-reservation-display-v1
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Patch member reservation UI
+        shell: bash
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          file = Path('member.html')
+          src = file.read_text(encoding='utf-8')
+          marker = 'DPRO-PHOTO-MEMBER-RESERVATION-SNAPSHOT-FALLBACK-V1-20261009'
+          if marker in src:
+              print('Already applied')
+              raise SystemExit(0)
+          def change_once(before, after):
+              global src
+              if src.count(before) != 1:
+                  raise RuntimeError(f'Expected unique patch anchor, found {src.count(before)} for {before[:60]!r}')
+              src = src.replace(before, after, 1)
+          anchor = '      function subjectsText(reservation) {'
+          helper = '''      /* DPRO-PHOTO-MEMBER-RESERVATION-SNAPSHOT-FALLBACK-V1-20261009 */
+          function reservationPlanDisplay(reservation) {
+            return reservation.plan_name || reservation.plan_name_snapshot || "";
+          }
+          function reservationStaffDisplay(reservation) {
+            return reservation.staff_name || reservation.staff_name_snapshot || "";
+          }
+          function reservationResourceDisplay(reservation) {
+            return reservation.resource_name || reservation.resource_name_snapshot || "";
+          }
+
+          '''
+          expected = {
+              'reservation.plan_name ||': 6,
+              'reservation.staff_name ||': 2,
+              'reservation.resource_name ||': 1,
+          }
+          for before, n in expected.items():
+              if src.count(before) != n:
+                  raise RuntimeError(f'Unexpected {before} occurrences: {src.count(before)} (expected {n})')
+          src = src.replace('reservation.plan_name ||', 'reservationPlanDisplay(reservation) ||')
+          src = src.replace('reservation.staff_name ||', 'reservationStaffDisplay(reservation) ||')
+          src = src.replace('reservation.resource_name ||', 'reservationResourceDisplay(reservation) ||')
+          change_once(anchor, helper + anchor)
+          change_once(
+              'const subjects = Array.isArray(reservation.subjects) ? reservation.subjects : [];\n        return subjects.length ? subjects.map((s) => s.subject_name).filter(Boolean).join("、") : "未登録";',
+              'const subjects = Array.isArray(reservation.subjects) ? reservation.subjects : (Array.isArray(reservation.reservation_subjects) ? reservation.reservation_subjects : []);\n        return subjects.length ? subjects.map((s) => s.subject_name || s.subject_name_snapshot || s.name).filter(Boolean).join("、") || "撮影対象を確認してください" : "撮影対象を確認してください";'
+          )
+          file.write_text(src, encoding='utf-8')
+          print('Updated member.html:', len(src), 'characters')
+          PYCODE
+      - name: Verify JavaScript and safe fallbacks
+        shell: bash
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import re
+          s = Path('member.html').read_text(encoding='utf-8')
+          assert s.count('DPRO-PHOTO-MEMBER-RESERVATION-SNAPSHOT-FALLBACK-V1-20261009') == 1
+          assert s.count('reservationPlanDisplay(reservation) ||') == 6
+          assert s.count('reservationStaffDisplay(reservation) ||') == 2
+          assert s.count('reservationResourceDisplay(reservation) ||') == 1
+          assert 'reservation.reservation_subjects' in s
+          assert 'reservation.plan_name || reservation.plan_name_snapshot' in s
+          inline = '\n'.join(re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>', s))
+          Path('/tmp/dpro-photo-member-inline.js').write_text(inline, encoding='utf-8')
+          print('Member UI regression assertions PASS')
+          PYCODE
+          node --check /tmp/dpro-photo-member-inline.js
+          node - <<'NODE'
+          const display = (r, type) => r[type] || r[type+'_snapshot'] || '';
+          const r = {plan_name_snapshot:'七五三撮影',staff_name_snapshot:'田中カメラマン',resource_name_snapshot:'メインスタジオA'};
+          if(display(r,'plan_name')!=='七五三撮影' || display(r,'staff_name')!=='田中カメラマン' || display(r,'resource_name')!=='メインスタジオA') throw Error('Snapshot fallback failed');
+          r.plan_name = '新しいプラン名';
+          if(display(r,'plan_name') !== '新しいプラン名') throw Error('Live name must take precedence');
+          console.log('Snapshot fallback tests PASS');
+          NODE
+      - name: Commit updated member page
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add member.html
+          git commit -m "fix(photo): show reservation snapshots on member page"
+          git push origin HEAD:main
