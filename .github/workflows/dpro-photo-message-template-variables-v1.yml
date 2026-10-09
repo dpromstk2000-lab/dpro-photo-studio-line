@@ -1,0 +1,129 @@
+name: DPRO PHOTO Message Template Variables Guard V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-message-template-variables-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-message-template-variables-v1
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Patch owner page
+        shell: bash
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          file = Path('owner.html')
+          content = file.read_text(encoding='utf-8')
+          marker = 'DPRO-PHOTO-MESSAGE-VARIABLES-GUARD-V1-20261009'
+          if marker in content:
+              print('Already applied; no changes required')
+              raise SystemExit(0)
+          def replace_once(old, new):
+              global content
+              occurrences = content.count(old)
+              if occurrences != 1:
+                  raise RuntimeError(f'Expected one anchor, found {occurrences}: {old[:95]}')
+              content = content.replace(old, new, 1)
+
+          replace_once(
+              '    function selectMessageTemplate() {',
+              """    /* DPRO-PHOTO-MESSAGE-VARIABLES-GUARD-V1-20261009 */
+              function updateMessagePlaceholderGuard() {
+                const body = $("messageBody").value || "";
+                const tokens = [...body.matchAll(/\\{\\{\\s*([a-zA-Z_][\\w]*)\\s*\\}\\}|\\{([a-zA-Z_][\\w]*)\\}/g)]
+                  .map((match) => match[1] || match[2]);
+                const names = [...new Set(tokens)];
+                const warning = $("messagePlaceholderWarning");
+                if (warning) {
+                  warning.hidden = !names.length;
+                  warning.textContent = names.length
+                    ? `未差し込み項目：${names.join("、")}。必要な情報を入力するか、文面を修正してください。` : "";
+                }
+                $("messageCopyBtn").disabled = Boolean(names.length);
+                return names;
+              }
+
+              function selectMessageTemplate() {""")
+          replace_once(
+              'customer_name: c.customer_name || customerName(r), reservation_no: r.reservation_no || "", reservation_date: fmtDate(r.start_at), reservation_time: fmtTime(r.start_at), plan_name:',
+              'customer_name: c.customer_name || customerName(r), reservation_no: r.reservation_no || "", reservation_date: r.start_at ? fmtDate(r.start_at) : "", reservation_time: r.start_at ? fmtTime(r.start_at) : "", reservation_datetime: r.start_at && r.end_at ? `${fmtDate(r.start_at)} ${fmtTime(r.start_at)}〜${fmtTime(r.end_at)}` : "", plan_name:')
+          replace_once(
+              'delivery_date: d.delivery?.scheduled_date ? fmtDate(d.delivery.scheduled_date) : "",',
+              'delivery_date: d.delivery?.scheduled_date ? fmtDate(d.delivery.scheduled_date) : "", delivery_method: d.delivery?.delivery_method ? getLabel("deliveryMethod", d.delivery.delivery_method) : "",')
+          replace_once(
+              'Object.entries(replacements).forEach(([key,val]) => { body = body.replaceAll(`{{${key}}}`, val).replaceAll(`{${key}}`, val); });',
+              """Object.entries(replacements).forEach(([key, val]) => {
+                  if (val !== undefined && val !== null && String(val).trim()) {
+                    body = body.replaceAll(`{{${key}}}`, String(val)).replaceAll(`{${key}}`, String(val));
+                  }
+                });""")
+          replace_once(
+              '      $("messageBody").value = body;\n      $("messageTypeInput").value = template.category || template.template_code || "general";',
+              '      $("messageBody").value = body;\n      $("messageTypeInput").value = template.category || template.template_code || "general";\n      updateMessagePlaceholderGuard();')
+          replace_once(
+              '      if (!body) { toast("コピーする文面を入力してください。", "error"); return; }\n      await C.copyText(body);',
+              '      if (!body) { toast("コピーする文面を入力してください。", "error"); return; }\n      if (updateMessagePlaceholderGuard().length) { toast("未差し込み項目を入力・修正してからコピーしてください。", "error"); return; }\n      await C.copyText(body);')
+          replace_once(
+              '<div class="page-actions" style="margin-top:12px;"><button id="messageCopyBtn"',
+              '<p id="messagePlaceholderWarning" role="status" hidden style="margin:10px 0;color:#875b13;background:#fff8e9;padding:10px 12px;border:1px solid #efd7a7;border-radius:10px;line-height:1.6;"></p>\n          <div class="page-actions" style="margin-top:12px;"><button id="messageCopyBtn"')
+          replace_once(
+              '      $("messageTemplateSelect").addEventListener("change", selectMessageTemplate);',
+              '      $("messageTemplateSelect").addEventListener("change", selectMessageTemplate);\n      $("messageBody").addEventListener("input", updateMessagePlaceholderGuard);')
+          file.write_text(content, encoding='utf-8')
+          print('Patched owner.html:', len(content), 'chars')
+          PYCODE
+      - name: JavaScript syntax and placeholder regression tests
+        shell: bash
+        run: |
+          python3 - <<'PYCODE'
+          import re
+          from pathlib import Path
+          s=Path('owner.html').read_text(encoding='utf-8')
+          assert s.count('DPRO-PHOTO-MESSAGE-VARIABLES-GUARD-V1-20261009')==1
+          assert 'reservation_datetime: r.start_at && r.end_at' in s
+          assert 'delivery_method: d.delivery?.delivery_method' in s
+          assert 'updateMessagePlaceholderGuard().length' in s
+          js='\n'.join(re.findall(r'<script(?:\\s[^>]*)?>([\\s\\S]*?)</script>',s))
+          Path('/tmp/dpro-owner-inline.js').write_text(js,encoding='utf-8')
+          print('Patch assertions OK')
+          PYCODE
+          node --check /tmp/dpro-owner-inline.js
+          node - <<'NODE'
+          const missing=s=>[...s.matchAll(/\{\{\s*([a-zA-Z_][\w]*)\s*\}\}|\{([a-zA-Z_][\w]*)\}/g)].map(v=>v[1]||v[2]);
+          const render=(s,map)=>Object.entries(map).reduce((body,[k,v])=>v!==undefined&&v!==null&&String(v).trim()?body.replaceAll(`{{${k}}}`,String(v)).replaceAll(`{${k}}`,String(v)):body,s);
+          const case1=render('日時：{{reservation_datetime}}\nプラン：{{plan_name}}',{reservation_datetime:'2026年10月31日（土） 14:00〜16:00',plan_name:'七五三撮影'});
+          if(case1.includes('{{')||!case1.includes('14:00〜16:00'))throw Error('datetime merge failed');
+          const case2=render('持ち物：{{belongings_guide}}',{belongings_guide:''});
+          if(missing(case2)[0]!=='belongings_guide')throw Error('missing token was incorrectly erased');
+          const case3=render('受取：{{delivery_method}}',{delivery_method:'店頭受取'});
+          if(case3!=='受取：店頭受取')throw Error('delivery method merge failed');
+          console.log('Message template substitution regression tests PASS');
+          NODE
+      - name: Commit updated owner screen
+        shell: bash
+        run: |
+          if git diff --quiet -- owner.html; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add owner.html
+          git commit -m "fix(photo): resolve reservation datetime and protect missing message variables"
+          git push origin HEAD:main
