@@ -1,0 +1,110 @@
+name: DPRO PHOTO Member Delivery Publication Guard V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-delivery-publication-guard-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-member-delivery-publication-guard-v1
+  cancel-in-progress: false
+
+jobs:
+  patch-member:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Protect delivery links until studio announces delivery
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('member.html')
+          s = p.read_text(encoding='utf-8')
+          marker = 'DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009'
+          if marker in s:
+              print('Already applied; preserving existing file.')
+              raise SystemExit(0)
+          start_key = '      function deliveryCardHtml(reservation) {'
+          end_key = '      function renderDelivery() {'
+          if s.count(start_key) != 1 or s.count(end_key) != 1:
+              raise SystemExit('QA STOP: delivery section anchors missing or repeated')
+          a = s.index(start_key)
+          b = s.index(end_key, a)
+          part = s[a:b]
+          old_url = '        const referenceUrl = delivery.reference_url && /^https?:\\/\\//i.test(delivery.reference_url) ? delivery.reference_url : "";'
+          new_url = '''        /* DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009 */
+                  const beforeShooting = reservation.visit_status === "scheduled"
+                    && ["reserved", "confirmed"].includes(reservation.reservation_status);
+                  // 'ready' is for internal preparation, not public release.
+                  const publiclyAnnounced = !beforeShooting
+                    && !["cancelled", "no_show"].includes(reservation.reservation_status)
+                    && ["guided", "delivered"].includes(status);
+                  const rawReferenceUrl = String(delivery.reference_url || "").trim();
+                  let referenceUrl = "";
+                  if (publiclyAnnounced && rawReferenceUrl) {
+                    try {
+                      const parsed = new URL(rawReferenceUrl);
+                      if (parsed.protocol === "https:" && parsed.hostname) referenceUrl = parsed.href;
+                    } catch (_) { /* Invalid or absent external URL: keep private. */ }
+                  }
+                  const publicStatus = beforeShooting ? "撮影前" : publiclyAnnounced
+                    ? C.getLabel("deliveryStatus", status, "納品案内済み")
+                    : status === "not_started" ? "未着手" : "納品案内準備中";
+                  // Do not expose internal pickup notes or unpublished customer-facing text.
+                  const publicMessage = beforeShooting ? "撮影後、写真館で納品準備を進めます。"
+                    : publiclyAnnounced ? (delivery.customer_message || "納品の詳細は写真館へご確認ください。")
+                    : "納品のご案内は、写真館で準備ができてから表示されます。";'''
+          old_status = '${escape(C.getLabel("deliveryStatus", status, "未着手"))}'
+          old_message = '${escape(delivery.customer_message || delivery.recipient_note || "写真館で納品準備を進めています。")}'
+          old_link = 'rel="noopener">納品案内を開く'
+          for label, key in [('link logic', old_url),('status badge',old_status),('message',old_message),('link rel',old_link)]:
+              if part.count(key) != 1:
+                  raise SystemExit(f'QA STOP: verified source changed for {label}: {part.count(key)} occurrences')
+          part = part.replace(old_url,new_url,1)
+          part = part.replace(old_status,'${escape(publicStatus)}',1)
+          part = part.replace(old_message,'${escape(publicMessage)}',1)
+          part = part.replace(old_link,'rel="noopener noreferrer">納品案内を開く',1)
+          result = s[:a] + part + s[b:]
+          if result.count(marker) != 1 or result.count(end_key) != 1:
+              raise SystemExit('QA STOP: delivery publication guard invariant failed')
+          p.write_text(result,encoding='utf-8')
+          print('Delivery links hidden before release; studio preparation data and reservations left intact.')
+          PY
+      - name: Check JavaScript syntax and guard presence
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('member.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(x=>x[1]).filter(x=>x.trim());
+          if(!html.includes('DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009') || !scripts.length)throw Error('Patch marker or inline JavaScript missing');
+          for(const code of scripts)new Function(code);
+          const start=html.indexOf('function deliveryCardHtml(reservation) {');
+          const end=html.indexOf('function renderDelivery() {',start);
+          const delivery=html.slice(start,end);
+          for(const snippet of ['["guided", "delivered"].includes(status)','parsed.protocol === "https:"','escape(publicStatus)','escape(publicMessage)','rel="noopener noreferrer"']){
+            if(!delivery.includes(snippet))throw Error('Missing publication guard: '+snippet);
+          }
+          console.log('PASS: JS syntax and delivery publication guard');
+          NODE
+      - name: Commit updated customer page
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo 'No changes'
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add member.html
+          git commit -m "fix(photo): hide unreleased delivery references on member page"
+          git push origin HEAD:main
