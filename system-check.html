@@ -339,6 +339,8 @@
     .check-card[data-state="running"] { border-color: #a9cbe8; background: var(--info-soft); }
     .check-card[data-state="ok"] { border-color: #b8dec9; background: var(--ok-soft); }
     .check-card[data-state="warn"] { border-color: #efd7a7; background: var(--warn-soft); }
+    /* DPRO-PHOTO-SYSTEM-CHECK-QA-DATA-MODE-R1-20261009 */
+    .check-card[data-state="info"] { border-color: #b6d9eb; background: var(--info-soft); }
     .check-card[data-state="error"] { border-color: #efc1c1; background: var(--error-soft); }
 
     .check-icon {
@@ -355,6 +357,7 @@
     .check-card[data-state="running"] .check-icon { color: var(--info); background: #dcecff; }
     .check-card[data-state="ok"] .check-icon { color: var(--ok); background: #d5efe1; }
     .check-card[data-state="warn"] .check-icon { color: var(--warn); background: #fde9bd; }
+    .check-card[data-state="info"] .check-icon { color: var(--info); background: #dcecff; }
     .check-card[data-state="error"] .check-icon { color: var(--error); background: #f9d7d7; }
 
     .check-title { margin: 0; font-size: 1rem; font-weight: 900; }
@@ -375,6 +378,7 @@
     .check-card[data-state="running"] .state-pill { color: var(--info); background: #dcecff; }
     .check-card[data-state="ok"] .state-pill { color: var(--ok); background: #d5efe1; }
     .check-card[data-state="warn"] .state-pill { color: var(--warn); background: #fde9bd; }
+    .check-card[data-state="info"] .state-pill { color: var(--info); background: #dcecff; }
     .check-card[data-state="error"] .state-pill { color: var(--error); background: #f9d7d7; }
 
     .demo-box {
@@ -842,8 +846,8 @@
       function renderChecks() {
         elements.checkList.innerHTML = checkDefinitions.map((definition) => {
           const result = state.checks[definition.id] || { state: "idle", detail: definition.description };
-          const icon = ({ idle: "—", running: "↻", ok: "✓", warn: "!", error: "×" })[result.state] || "—";
-          const label = ({ idle: "未実行", running: "確認中", ok: "OK", warn: "要確認", error: "エラー" })[result.state] || "未実行";
+          const icon = ({ idle: "—", running: "↻", ok: "✓", warn: "!", info: "i", error: "×" })[result.state] || "—";
+          const label = ({ idle: "未実行", running: "確認中", ok: "OK", warn: "要確認", info: "QA記録あり", error: "エラー" })[result.state] || "未実行";
           return `
             <article class="check-card" data-state="${escapeHtml(result.state)}" id="check-${escapeHtml(definition.id)}">
               <div class="check-icon" aria-hidden="true">${icon}</div>
@@ -879,7 +883,8 @@
         const errors = values.filter((item) => item.state === "error").length;
         const warnings = values.filter((item) => item.state === "warn").length;
         const running = values.some((item) => item.state === "running");
-        const completed = values.filter((item) => ["ok", "warn", "error"].includes(item.state)).length;
+        const completed = values.filter((item) => ["ok", "warn", "info", "error"].includes(item.state)).length;
+        const informational = values.filter((item) => item.state === "info").length;
         const okCount = values.filter((item) => item.state === "ok").length;
         const manual = getManualState();
         const manualDone = manualDefinitions.every((item) => manual[item.id]);
@@ -909,6 +914,14 @@
           elements.overallTitle.textContent = "一部の確認が残っています";
           elements.overallMessage.textContent = `${warnings}件が要確認です。管理認証または営業デモ再準備を確認してください。`;
           elements.overallPill.textContent = `要確認 ${warnings}件`;
+          return;
+        }
+
+        // In QA mode, extra test rows are informational, never a sales-ready confirmation.
+        if (informational > 0) {
+          elements.overallTitle.textContent = "本体チェック正常・QAデータ保持中";
+          elements.overallMessage.textContent = `${okCount}件の本体チェック正常。追加の検証データを保持しています。営業デモ初期化は行っていません。`;
+          elements.overallPill.textContent = "QAデータ保持";
           return;
         }
 
@@ -1196,11 +1209,19 @@
           postCount === 2 &&
           reorderCount === 1;
 
+        // Only explicit ?qa=1 on a DEMO studio distinguishes preserved QA data.
+        // Normal sales-day URL keeps the strict initial-state warning unchanged.
+        const qaMode = new URLSearchParams(window.location.search).get("qa") === "1"
+          && health.database.is_demo === true;
+        const retainedQaData = qaMode && !ready && customerCount >= 4
+          && demoReservationCount >= 4 && openTaskCount >= 4;
         return {
-          state: ready ? "ok" : "warn",
+          state: ready ? "ok" : (retainedQaData ? "info" : "warn"),
           detail: ready
             ? "初期状態を確認しました。顧客4名・デモ予約4件・未完了タスク4件・今日の撮影1件・撮影後進捗2件・再注文1件です。"
-            : `営業デモを完全初期化してください。現在：顧客${customerCount}名・デモ予約${demoReservationCount}件・未完了タスク${openTaskCount}件・今日${todayCount}件・一覧タスク${taskCount}件・撮影後${postCount}件・再注文${reorderCount}件です。`,
+            : retainedQaData
+              ? `開発QA中の検証データを保持しています。デモ初期化は不要です。現在：顧客${customerCount}名・デモ予約${demoReservationCount}件・未完了タスク${openTaskCount}件・今日${todayCount}件・一覧タスク${taskCount}件・撮影後${postCount}件・再注文${reorderCount}件。営業当日の初期状態とは異なります。`
+              : `営業デモの初期状態ではありません。営業デモ開始前に必要な場合だけ初期化してください。現在：顧客${customerCount}名・デモ予約${demoReservationCount}件・未完了タスク${openTaskCount}件・今日${todayCount}件・一覧タスク${taskCount}件・撮影後${postCount}件・再注文${reorderCount}件。`,
           payload: {
             customers: customerCount,
             demo_reservations: demoReservationCount,
@@ -1210,6 +1231,8 @@
             post_production: postCount,
             reorders: reorderCount,
             ready,
+            qa_mode: qaMode,
+            qa_data_retained: retainedQaData,
           },
         };
       }
