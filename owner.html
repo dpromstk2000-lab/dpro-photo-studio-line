@@ -834,6 +834,7 @@
             <div class="field span-2"><label for="selectionInternalNote">内部メモ</label><textarea id="selectionInternalNote"></textarea></div>
           </div>
           <div class="page-actions" style="margin-top:12px;"><button id="selectionSaveBtn" class="btn btn-primary" type="button">セレクト案内を保存</button><button id="selectionMarkGuidedBtn" class="btn btn-secondary" type="button">案内済みにする</button><button id="selectionMarkSelectedBtn" class="btn btn-secondary" type="button">写真選択済みにする</button></div>
+          <p id="selectionPostShootingGuardNote" role="status" hidden style="margin:12px 0 0;padding:10px 12px;border:1px solid #efd7a7;border-radius:10px;background:#fff8e9;color:#875b13;font-size:13px;line-height:1.6;"></p>
         </section>
         <section id="detail-delivery" class="modal-panel">
           <div class="form-grid">
@@ -848,6 +849,7 @@
             <div class="field"><label><input id="deliveryAccounting" type="checkbox" /> 会計確認済み</label></div>
           </div>
           <div class="page-actions" style="margin-top:12px;"><button id="deliverySaveBtn" class="btn btn-primary" type="button">納品情報を保存</button><button id="deliveryMarkReadyBtn" class="btn btn-secondary" type="button">納品可能にする</button><button id="deliveryMarkDoneBtn" class="btn btn-secondary" type="button">納品完了にする</button></div>
+          <p id="deliveryPostShootingGuardNote" role="status" hidden style="margin:12px 0 0;padding:10px 12px;border:1px solid #efd7a7;border-radius:10px;background:#fff8e9;color:#875b13;font-size:13px;line-height:1.6;"></p>
         </section>
         <section id="detail-message" class="modal-panel">
           <div class="form-grid">
@@ -1764,6 +1766,7 @@
       $("shootingNext").value = sr.next_action || "";
       state.shootingStartedAt = sr.started_at || null;
       state.shootingCompletedAt = sr.completed_at || null;
+      updatePostShootingActions();
 
       const sg = d.selection_guide || {};
       $("selectionProvider").value = sg.provider_name || state.settings?.settings?.default_gallery_provider || "";
@@ -1848,14 +1851,42 @@
       toast("撮影カルテを保存しました。"); await reloadCurrentReservation();
     }
 
+    /* DPRO-PHOTO-POSTSHOOT-PROGRESSION-GUARD-V1-20261009 */
+    function postShootingGuardReason() {
+      const d = state.selectedReservation || {};
+      const r = d.reservation || {};
+      const shot = d.shooting_record || {};
+      if (!r.id) return "対象予約を確認できません。";
+      if (["cancelled", "no_show"].includes(r.reservation_status)) return "取消・無断キャンセルの予約では撮影後の状態を進められません。";
+      const started = Boolean(shot.started_at || shot.completed_at);
+      const progressed = ["shooting", "selecting_on_site", "checkout_guidance", "completed"].includes(r.visit_status);
+      return (started || progressed) ? "" : "まだ撮影が開始されていません。撮影当日の進行を記録してから、案内済み・写真選択済み・納品可能・納品完了に変更してください。";
+    }
+    function canAdvancePostShooting() {
+      const reason = postShootingGuardReason();
+      if (reason) { toast(reason, "error", 6500); return false; }
+      return true;
+    }
+    function updatePostShootingActions() {
+      const reason = postShootingGuardReason();
+      for (const id of ["selectionMarkGuidedBtn", "selectionMarkSelectedBtn", "deliveryMarkReadyBtn", "deliveryMarkDoneBtn"]) {
+        const button = $(id); if (button) { button.disabled = Boolean(reason); button.title = reason || ""; }
+      }
+      for (const id of ["selectionPostShootingGuardNote", "deliveryPostShootingGuardNote"]) {
+        const note = $(id); if (note) { note.hidden = !reason; note.textContent = reason; }
+      }
+    }
+
     async function saveSelection() {
       const r = state.selectedReservation?.reservation; if (!r) return;
+      if (!["draft", "ready"].includes($("selectionStatus").value) && !canAdvancePostShooting()) return;
       await runBusy("写真セレクト案内を保存しています...", () => C.adminPost(C.ENDPOINTS.ADMIN_SELECTION_GUIDE_SAVE, { reservation_id: r.id, provider_name: $("selectionProvider").value, selection_url: $("selectionUrl").value, access_note: $("selectionAccessNote").value, guide_status: $("selectionStatus").value, selection_deadline: $("selectionDeadline").value, customer_message: $("selectionCustomerMessage").value, internal_note: $("selectionInternalNote").value, updated_by: "owner_pc" }));
       toast("写真セレクト案内を保存しました。"); await reloadCurrentReservation(); await refreshDashboard();
     }
 
     async function markSelectionStatus(status) {
       const r = state.selectedReservation?.reservation; if (!r) return;
+      if (!canAdvancePostShooting()) return;
       if (!state.selectedReservation.selection_guide) await saveSelection();
       await runBusy("セレクト案内状態を更新しています...", () => C.adminPost(C.ENDPOINTS.ADMIN_SELECTION_GUIDE_STATUS, { reservation_id: r.id, guide_status: status }));
       toast(getLabel("guideStatus", status) + "に更新しました。"); await reloadCurrentReservation(); await refreshDashboard();
@@ -1863,12 +1894,14 @@
 
     async function saveDelivery() {
       const r = state.selectedReservation?.reservation; if (!r) return;
+      if (["ready", "guided", "delivered"].includes($("deliveryStatus").value) && !canAdvancePostShooting()) return;
       await runBusy("納品情報を保存しています...", () => C.adminPost(C.ENDPOINTS.ADMIN_DELIVERY_SAVE, { reservation_id: r.id, delivery_type: $("deliveryType").value, delivery_method: $("deliveryMethod").value, delivery_status: $("deliveryStatus").value, scheduled_date: $("deliveryDate").value, reference_url: $("deliveryUrl").value, recipient_note: $("deliveryRecipientNote").value, accounting_confirmed: $("deliveryAccounting").checked, customer_message: $("deliveryCustomerMessage").value, internal_note: $("deliveryInternalNote").value, updated_by: "owner_pc" }));
       toast("納品情報を保存しました。"); await reloadCurrentReservation(); await refreshDashboard();
     }
 
     async function markDeliveryStatus(status) {
       const r = state.selectedReservation?.reservation; if (!r) return;
+      if (["ready", "guided", "delivered"].includes(status) && !canAdvancePostShooting()) return;
       if (["delivered", "cancelled"].includes(status) && !confirm(`納品状態を「${status}」へ変更しますか？`)) return;
       if (!state.selectedReservation.delivery) await saveDelivery();
       await runBusy("納品状態を更新しています...", () => C.adminPost(C.ENDPOINTS.ADMIN_DELIVERY_STATUS, { reservation_id: r.id, delivery_status: status }));
