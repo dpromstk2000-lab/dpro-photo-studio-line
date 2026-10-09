@@ -1,0 +1,101 @@
+name: DPRO PHOTO Member Preparation Clarity V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-preparation-clarity-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-member-preparation-clarity-v1
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Separate intake and belongings on member preparation page
+        shell: bash
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          file = Path('member.html')
+          content = file.read_text(encoding='utf-8')
+          marker = 'DPRO-PHOTO-MEMBER-PREPARATION-CLARITY-V1-20261009'
+          if marker in content:
+              print('Patch already applied; no changes required')
+              raise SystemExit(0)
+
+          def replace_once(old, new):
+              global content
+              n = content.count(old)
+              if n != 1:
+                  raise RuntimeError(f'Safe patch aborted; expected exactly one match, got {n}: {old[:120]!r}')
+              content = content.replace(old, new, 1)
+
+          replace_once(
+              '        const belongings = reservation.intake?.summary || "撮影プランの持ち物案内をご確認ください。詳細は写真館からLINEでご案内します。";',
+              '''        /* DPRO-PHOTO-MEMBER-PREPARATION-CLARITY-V1-20261009 */
+              // The intake summary describes shooting wishes; it is not a verified list of items to bring.
+              const intakeSummary = String(reservation.intake?.summary || reservation.shooting_purpose || "").trim();
+              const belongingsGuide = String(reservation.intake?.belongings_guide || reservation.belongings_guide || "").trim();
+              const belongingsMessage = belongingsGuide || "この画面には持ち物の具体的な案内がありません。必要なものは写真館へご確認ください。";'''
+          )
+          replace_once(
+              '              <div class="info-panel"><h4>事前ヒアリング・持ち物</h4><p>${escape(belongings)}</p></div>',
+              '''              <div class="info-panel"><h4>事前ヒアリング内容</h4><p style="white-space:pre-wrap;">${escape(intakeSummary || "撮影のご希望を確認中です。")}</p></div>
+              <div class="info-panel amber"><h4>当日の持ち物・来店準備</h4><p style="white-space:pre-wrap;">${escape(belongingsMessage)}</p></div>'''
+          )
+          file.write_text(content, encoding='utf-8')
+          print('Patched member.html; intake summary separated from belongings guidance')
+          PYCODE
+      - name: Validate patch and JavaScript syntax
+        shell: bash
+        run: |
+          python3 - <<'PYCODE'
+          import re
+          from pathlib import Path
+          s = Path('member.html').read_text(encoding='utf-8')
+          assert s.count('DPRO-PHOTO-MEMBER-PREPARATION-CLARITY-V1-20261009') == 1
+          assert '事前ヒアリング内容' in s
+          assert '当日の持ち物・来店準備' in s
+          assert 'この画面には持ち物の具体的な案内がありません。' in s
+          assert '事前ヒアリング・持ち物</h4>' not in s
+          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>', s)
+          assert scripts, 'No JS scripts found'
+          Path('/tmp/dpro-member-preparation-check.js').write_text('\n'.join(scripts),encoding='utf-8')
+          print('Patch checks PASS')
+          PYCODE
+          node --check /tmp/dpro-member-preparation-check.js
+          node - <<'NODE'
+          const display=(r)=>({
+            intake:String(r.intake?.summary || r.shooting_purpose || '').trim(),
+            belonging:String(r.intake?.belongings_guide || r.belongings_guide || '').trim() || 'この画面には持ち物の具体的な案内がありません。必要なものは写真館へご確認ください。'
+          });
+          const sample=display({intake:{summary:'七五三'},shooting_purpose:'七五三'});
+          if(sample.intake!=='七五三'||sample.belonging==='七五三')throw Error('Intake summary misused as packing list');
+          const explicit=display({intake:{summary:'七五三',belongings_guide:'写真館から指定された持ち物'}});
+          if(explicit.belonging!=='写真館から指定された持ち物')throw Error('Explicit guide not shown');
+          console.log('Preparation display tests PASS');
+          NODE
+      - name: Commit updated member page
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo 'No changes'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add member.html
+          git commit -m 'fix(photo): distinguish intake from actual preparation guidance'
+          git push origin HEAD:main
