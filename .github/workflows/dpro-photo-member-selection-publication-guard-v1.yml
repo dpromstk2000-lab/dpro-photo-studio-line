@@ -1,0 +1,75 @@
+name: DPRO PHOTO Member Selection Publication Guard V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-selection-publication-guard-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-member-selection-publication-guard-v1
+  cancel-in-progress: false
+
+jobs:
+  patch-member:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Protect unreleased galleries and label pre-shoot reservations
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('member.html')
+          s = p.read_text(encoding='utf-8')
+          marker = 'DPRO-PHOTO-MEMBER-SELECTION-PUBLICATION-GUARD-V1-20261009'
+          if marker in s:
+              print('Already applied; preserving existing file.')
+              raise SystemExit(0)
+          start_key = '      function selectionCardHtml(reservation) {'
+          end_key = '      function renderSelection() {'
+          if s.count(start_key) != 1 or s.count(end_key) != 1:
+              raise SystemExit('QA STOP: exact section anchors not found')
+          a = s.index(start_key)
+          b = s.index(end_key, a)
+          original = s[a:b]
+          for expected in ['["ready", "guided", "selected"].includes(guide.guide_status)', 'guide.selection_url', 'selectionCardHtml']:
+              if expected not in original:
+                  raise SystemExit('QA STOP: selection section differs from verified original: ' + expected)
+          replacement = '      function selectionCardHtml(reservation) {\n        /* DPRO-PHOTO-MEMBER-SELECTION-PUBLICATION-GUARD-V1-20261009 */\n        const guide = reservation.selection_guide || {};\n        const guideStatus = String(guide.guide_status || "draft");\n        const galleryUrl = String(guide.selection_url || "").trim();\n        let safeGalleryUrl = false;\n        try {\n          const parsed = new URL(galleryUrl);\n          safeGalleryUrl = parsed.protocol === "https:" && Boolean(parsed.hostname);\n        } catch (_) { /* Missing or invalid URL: no public link. */ }\n        const date = Date.parse(reservation.start_at || "");\n        const beforeShooting = Number.isFinite(date) && date > Date.now()\n          && reservation.visit_status === "scheduled"\n          && ["reserved", "confirmed"].includes(reservation.reservation_status);\n        // \'ready\' is an internal preparation stage; it is not public approval.\n        const published = safeGalleryUrl && !beforeShooting\n          && !["cancelled", "no_show"].includes(reservation.reservation_status)\n          && ["guided", "selected"].includes(guideStatus);\n        const publicStatus = beforeShooting ? "撮影前" : published\n          ? C.getLabel("guideStatus", guideStatus, "案内済み") : "準備中";\n        const publicTitle = beforeShooting ? "撮影後に写真セレクトをご案内します"\n          : published ? "写真を選ぶ準備ができました"\n          : "写真館でセレクト案内を準備しています";\n        // Never reveal an unannounced URL, access notes or password guidance in the page.\n        const publicMessage = beforeShooting ? "撮影後、写真館で写真セレクトの準備を進めます。"\n          : published ? (guide.customer_message || guide.access_note || "写真セレクトをご確認ください。")\n          : "案内が準備できると、この画面にボタンが表示されます。";\n        const deadline = published && guide.selection_deadline\n          ? C.formatDate(guide.selection_deadline, { weekday: "short" })\n          : "期限は写真館からご案内します";\n        return `\n          <article class="reservation-card open">\n            <div class="reservation-head">\n              ${dateBoxHtml(reservation)}\n              <div class="reservation-main"><strong>${escape(reservationPlanDisplay(reservation) || "撮影")}</strong><p>撮影日：${escape(C.formatDate(reservation.start_at, { weekday: "short" }))}</p></div>\n              <span class="status-badge ${published ? "" : "warn"}">${escape(publicStatus)}</span>\n            </div>\n            <div class="reservation-detail">\n              <div class="info-panel ${published ? "" : "amber"}">\n                <h4>${escape(publicTitle)}</h4>\n                <p>${escape(publicMessage)}</p>\n              </div>\n              ${published ? `<div class="action-row"><a class="btn btn-primary" href="${escape(galleryUrl)}" target="_blank" rel="noopener noreferrer">写真セレクトを開く</a></div>` : ""}\n              <div class="detail-grid">\n                <div class="detail-item"><span>セレクト期限</span><strong>${escape(deadline)}</strong></div>\n                <div class="detail-item"><span>案内サービス</span><strong>${escape(published ? (guide.provider_name || "写真館指定サービス") : "写真館指定サービス")}</strong></div>\n              </div>\n              ${actionButtons(reservation)}\n            </div>\n          </article>\n        `;\n      }\n\n'
+          result = s[:a] + replacement + s[b:]
+          if result.count(marker) != 1 or result.count(end_key) != 1:
+              raise SystemExit('QA STOP: invariant failed')
+          p.write_text(result,encoding='utf-8')
+          print('Applied guarded publication + clearer pre-shoot status. No API or database changes.')
+          PY
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('member.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(x=>x[1]).filter(x=>x.trim());
+          if(!html.includes('DPRO-PHOTO-MEMBER-SELECTION-PUBLICATION-GUARD-V1-20261009') || !scripts.length)throw Error('Guard or scripts missing');
+          for(const code of scripts)new Function(code);
+          console.log('PASS: all inline scripts compile');
+          NODE
+      - name: Commit updated customer page
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo 'No changes'
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add member.html
+          git commit -m "fix(photo): keep gallery private until guidance sent"
+          git push origin HEAD:main
