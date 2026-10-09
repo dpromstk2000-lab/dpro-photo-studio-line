@@ -985,6 +985,31 @@
       return "gray";
     }
     function getLabel(group, value) { return labels[group]?.[value] || value || "-"; }
+
+    /* DPRO-PHOTO-SHOOTING-PROGRESS-GUARD-V1-20261009 */
+    function futureUnshotReservation(row) {
+      if (!row || row.post_status !== "selection_pending") return false;
+      if (!["reserved","confirmed"].includes(row.reservation_status) || row.visit_status !== "scheduled") return false;
+      const when = Date.parse(row.start_at || "");
+      return Number.isFinite(when) && when > Date.now();
+    }
+    function postStatusDisplay(row) {
+      return futureUnshotReservation(row) ? "撮影前（セレクト未開始）" : getLabel("postStatus", row?.post_status);
+    }
+    function guardShootingStamp(kind) {
+      const r = state.selectedReservation?.reservation;
+      if (!r?.id) { toast("対象予約を確認できません。", "error"); return false; }
+      if (["cancelled","no_show"].includes(r.reservation_status)) { toast("取消・無断キャンセルの予約には撮影時刻を記録できません。", "error"); return false; }
+      if (kind === "complete" && !state.shootingStartedAt) { toast("先に撮影開始時刻を記録してください。", "error"); return false; }
+      const start = Date.parse(r.start_at || "");
+      const now = Date.now();
+      if (Number.isFinite(start) && start - now > 2 * 60 * 60 * 1000) {
+        toast("撮影予定の2時間以上前です。誤記録防止のため操作できません。", "error"); return false;
+      }
+      if (Number.isFinite(start) && start > now && !confirm("まだ撮影予定時刻の前です。実際に撮影を開始している場合のみ続行しますか？")) return false;
+      return true;
+    }
+
     function reservationId(row) { return row?.reservation_id || row?.id || ""; }
     function taskId(row) { return row?.task_id || row?.id || ""; }
     function customerId(row) { return row?.customer_id || row?.id || ""; }
@@ -1154,7 +1179,7 @@
       const rows = state.reservationRows;
       $("reservationResultMeta").textContent = `${rows.length}件表示しています。`;
       if (!rows.length) { $("reservationTable").innerHTML = '<div class="empty">条件に一致する予約はありません。</div>'; return; }
-      $("reservationTable").innerHTML = `<table><thead><tr><th>撮影日時</th><th>お客様</th><th>プラン</th><th>担当・場所</th><th>予約状態</th><th>来店状態</th><th>撮影後</th><th></th></tr></thead><tbody>${rows.map((row) => `<tr><td><strong>${esc(fmtDate(row.start_at))}</strong><br>${esc(fmtTime(row.start_at))}〜${esc(fmtTime(row.end_at))}</td><td><strong>${esc(customerName(row))}</strong><br><small>${esc(row.customer_phone_snapshot || "")}</small></td><td>${esc(planName(row))}<br><small>${esc(row.reservation_no || "")}</small></td><td>${esc(staffName(row))}<br><small>${esc(resourceName(row))}</small></td><td>${badge(getLabel("reservationStatus", row.reservation_status), statusTone(row.reservation_status))}</td><td>${badge(getLabel("visitStatus", row.visit_status), statusTone(row.visit_status))}</td><td>${badge(getLabel("postStatus", row.post_status), statusTone(row.post_status))}</td><td><button class="btn btn-small btn-secondary" data-open-reservation="${esc(reservationId(row))}" type="button">詳細</button></td></tr>`).join("")}</tbody></table>`;
+      $("reservationTable").innerHTML = `<table><thead><tr><th>撮影日時</th><th>お客様</th><th>プラン</th><th>担当・場所</th><th>予約状態</th><th>来店状態</th><th>撮影後</th><th></th></tr></thead><tbody>${rows.map((row) => `<tr><td><strong>${esc(fmtDate(row.start_at))}</strong><br>${esc(fmtTime(row.start_at))}〜${esc(fmtTime(row.end_at))}</td><td><strong>${esc(customerName(row))}</strong><br><small>${esc(row.customer_phone_snapshot || "")}</small></td><td>${esc(planName(row))}<br><small>${esc(row.reservation_no || "")}</small></td><td>${esc(staffName(row))}<br><small>${esc(resourceName(row))}</small></td><td>${badge(getLabel("reservationStatus", row.reservation_status), statusTone(row.reservation_status))}</td><td>${badge(getLabel("visitStatus", row.visit_status), statusTone(row.visit_status))}</td><td>${badge(postStatusDisplay(row), futureUnshotReservation(row) ? "gray" : statusTone(row.post_status))}</td><td><button class="btn btn-small btn-secondary" data-open-reservation="${esc(reservationId(row))}" type="button">詳細</button></td></tr>`).join("")}</tbody></table>`;
     }
 
     async function searchCustomers(inputId = "customerSearchInput") {
@@ -1715,7 +1740,7 @@
       $("reservationModalTitle").textContent = `${customerName(r)} 様｜${planName(r)}`;
       $("reservationModalMeta").textContent = `${r.reservation_no || ""}｜${fmtDateTime(r.start_at)}〜${fmtTime(r.end_at)}`;
       $("reservationDetailSummary").innerHTML = [
-        ["お客様", `${c.customer_name || customerName(r)} 様`], ["電話番号", C.formatPhone(c.phone || r.customer_phone_snapshot || "")], ["担当", staffName(r)], ["撮影場所", resourceName(r)], ["予約状態", getLabel("reservationStatus", r.reservation_status)], ["来店状態", getLabel("visitStatus", r.visit_status)], ["撮影後", getLabel("postStatus", r.post_status)], ["参加人数", `${r.participant_count || 1}名`],
+        ["お客様", `${c.customer_name || customerName(r)} 様`], ["電話番号", C.formatPhone(c.phone || r.customer_phone_snapshot || "")], ["担当", staffName(r)], ["撮影場所", resourceName(r)], ["予約状態", getLabel("reservationStatus", r.reservation_status)], ["来店状態", getLabel("visitStatus", r.visit_status)], ["撮影後", postStatusDisplay(r)], ["参加人数", `${r.participant_count || 1}名`],
       ].map(([k,v]) => `<div class="detail-box"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join("");
       $("reservationOverview").innerHTML = renderOverview(d);
       $("reservationModal").dataset.reservationId = r.id || "";
@@ -1723,6 +1748,8 @@
       $("detailReservationStatus").value = r.reservation_status || "reserved";
       $("detailVisitStatus").value = r.visit_status || "scheduled";
       $("detailPostStatus").value = r.post_status || "selection_pending";
+      const pendingOption = $("detailPostStatus").querySelector('option[value="selection_pending"]');
+      if (pendingOption) pendingOption.textContent = futureUnshotReservation(r) ? "撮影前（セレクト未開始）" : getLabel("postStatus", "selection_pending");
       $("detailStaff").value = r.assigned_staff_id || "";
       $("detailResource").value = r.resource_id || "";
       $("detailInternalNote").value = r.internal_note || "";
@@ -1967,8 +1994,8 @@
       $("settingsSaveBtn").addEventListener("click", () => saveSettings().catch(() => {}));
       $("detailStatusSaveBtn").addEventListener("click", () => saveReservationStatus().catch(() => {}));
       $("detailAssignSaveBtn").addEventListener("click", () => saveAssignment().catch(() => {}));
-      $("shootingStartBtn").addEventListener("click", () => { state.shootingStartedAt = new Date().toISOString(); toast("撮影開始時刻を現在に設定しました。保存ボタンを押してください。"); });
-      $("shootingCompleteBtn").addEventListener("click", () => { state.shootingCompletedAt = new Date().toISOString(); toast("撮影完了時刻を現在に設定しました。保存ボタンを押してください。"); });
+      $("shootingStartBtn").addEventListener("click", () => { if (!guardShootingStamp("start")) return; state.shootingStartedAt = new Date().toISOString(); toast("撮影開始時刻を現在に設定しました。保存ボタンを押してください。"); });
+      $("shootingCompleteBtn").addEventListener("click", () => { if (!guardShootingStamp("complete")) return; state.shootingCompletedAt = new Date().toISOString(); toast("撮影完了時刻を現在に設定しました。保存ボタンを押してください。"); });
       $("shootingSaveBtn").addEventListener("click", () => saveShooting().catch(() => {}));
       $("selectionSaveBtn").addEventListener("click", () => saveSelection().catch(() => {}));
       $("selectionMarkGuidedBtn").addEventListener("click", () => markSelectionStatus("guided").catch(() => {}));
