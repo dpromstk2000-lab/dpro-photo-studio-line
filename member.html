@@ -740,9 +740,20 @@
         return `<div class="date-box"><small>${escape(p.month)}月</small><strong>${escape(p.day)}</strong><small>${escape(p.weekday)}</small></div>`;
       }
 
+      /* DPRO-PHOTO-MEMBER-RESERVATION-SNAPSHOT-FALLBACK-V1-20261009 */
+function reservationPlanDisplay(reservation) {
+  return reservation.plan_name || reservation.plan_name_snapshot || "";
+}
+function reservationStaffDisplay(reservation) {
+  return reservation.staff_name || reservation.staff_name_snapshot || "";
+}
+function reservationResourceDisplay(reservation) {
+  return reservation.resource_name || reservation.resource_name_snapshot || "";
+}
+
       function subjectsText(reservation) {
-        const subjects = Array.isArray(reservation.subjects) ? reservation.subjects : [];
-        return subjects.length ? subjects.map((s) => s.subject_name).filter(Boolean).join("、") : "未登録";
+        const subjects = Array.isArray(reservation.subjects) ? reservation.subjects : (Array.isArray(reservation.reservation_subjects) ? reservation.reservation_subjects : []);
+        return subjects.length ? subjects.map((s) => s.subject_name || s.subject_name_snapshot || s.name).filter(Boolean).join("、") || "撮影対象を確認してください" : "撮影対象を確認してください";
       }
 
       function optionTags(reservation) {
@@ -761,9 +772,9 @@
           <div class="detail-grid">
             <div class="detail-item"><span>予約日時</span><strong>${escape(C.formatDateTime(reservation.start_at))}〜${escape(C.formatTime(reservation.end_at))}</strong></div>
             <div class="detail-item"><span>予約番号</span><strong>${escape(reservation.reservation_no || "—")}</strong></div>
-            <div class="detail-item"><span>撮影プラン</span><strong>${escape(reservation.plan_name || "—")}</strong></div>
-            <div class="detail-item"><span>担当</span><strong>${escape(reservation.staff_name || "おまかせ")}</strong></div>
-            <div class="detail-item"><span>撮影場所</span><strong>${escape(reservation.resource_name || "当日ご案内")}</strong></div>
+            <div class="detail-item"><span>撮影プラン</span><strong>${escape(reservationPlanDisplay(reservation) || "—")}</strong></div>
+            <div class="detail-item"><span>担当</span><strong>${escape(reservationStaffDisplay(reservation) || "おまかせ")}</strong></div>
+            <div class="detail-item"><span>撮影場所</span><strong>${escape(reservationResourceDisplay(reservation) || "当日ご案内")}</strong></div>
             <div class="detail-item"><span>参加人数</span><strong>${escape(String(reservation.participant_count || 1))}名</strong></div>
             <div class="detail-item full"><span>撮影対象</span><strong>${escape(subjectsText(reservation))}</strong></div>
             ${reservation.shooting_purpose ? `<div class="detail-item full"><span>撮影目的</span><p>${escape(reservation.shooting_purpose)}</p></div>` : ""}
@@ -826,8 +837,8 @@
             <div class="reservation-head" data-toggle-reservation="${escape(reservation.id)}" role="button" tabindex="0">
               ${dateBoxHtml(reservation)}
               <div class="reservation-main">
-                <strong>${escape(reservation.plan_name || "撮影予約")}</strong>
-                <p>${escape(C.formatTime(reservation.start_at))}〜${escape(C.formatTime(reservation.end_at))}｜${escape(reservation.staff_name || "担当おまかせ")}</p>
+                <strong>${escape(reservationPlanDisplay(reservation) || "撮影予約")}</strong>
+                <p>${escape(C.formatTime(reservation.start_at))}〜${escape(C.formatTime(reservation.end_at))}｜${escape(reservationStaffDisplay(reservation) || "担当おまかせ")}</p>
               </div>
               <span class="status-badge ${reservationStatusClass(reservation.reservation_status)}">${escape(displayReservationStatus(reservation))}</span>
             </div>
@@ -888,7 +899,7 @@
           <article class="reservation-card open">
             <div class="reservation-head">
               ${dateBoxHtml(reservation)}
-              <div class="reservation-main"><strong>${escape(reservation.plan_name || "撮影予約")}</strong><p>${escape(C.formatDateTime(reservation.start_at))}</p></div>
+              <div class="reservation-main"><strong>${escape(reservationPlanDisplay(reservation) || "撮影予約")}</strong><p>${escape(C.formatDateTime(reservation.start_at))}</p></div>
               <span class="status-badge">${escape(displayReservationStatus(reservation))}</span>
             </div>
             <div class="reservation-detail">
@@ -916,7 +927,7 @@
           <article class="reservation-card open">
             <div class="reservation-head">
               ${dateBoxHtml(reservation)}
-              <div class="reservation-main"><strong>${escape(reservation.plan_name || "撮影")}</strong><p>撮影日：${escape(C.formatDate(reservation.start_at, { weekday: "short" }))}</p></div>
+              <div class="reservation-main"><strong>${escape(reservationPlanDisplay(reservation) || "撮影")}</strong><p>撮影日：${escape(C.formatDate(reservation.start_at, { weekday: "short" }))}</p></div>
               <span class="status-badge ${ready ? "" : "warn"}">${escape(C.getLabel("guideStatus", guide.guide_status || "draft", "準備中"))}</span>
             </div>
             <div class="reservation-detail">
@@ -951,7 +962,7 @@
           <article class="reservation-card open">
             <div class="reservation-head">
               ${dateBoxHtml(reservation)}
-              <div class="reservation-main"><strong>${escape(reservation.plan_name || "撮影")}</strong><p>撮影日：${escape(C.formatDate(reservation.start_at, { weekday: "short" }))}</p></div>
+              <div class="reservation-main"><strong>${escape(reservationPlanDisplay(reservation) || "撮影")}</strong><p>撮影日：${escape(C.formatDate(reservation.start_at, { weekday: "short" }))}</p></div>
               <span class="status-badge info">${escape(C.getLabel("deliveryStatus", status, "未着手"))}</span>
             </div>
             <div class="reservation-detail">
@@ -1039,7 +1050,7 @@
         state.modalMode = mode;
         state.modalReservation = reservation;
         els.requestModalTitle.textContent = config.title;
-        els.requestModalLead.textContent = `${reservation.reservation_no}｜${reservation.plan_name || "撮影予約"}`;
+        els.requestModalLead.textContent = `${reservation.reservation_no}｜${reservationPlanDisplay(reservation) || "撮影予約"}`;
         els.requestNoteLabel.textContent = config.label;
         els.requestNote.placeholder = config.placeholder;
         els.requestNote.value = "";
