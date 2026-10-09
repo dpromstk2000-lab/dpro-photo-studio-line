@@ -1,0 +1,92 @@
+name: DPRO PHOTO Customer Detail LINE Status V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-customer-detail-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-customer-detail-v1
+  cancel-in-progress: false
+
+jobs:
+  customer-detail-qa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Improve customer detail and check scripts
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+
+          path = Path('owner.html')
+          source = path.read_text(encoding='utf-8')
+          s = source
+          marker = 'DPRO-PHOTO-CUSTOMER-DETAIL-LINE-STATUS-V1-20261009'
+          if marker not in s:
+              def unique(old, new):
+                  global s
+                  count = s.count(old)
+                  if count != 1:
+                      raise RuntimeError(f'Safety stop: expected 1 match, got {count}: {old[:95]}')
+                  s = s.replace(old, new, 1)
+
+              old_intro = '      const sr = d.latest_shooting_record || {};\n      return `<div class="detail-summary">'
+              new_intro = ('      const sr = d.latest_shooting_record || {};\n'
+                '      // ' + marker + '\n'
+                '      const lineLinked = c.line_linked === true || Boolean(String(c.line_user_id || "").trim());\n'
+                '      const lineKnown = Object.prototype.hasOwnProperty.call(c, "line_user_id") || typeof c.line_linked === "boolean";\n'
+                '      const lineStatus = lineLinked ? "連携済み" : (lineKnown ? "未連携" : "状態未取得");\n'
+                '      const contactLabel = ({line:"LINE",phone:"電話",email:"メール",sms:"SMS"})[String(c.preferred_contact || "").toLowerCase()] || c.preferred_contact || "未設定";\n'
+                '      return `<div class="detail-summary">')
+              unique(old_intro, new_intro)
+              unique('["顧客番号",c.customer_no||"-"],["電話番号",C.formatPhone(c.phone||"")],["撮影回数",`${c.total_shoot_count||0}回`],["希望連絡",c.preferred_contact||"-"]',
+                     '["顧客番号",c.customer_no||"-"],["電話番号",C.formatPhone(c.phone||"")],["撮影回数",`${c.total_shoot_count||0}回`],["LINE連携",lineStatus]')
+              unique('</div><div class="simple-list"><div class="detail-box"><span>撮影対象者</span>',
+                '</div><div class="auth-note" style="margin:10px 0 14px;line-height:1.7;">'
+                '<strong>希望連絡方法：${esc(contactLabel)}</strong>　／　LINE連携：<strong>${esc(lineStatus)}</strong>。'
+                '希望連絡方法とLINE友だち連携は別の情報です。'
+                '顧客（連絡先）と撮影対象者は別々に管理しています。'
+                '</div><div class="simple-list"><div class="detail-box"><span>撮影対象者（子ども・ご家族など）</span>')
+              if s == source or s.count(marker) != 1 or '"LINE連携",lineStatus' not in s:
+                  raise RuntimeError('Postpatch assertion failed')
+
+          scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', s, re.S)
+          if not scripts:
+              raise RuntimeError('Inline scripts not found')
+          for i, javascript in enumerate(scripts):
+              if not javascript.strip():
+                  continue
+              check = subprocess.run(['node', '--check'], input=javascript, text=True, capture_output=True)
+              if check.returncode:
+                  raise RuntimeError(f'JavaScript syntax check {i} failed: {check.stderr}')
+
+          path.write_text(s, encoding='utf-8')
+          print('PASS: customer detail display, safer LINE-status handling, JavaScript syntax, idempotence')
+          PY
+
+      - name: Commit checked improvement
+        shell: bash
+        run: |
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add owner.html
+          if git diff --cached --quiet; then
+            echo "Customer detail already up to date"
+            exit 0
+          fi
+          git commit -m "DPRO PHOTO: show LINE linkage distinctly in customer detail"
+          git push
