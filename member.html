@@ -894,7 +894,11 @@ function reservationResourceDisplay(reservation) {
       }
 
       function preparationCardHtml(reservation) {
-        const belongings = reservation.intake?.summary || "撮影プランの持ち物案内をご確認ください。詳細は写真館からLINEでご案内します。";
+        /* DPRO-PHOTO-MEMBER-PREPARATION-CLARITY-V1-20261009 */
+    // The intake summary describes shooting wishes; it is not a verified list of items to bring.
+    const intakeSummary = String(reservation.intake?.summary || reservation.shooting_purpose || "").trim();
+    const belongingsGuide = String(reservation.intake?.belongings_guide || reservation.belongings_guide || "").trim();
+    const belongingsMessage = belongingsGuide || "この画面には持ち物の具体的な案内がありません。必要なものは写真館へご確認ください。";
         return `
           <article class="reservation-card open">
             <div class="reservation-head">
@@ -903,7 +907,8 @@ function reservationResourceDisplay(reservation) {
               <span class="status-badge">${escape(displayReservationStatus(reservation))}</span>
             </div>
             <div class="reservation-detail">
-              <div class="info-panel"><h4>事前ヒアリング・持ち物</h4><p>${escape(belongings)}</p></div>
+              <div class="info-panel"><h4>事前ヒアリング内容</h4><p style="white-space:pre-wrap;">${escape(intakeSummary || "撮影のご希望を確認中です。")}</p></div>
+    <div class="info-panel amber"><h4>当日の持ち物・来店準備</h4><p style="white-space:pre-wrap;">${escape(belongingsMessage)}</p></div>
               ${reservation.accommodation_note ? `<div class="info-panel blue"><h4>撮影時の配慮</h4><p>${escape(reservation.accommodation_note)}</p></div>` : ""}
               ${reservationBaseDetail(reservation)}
               ${actionButtons(reservation)}
