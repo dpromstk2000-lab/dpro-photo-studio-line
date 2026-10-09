@@ -1,0 +1,131 @@
+name: DPRO PHOTO Postshoot Status Guard V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-postshoot-status-guard-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-postshoot-status-guard-v1
+  cancel-in-progress: false
+
+jobs:
+  patch-owner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Add post-shoot safety checks without changing existing data
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+          import sys
+
+          owner=Path('owner.html')
+          s=owner.read_text(encoding='utf-8')
+          MARKER='DPRO-PHOTO-POSTSHOOT-PROGRESSION-GUARD-V1-20261009'
+
+          def replace_once(needle,replacement):
+              global s
+              n=s.count(needle)
+              if n!=1:
+                  raise RuntimeError('Safety stop: expected exactly one match; found '+str(n)+' of '+repr(needle[:85]))
+              s=s.replace(needle,replacement,1)
+
+          if MARKER not in s:
+              helper='''    /* DPRO-PHOTO-POSTSHOOT-PROGRESSION-GUARD-V1-20261009 */
+              function postShootingGuardReason() {
+                const d = state.selectedReservation || {};
+                const r = d.reservation || {};
+                const shot = d.shooting_record || {};
+                if (!r.id) return "対象予約を確認できません。";
+                if (["cancelled", "no_show"].includes(r.reservation_status)) return "取消・無断キャンセルの予約では撮影後の状態を進められません。";
+                const started = Boolean(shot.started_at || shot.completed_at);
+                const progressed = ["shooting", "selecting_on_site", "checkout_guidance", "completed"].includes(r.visit_status);
+                return (started || progressed) ? "" : "まだ撮影が開始されていません。撮影当日の進行を記録してから、案内済み・写真選択済み・納品可能・納品完了に変更してください。";
+              }
+              function canAdvancePostShooting() {
+                const reason = postShootingGuardReason();
+                if (reason) { toast(reason, "error", 6500); return false; }
+                return true;
+              }
+              function updatePostShootingActions() {
+                const reason = postShootingGuardReason();
+                for (const id of ["selectionMarkGuidedBtn", "selectionMarkSelectedBtn", "deliveryMarkReadyBtn", "deliveryMarkDoneBtn"]) {
+                  const button = $(id); if (button) { button.disabled = Boolean(reason); button.title = reason || ""; }
+                }
+                for (const id of ["selectionPostShootingGuardNote", "deliveryPostShootingGuardNote"]) {
+                  const note = $(id); if (note) { note.hidden = !reason; note.textContent = reason; }
+                }
+              }
+
+          '''
+              replace_once('    async function saveSelection() {', helper+'    async function saveSelection() {')
+              replace_once('    async function saveSelection() {\n      const r = state.selectedReservation?.reservation; if (!r) return;',
+                '    async function saveSelection() {\n      const r = state.selectedReservation?.reservation; if (!r) return;\n      if (!["draft", "ready"].includes($("selectionStatus").value) && !canAdvancePostShooting()) return;')
+              replace_once('    async function markSelectionStatus(status) {\n      const r = state.selectedReservation?.reservation; if (!r) return;',
+                '    async function markSelectionStatus(status) {\n      const r = state.selectedReservation?.reservation; if (!r) return;\n      if (!canAdvancePostShooting()) return;')
+              replace_once('    async function saveDelivery() {\n      const r = state.selectedReservation?.reservation; if (!r) return;',
+                '    async function saveDelivery() {\n      const r = state.selectedReservation?.reservation; if (!r) return;\n      if (["ready", "guided", "delivered"].includes($("deliveryStatus").value) && !canAdvancePostShooting()) return;')
+              replace_once('    async function markDeliveryStatus(status) {\n      const r = state.selectedReservation?.reservation; if (!r) return;',
+                '    async function markDeliveryStatus(status) {\n      const r = state.selectedReservation?.reservation; if (!r) return;\n      if (["ready", "guided", "delivered"].includes(status) && !canAdvancePostShooting()) return;')
+              replace_once('      state.shootingCompletedAt = sr.completed_at || null;',
+                '      state.shootingCompletedAt = sr.completed_at || null;\n      updatePostShootingActions();')
+              replace_once('        </section>\n        <section id="detail-delivery" class="modal-panel">',
+                '          <p id="selectionPostShootingGuardNote" role="status" hidden style="margin:12px 0 0;padding:10px 12px;border:1px solid #efd7a7;border-radius:10px;background:#fff8e9;color:#875b13;font-size:13px;line-height:1.6;"></p>\n        </section>\n        <section id="detail-delivery" class="modal-panel">')
+              replace_once('        </section>\n        <section id="detail-message" class="modal-panel">',
+                '          <p id="deliveryPostShootingGuardNote" role="status" hidden style="margin:12px 0 0;padding:10px 12px;border:1px solid #efd7a7;border-radius:10px;background:#fff8e9;color:#875b13;font-size:13px;line-height:1.6;"></p>\n        </section>\n        <section id="detail-message" class="modal-panel">')
+
+          if s.count(MARKER)!=1:
+              raise RuntimeError('Expected unique patch marker')
+          for v in ['selectionPostShootingGuardNote','deliveryPostShootingGuardNote','updatePostShootingActions();', 'if (!canAdvancePostShooting()) return;', 'if (!["draft", "ready"].includes($("selectionStatus").value)']:
+              if v not in s: raise RuntimeError('Missing protection: '+v)
+
+          blocks=re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>',s)
+          if not blocks: raise RuntimeError('No inline JS to test')
+          for i,block in enumerate(blocks):
+              if not block.strip(): continue
+              p=subprocess.run(['node','--check'],input=block,text=True,capture_output=True)
+              if p.returncode: raise RuntimeError('JS syntax failed: '+str(i)+': '+p.stderr)
+
+          # Non-mutating behavioral tests of the new decision function
+          source=s.split('    function postShootingGuardReason() {',1)[1].split('    function canAdvancePostShooting() {',1)[0]
+          source='function postShootingGuardReason() {'+source
+          node_test=r'''const vm = require('node:vm');
+          const fn = (new Function('state', %s + '\nreturn postShootingGuardReason();'));
+          const sample = (reservation,shooting_record={})=>fn({selectedReservation:{reservation,shooting_record}});
+          const base={id:'TEST',reservation_status:'reserved',visit_status:'scheduled'};
+          if(!sample(base)) throw new Error('Premature progression was allowed');
+          if(sample({...base,visit_status:'shooting'})) throw new Error('Recording legitimate shooting was blocked');
+          if(sample(base,{started_at:'2026-10-09T05:00:00Z'})) throw new Error('Recorded shoot was blocked');
+          if(!sample({...base,reservation_status:'cancelled',visit_status:'completed'})) throw new Error('Cancelled booking was allowed');
+          console.log('PASS: scheduled blocked, shooting allowed, existing shooting record allowed, cancelled blocked');'''
+          p=subprocess.run(['node','-e',node_test % repr(source)],text=True,capture_output=True)
+          if p.returncode: raise RuntimeError('Guard behavior failed: '+p.stdout+' '+p.stderr)
+          print(p.stdout.strip())
+          owner.write_text(s,encoding='utf-8')
+          print('PASS: owner.html patched, JS syntax valid, workflows remain idempotent')
+          PY
+      - name: Commit verified owner update
+        shell: bash
+        run: |
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add owner.html
+          if git diff --cached --quiet; then
+            echo "Already updated, no duplicate changes"
+            exit 0
+          fi
+          git commit -m "DPRO PHOTO: guard selection and delivery status before shooting"
+          git push
