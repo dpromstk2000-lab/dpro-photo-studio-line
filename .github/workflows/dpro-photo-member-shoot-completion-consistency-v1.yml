@@ -1,0 +1,113 @@
+name: DPRO PHOTO Member Shooting Completion Consistency V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-shoot-completion-consistency-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-member-shoot-completion-consistency-v1
+  cancel-in-progress: false
+
+jobs:
+  patch-member:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Align past reservation shooting states and reorder actions
+        shell: bash
+        run: |
+          python3 - <<'PYFIX'
+          from pathlib import Path
+          p=Path('member.html')
+          s=p.read_text(encoding='utf-8')
+          marker='DPRO-PHOTO-MEMBER-SHOOT-COMPLETION-CONSISTENCY-V1-20261009'
+          if marker in s:
+              print('Already applied; no change required')
+              raise SystemExit(0)
+          required=['DPRO-PHOTO-MEMBER-DELIVERY-REORDER-ENTRY-V1-20261009', 'DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009']
+          if any(x not in s for x in required):
+              raise SystemExit('QA STOP: expected upstream public-delivery protections missing')
+          edits=[
+            ('      function actionButtons(reservation) {',
+             """      /* DPRO-PHOTO-MEMBER-SHOOT-COMPLETION-CONSISTENCY-V1-20261009 */
+          function hasRecordedCompletedShoot(reservation) {
+          if (!reservation || ["cancelled", "no_show"].includes(reservation.reservation_status)) return false;
+          return reservation.visit_status === "completed"
+          || ["selected", "retouching", "delivery_preparing", "delivered", "reorder_follow", "closed"].includes(reservation.post_status);
+          }
+
+          function actionButtons(reservation) {"""),
+            ('if (isPast(reservation) || ["selection_guided", "selected", "retouching", "delivery_preparing", "delivered", "reorder_follow", "closed"].includes(reservation.post_status)) {',
+             'if (hasRecordedCompletedShoot(reservation)) {'),
+            ('const visitDone = ["completed"].includes(reservation.visit_status) || isPast(reservation);',
+             'const visitDone = hasRecordedCompletedShoot(reservation);'),
+            ('const completed = r.visit_status === "completed" || ["selected", "retouching", "delivery_preparing", "delivered", "reorder_follow", "closed"].includes(r.post_status);',
+             'const completed = hasRecordedCompletedShoot(r);'),
+            ('<h4>過去の撮影からも追加相談できます</h4>',
+             '<h4>過去の予約からもお問い合わせできます</h4>'),
+            ('<p>追加プリント、ご家族分、アルバム、台紙、データ追加などは「再注文・アルバム相談」からお問い合わせください。</p>',
+             '<p>撮影完了前は各予約の「この予約について問い合わせる」からご相談ください。撮影完了後は追加プリント・アルバムなどの再注文相談もご利用いただけます。</p>'),
+          ]
+          for old,new in edits:
+              n=s.count(old)
+              if n!=1:
+                  raise SystemExit('QA STOP: expected exactly 1 source anchor, got '+str(n)+': '+old[:100])
+              s=s.replace(old,new,1)
+          for x in required:
+              if x not in s: raise SystemExit('QA STOP: an upstream protection disappeared')
+          if s.count(marker)!=1: raise SystemExit('QA STOP: patch marker count incorrect')
+          p.write_text(s, encoding='utf-8')
+          print('Patched only member.html; booking, LINE, Google OAuth and database are unchanged')
+          PYFIX
+      - name: Verify customer page code and completion rules
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('member.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(x=>x[1]).filter(x=>x.trim());
+          if(!scripts.length)throw Error('Missing inline JavaScript');
+          for(const src of scripts)new Function(src);
+          const checks=[
+            'DPRO-PHOTO-MEMBER-SHOOT-COMPLETION-CONSISTENCY-V1-20261009',
+            'DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009',
+            'DPRO-PHOTO-MEMBER-SELECTION-PUBLICATION-GUARD-V1-20261009',
+            'function hasRecordedCompletedShoot(reservation)',
+            'const visitDone = hasRecordedCompletedShoot(reservation);',
+            'const completed = hasRecordedCompletedShoot(r);',
+            'if (hasRecordedCompletedShoot(reservation)) {',
+            '過去の予約からもお問い合わせできます',
+          ];
+          for(const x of checks)if(!html.includes(x))throw Error('QA STOP: missing safe guard: '+x);
+          if(html.includes('const visitDone = ["completed"].includes(reservation.visit_status) || isPast(reservation);'))throw Error('Unsafe past-date shooting logic remains');
+          const completed=(r)=>!!r&&!['cancelled','no_show'].includes(r.reservation_status)&&(r.visit_status==='completed'||['selected','retouching','delivery_preparing','delivered','reorder_follow','closed'].includes(r.post_status));
+          const cases=[
+            [{reservation_status:'reserved',visit_status:'scheduled',post_status:'selection_pending'},false],
+            [{reservation_status:'confirmed',visit_status:'completed',post_status:'selection_pending'},true],
+            [{reservation_status:'reserved',visit_status:'scheduled',post_status:'selected'},true],
+            [{reservation_status:'cancelled',visit_status:'completed',post_status:'delivered'},false],
+            [{reservation_status:'reserved',visit_status:'shooting',post_status:'selection_pending'},false],
+          ];
+          for(const [r,expected] of cases)if(completed(r)!==expected)throw Error('Shoot-complete state QA FAILED');
+          console.log('PASS: JavaScript syntax, existing protection, 5 state cases, no date-only completion');
+          NODE
+      - name: Commit corrected customer page
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo 'No code changes needed'; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add member.html
+          git commit -m "fix(photo): require actual shooting completion for reorder"
+          git push origin HEAD:main
