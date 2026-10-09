@@ -1,0 +1,117 @@
+name: DPRO PHOTO Shooting Progress Guard V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-shooting-progress-guard-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-shooting-progress-guard-v1
+  cancel-in-progress: false
+
+jobs:
+  update-owner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Verify and improve owner screen
+        shell: bash
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import subprocess
+          import re
+
+          p = Path('owner.html')
+          s = p.read_text(encoding='utf-8')
+          marker = 'DPRO-PHOTO-SHOOTING-PROGRESS-GUARD-V1-20261009'
+          if marker in s:
+              print('PASS: patch already applied; no further change')
+              raise SystemExit(0)
+
+          def swap(old, new):
+              global s
+              count = s.count(old)
+              if count != 1:
+                  raise RuntimeError(f'Expected 1 exact match; found {count}: {old[:80]}')
+              s = s.replace(old, new, 1)
+
+          anchor = '    function getLabel(group, value) { return labels[group]?.[value] || value || "-"; }'
+          helper = '''
+              /* DPRO-PHOTO-SHOOTING-PROGRESS-GUARD-V1-20261009 */
+              function futureUnshotReservation(row) {
+                if (!row || row.post_status !== "selection_pending") return false;
+                if (!["reserved","confirmed"].includes(row.reservation_status) || row.visit_status !== "scheduled") return false;
+                const when = Date.parse(row.start_at || "");
+                return Number.isFinite(when) && when > Date.now();
+              }
+              function postStatusDisplay(row) {
+                return futureUnshotReservation(row) ? "撮影前（セレクト未開始）" : getLabel("postStatus", row?.post_status);
+              }
+              function guardShootingStamp(kind) {
+                const r = state.selectedReservation?.reservation;
+                if (!r?.id) { toast("対象予約を確認できません。", "error"); return false; }
+                if (["cancelled","no_show"].includes(r.reservation_status)) { toast("取消・無断キャンセルの予約には撮影時刻を記録できません。", "error"); return false; }
+                if (kind === "complete" && !state.shootingStartedAt) { toast("先に撮影開始時刻を記録してください。", "error"); return false; }
+                const start = Date.parse(r.start_at || "");
+                const now = Date.now();
+                if (Number.isFinite(start) && start - now > 2 * 60 * 60 * 1000) {
+                  toast("撮影予定の2時間以上前です。誤記録防止のため操作できません。", "error"); return false;
+                }
+                if (Number.isFinite(start) && start > now && !confirm("まだ撮影予定時刻の前です。実際に撮影を開始している場合のみ続行しますか？")) return false;
+                return true;
+              }
+          '''
+          swap(anchor, anchor + '\n' + helper)
+          swap(
+              '${badge(getLabel("postStatus", row.post_status), statusTone(row.post_status))}</td><td><button',
+              '${badge(postStatusDisplay(row), futureUnshotReservation(row) ? "gray" : statusTone(row.post_status))}</td><td><button'
+          )
+          swap('["撮影後", getLabel("postStatus", r.post_status)]', '["撮影後", postStatusDisplay(r)]')
+          sel = '      $("detailPostStatus").value = r.post_status || "selection_pending";'
+          swap(sel, sel + '''
+                const pendingOption = $("detailPostStatus").querySelector('option[value="selection_pending"]');
+                if (pendingOption) pendingOption.textContent = futureUnshotReservation(r) ? "撮影前（セレクト未開始）" : getLabel("postStatus", "selection_pending");''')
+          swap(
+              '      $("shootingStartBtn").addEventListener("click", () => { state.shootingStartedAt = new Date().toISOString(); toast("撮影開始時刻を現在に設定しました。保存ボタンを押してください。"); });',
+              '      $("shootingStartBtn").addEventListener("click", () => { if (!guardShootingStamp("start")) return; state.shootingStartedAt = new Date().toISOString(); toast("撮影開始時刻を現在に設定しました。保存ボタンを押してください。"); });'
+          )
+          swap(
+              '      $("shootingCompleteBtn").addEventListener("click", () => { state.shootingCompletedAt = new Date().toISOString(); toast("撮影完了時刻を現在に設定しました。保存ボタンを押してください。"); });',
+              '      $("shootingCompleteBtn").addEventListener("click", () => { if (!guardShootingStamp("complete")) return; state.shootingCompletedAt = new Date().toISOString(); toast("撮影完了時刻を現在に設定しました。保存ボタンを押してください。"); });'
+          )
+          assert s.count(marker) == 1
+          assert s.count('function guardShootingStamp(') == 1
+          assert s.count('function postStatusDisplay(') == 1
+          assert 'C.adminPost(C.ENDPOINTS.ADMIN_RESERVATION_STATUS' in s
+          assert 'C.adminPost(C.ENDPOINTS.ADMIN_SHOOTING_RECORD_SAVE' in s
+          scripts = re.findall(r'<script(?:\s[^>]*)?>([\s\S]*?)</script>', s)
+          assert scripts
+          for i, javascript in enumerate(scripts):
+              if not javascript.strip():
+                  continue
+              check = subprocess.run(['node','--check'],input=javascript,text=True,capture_output=True)
+              if check.returncode:
+                  raise RuntimeError(f'JavaScript syntax error in script {i}: {check.stderr}')
+          p.write_text(s, encoding='utf-8')
+          print('PASS: six exact guards applied; reservation APIs untouched; JavaScript syntax PASS')
+          PYCODE
+      - name: Commit validated changes
+        shell: bash
+        run: |
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add owner.html
+          if git diff --cached --quiet; then
+            echo 'Already up to date'
+            exit 0
+          fi
+          git commit -m 'DPRO PHOTO: distinguish pre-shoot and guard shooting timestamps'
+          git push
