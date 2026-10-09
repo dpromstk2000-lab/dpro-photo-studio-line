@@ -1,0 +1,78 @@
+name: DPRO PHOTO Member Delivery Reorder Entry V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-delivery-reorder-entry-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-member-delivery-reorder-entry-v1
+  cancel-in-progress: false
+
+jobs:
+  patch-member:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Offer accurate past booking enquiries when delivery is empty
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('member.html')
+          s=p.read_text(encoding='utf-8')
+          marker='DPRO-PHOTO-MEMBER-DELIVERY-REORDER-ENTRY-V1-20261009'
+          if marker in s:
+              print('Already applied, no change required')
+              raise SystemExit(0)
+          a='      function renderDelivery() {'
+          b='      function renderAll() {'
+          if s.count(a)!=1 or s.count(b)!=1:
+              raise SystemExit('QA STOP: renderDelivery section anchors are not unique')
+          i=s.index(a)
+          j=s.index(b,i)
+          old=s[i:j]
+          if 'rows.map(deliveryCardHtml)' not in old or 'els.deliveryList.innerHTML' not in old:
+              raise SystemExit('QA STOP: current delivery UI differs from verified version')
+          result=s[:i]+'      function renderDelivery() {\n        /* DPRO-PHOTO-MEMBER-DELIVERY-REORDER-ENTRY-V1-20261009 */\n        const rows = state.reservations.filter((r) => r.delivery || ["selected", "retouching", "delivery_preparing", "delivered", "reorder_follow", "closed"].includes(r.post_status));\n        const rowIds = new Set(rows.map((r) => r.id));\n        const past = state.reservations\n          .filter((r) => !rowIds.has(r.id) && isPast(r) && !["cancelled", "no_show"].includes(r.reservation_status))\n          .sort((a, b) => new Date(b.start_at) - new Date(a.start_at));\n        const currentDelivery = rows.length\n          ? rows.map(deliveryCardHtml).join("")\n          : `<div class="empty"><strong>現在、納品中の撮影はありません</strong><p>写真選択後の制作・納品状況がこちらに表示されます。</p></div>`;\n        // A past booking is not necessarily a completed shoot. Offer an enquiry until completion is recorded.\n        const pastList = past.length ? `\n          <div class="info-panel" style="margin-top:14px;">\n            <h4>過去の予約について相談する</h4>\n            <p>過去の予約を選んで、追加プリントやアルバムについてご相談いただけます。撮影完了が未登録の予約は、まず写真館へのお問い合わせとなります。</p>\n          </div>\n          ${past.slice(0, 10).map((r) => {\n            const completed = r.visit_status === "completed" || ["selected", "retouching", "delivery_preparing", "delivered", "reorder_follow", "closed"].includes(r.post_status);\n            const mode = completed ? "reorder" : "contact";\n            const buttonLabel = completed ? "再注文・アルバム相談" : "この予約について問い合わせる";\n            return `<article class="reservation-card open">\n              <div class="reservation-head">\n                ${dateBoxHtml(r)}\n                <div class="reservation-main"><strong>${escape(reservationPlanDisplay(r) || "撮影予約")}</strong><p>${escape(C.formatDateTime(r.start_at))}｜${escape(r.reservation_no || "")}</p></div>\n                <span class="status-badge ${completed ? "info" : "warn"}">${completed ? "撮影完了" : "撮影状況を確認中"}</span>\n              </div>\n              <div class="action-row"><button class="btn ${completed ? "btn-primary" : "btn-neutral"} btn-small request-action" data-mode="${mode}" data-id="${escape(r.id)}" type="button">${buttonLabel}</button></div>\n            </article>`;\n          }).join("")}`\n          : `<div class="info-panel" style="margin-top:14px;"><h4>過去の予約についてのご相談</h4><p>このお客様には、過去の予約がまだ登録されていません。撮影後に追加のご相談を受け付けます。</p></div>`;\n        els.deliveryList.innerHTML = currentDelivery + pastList;\n      }\n\n'+s[j:]
+          if result.count(marker)!=1 or result.count(b)!=1:
+              raise SystemExit('QA STOP: post-patch marker invariant failed')
+          if 'DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009' not in result:
+              raise SystemExit('QA STOP: existing delivery URL guard was removed')
+          p.write_text(result,encoding='utf-8')
+          print('Patched renderDelivery; no API/database modifications')
+          PY
+      - name: Verify member page JavaScript and guards
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const html=fs.readFileSync('member.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(x=>x.trim());
+          if (!html.includes('DPRO-PHOTO-MEMBER-DELIVERY-REORDER-ENTRY-V1-20261009') || !scripts.length) throw Error('Missing patch marker or JavaScript');
+          for (const js of scripts) new Function(js);
+          for (const required of ['past.slice(0, 10)', 'data-mode="${mode}"', 'isPast(r)', 'visit_status === "completed"', 'photo']) {
+            if(required !== 'photo' && !html.includes(required)) throw Error('Missing new safe customer enquiry flow: '+required);
+          }
+          console.log('PASS: patched member scripts compile and historical booking actions exist');
+          NODE
+      - name: Commit updated customer page
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo 'No changes'
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add member.html
+          git commit -m "fix(photo): add past reservation consultation entry in delivery tab"
+          git push origin HEAD:main
