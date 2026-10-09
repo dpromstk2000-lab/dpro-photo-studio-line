@@ -857,6 +857,7 @@
             <div class="field"><label for="messageTypeInput">文面種別</label><input id="messageTypeInput" class="input" type="text" value="general" /></div>
             <div class="field span-2"><label for="messageBody">コピーする文面</label><textarea id="messageBody" style="min-height:220px;"></textarea></div>
           </div>
+          <p id="messagePlaceholderWarning" role="status" hidden style="margin:10px 0;color:#875b13;background:#fff8e9;padding:10px 12px;border:1px solid #efd7a7;border-radius:10px;line-height:1.6;"></p>
           <div class="page-actions" style="margin-top:12px;"><button id="messageCopyBtn" class="btn btn-primary" type="button">文面をコピー</button><button id="messageOpenMemberBtn" class="btn btn-neutral" type="button">お客様マイページを開く</button></div>
         </section>
         <section id="detail-tasks" class="modal-panel"><div class="dashboard-grid"><div><h4>関連タスク</h4><div id="detailTasks" class="task-list"></div></div><div><h4>再注文・アルバム相談</h4><div id="detailReorders" class="simple-list"></div></div></div></section>
@@ -1955,6 +1956,22 @@
       return `<div class="detail-summary">${[["顧客番号",c.customer_no||"-"],["電話番号",C.formatPhone(c.phone||"")],["撮影回数",`${c.total_shoot_count||0}回`],["LINE連携",lineStatus]].map(([k,v])=>`<div class="detail-box"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join("")}</div><div class="customer-contact-status-note"><div class="customer-contact-status-value">希望連絡方法：<strong>${esc(contactLabel)}</strong></div><div class="customer-contact-status-explain">希望連絡方法はLINEの友だち連携状態とは別の設定です。顧客（連絡先）と撮影対象者は別々に管理しています。</div></div><div class="simple-list"><div class="detail-box"><span>撮影対象者（子ども・ご家族など）</span><strong>${subjects.length ? esc(subjects.map((s)=>`${s.subject_name}（${getLabel("subjectType",s.subject_type)}）`).join("、")) : "未登録"}</strong></div><div class="detail-box"><span>アレルギー・配慮事項</span><strong style="white-space:pre-wrap;">${esc(c.allergies_and_care||"なし")}</strong></div><div class="detail-box"><span>内部注意事項</span><strong style="white-space:pre-wrap;">${esc(c.internal_note||"なし")}</strong></div>${sr.shooting_note ? `<div class="detail-box"><span>最新撮影カルテ</span><strong style="white-space:pre-wrap;">${esc(sr.shooting_note)}</strong></div>` : ""}</div><h4>予約履歴</h4><div class="simple-list">${reservations.length ? reservations.slice(0,20).map((r)=>`<article class="simple-item" style="padding:12px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;"><div><strong>${esc(fmtDateTime(r.start_at))}｜${esc(planName(r))}</strong><div class="item-tags">${badge(getLabel("reservationStatus",r.reservation_status),statusTone(r.reservation_status))}${badge(getLabel("postStatus",r.post_status),statusTone(r.post_status))}</div></div><button class="btn btn-small btn-secondary" data-open-reservation="${esc(r.id)}" type="button">詳細</button></article>`).join("") : '<div class="empty">予約履歴はありません。</div>'}</div>`;
     }
 
+    /* DPRO-PHOTO-MESSAGE-VARIABLES-GUARD-V1-20261009 */
+    function updateMessagePlaceholderGuard() {
+      const body = $("messageBody").value || "";
+      const tokens = [...body.matchAll(/\{\{\s*([a-zA-Z_][\w]*)\s*\}\}|\{([a-zA-Z_][\w]*)\}/g)]
+        .map((match) => match[1] || match[2]);
+      const names = [...new Set(tokens)];
+      const warning = $("messagePlaceholderWarning");
+      if (warning) {
+        warning.hidden = !names.length;
+        warning.textContent = names.length
+          ? `未差し込み項目：${names.join("、")}。必要な情報を入力するか、文面を修正してください。` : "";
+      }
+      $("messageCopyBtn").disabled = Boolean(names.length);
+      return names;
+    }
+
     function selectMessageTemplate() {
       const value = $("messageTemplateSelect").value;
       const template = (state.settings?.message_templates || []).find((t) => (t.id || t.template_code) === value);
@@ -1963,17 +1980,23 @@
       const r = d.reservation || {};
       const c = d.customer || {};
       const replacements = {
-        customer_name: c.customer_name || customerName(r), reservation_no: r.reservation_no || "", reservation_date: fmtDate(r.start_at), reservation_time: fmtTime(r.start_at), plan_name: planName(r), staff_name: staffName(r), studio_name: state.settings?.studio?.studio_name || C.STUDIO_NAME, phone: state.settings?.studio?.phone || "", selection_url: d.selection_guide?.selection_url || "", selection_deadline: d.selection_guide?.selection_deadline ? fmtDate(d.selection_guide.selection_deadline) : "", delivery_date: d.delivery?.scheduled_date ? fmtDate(d.delivery.scheduled_date) : "",
+        customer_name: c.customer_name || customerName(r), reservation_no: r.reservation_no || "", reservation_date: r.start_at ? fmtDate(r.start_at) : "", reservation_time: r.start_at ? fmtTime(r.start_at) : "", reservation_datetime: r.start_at && r.end_at ? `${fmtDate(r.start_at)} ${fmtTime(r.start_at)}〜${fmtTime(r.end_at)}` : "", plan_name: planName(r), staff_name: staffName(r), studio_name: state.settings?.studio?.studio_name || C.STUDIO_NAME, phone: state.settings?.studio?.phone || "", selection_url: d.selection_guide?.selection_url || "", selection_deadline: d.selection_guide?.selection_deadline ? fmtDate(d.selection_guide.selection_deadline) : "", delivery_date: d.delivery?.scheduled_date ? fmtDate(d.delivery.scheduled_date) : "", delivery_method: d.delivery?.delivery_method ? getLabel("deliveryMethod", d.delivery.delivery_method) : "",
       };
       let body = template.body || "";
-      Object.entries(replacements).forEach(([key,val]) => { body = body.replaceAll(`{{${key}}}`, val).replaceAll(`{${key}}`, val); });
+      Object.entries(replacements).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && String(val).trim()) {
+          body = body.replaceAll(`{{${key}}}`, String(val)).replaceAll(`{${key}}`, String(val));
+        }
+      });
       $("messageBody").value = body;
       $("messageTypeInput").value = template.category || template.template_code || "general";
+      updateMessagePlaceholderGuard();
     }
 
     async function copyMessage() {
       const body = $("messageBody").value.trim();
       if (!body) { toast("コピーする文面を入力してください。", "error"); return; }
+      if (updateMessagePlaceholderGuard().length) { toast("未差し込み項目を入力・修正してからコピーしてください。", "error"); return; }
       await C.copyText(body);
       const d = state.selectedReservation || {};
       await C.adminPost(C.ENDPOINTS.ADMIN_MESSAGE_LOG_COPY, { reservation_id: d.reservation?.id || null, customer_id: d.customer?.id || null, message_type: $("messageTypeInput").value || "general", channel: "copy", recipient: d.customer?.phone || d.reservation?.customer_phone_snapshot || "", body_snapshot: body, action_type: "copied", acted_by: "owner_pc" });
@@ -2037,6 +2060,7 @@
       $("deliveryMarkReadyBtn").addEventListener("click", () => markDeliveryStatus("ready").catch(() => {}));
       $("deliveryMarkDoneBtn").addEventListener("click", () => markDeliveryStatus("delivered").catch(() => {}));
       $("messageTemplateSelect").addEventListener("change", selectMessageTemplate);
+      $("messageBody").addEventListener("input", updateMessagePlaceholderGuard);
       $("messageCopyBtn").addEventListener("click", () => copyMessage().catch((e) => toast(errorMessage(e), "error")));
       $("messageOpenMemberBtn").addEventListener("click", openMemberPage);
       $("customerNewBookingBtn").addEventListener("click", () => { const c = state.selectedCustomer?.customer; closeModal("customerModal"); openManualModal(c); });
