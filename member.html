@@ -988,16 +988,37 @@ function reservationResourceDisplay(reservation) {
         const delivery = reservation.delivery || {};
         const status = delivery.delivery_status || "not_started";
         const scheduled = delivery.scheduled_date ? C.formatDate(delivery.scheduled_date, { weekday: "short" }) : "準備でき次第ご案内";
-        const referenceUrl = delivery.reference_url && /^https?:\/\//i.test(delivery.reference_url) ? delivery.reference_url : "";
+        /* DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009 */
+        const beforeShooting = reservation.visit_status === "scheduled"
+          && ["reserved", "confirmed"].includes(reservation.reservation_status);
+        // 'ready' is for internal preparation, not public release.
+        const publiclyAnnounced = !beforeShooting
+          && !["cancelled", "no_show"].includes(reservation.reservation_status)
+          && ["guided", "delivered"].includes(status);
+        const rawReferenceUrl = String(delivery.reference_url || "").trim();
+        let referenceUrl = "";
+        if (publiclyAnnounced && rawReferenceUrl) {
+          try {
+            const parsed = new URL(rawReferenceUrl);
+            if (parsed.protocol === "https:" && parsed.hostname) referenceUrl = parsed.href;
+          } catch (_) { /* Invalid or absent external URL: keep private. */ }
+        }
+        const publicStatus = beforeShooting ? "撮影前" : publiclyAnnounced
+          ? C.getLabel("deliveryStatus", status, "納品案内済み")
+          : status === "not_started" ? "未着手" : "納品案内準備中";
+        // Do not expose internal pickup notes or unpublished customer-facing text.
+        const publicMessage = beforeShooting ? "撮影後、写真館で納品準備を進めます。"
+          : publiclyAnnounced ? (delivery.customer_message || "納品の詳細は写真館へご確認ください。")
+          : "納品のご案内は、写真館で準備ができてから表示されます。";
         return `
           <article class="reservation-card open">
             <div class="reservation-head">
               ${dateBoxHtml(reservation)}
               <div class="reservation-main"><strong>${escape(reservationPlanDisplay(reservation) || "撮影")}</strong><p>撮影日：${escape(C.formatDate(reservation.start_at, { weekday: "short" }))}</p></div>
-              <span class="status-badge info">${escape(C.getLabel("deliveryStatus", status, "未着手"))}</span>
+              <span class="status-badge info">${escape(publicStatus)}</span>
             </div>
             <div class="reservation-detail">
-              <div class="info-panel blue"><h4>納品状況</h4><p>${escape(delivery.customer_message || delivery.recipient_note || "写真館で納品準備を進めています。")}</p></div>
+              <div class="info-panel blue"><h4>納品状況</h4><p>${escape(publicMessage)}</p></div>
               <div class="detail-grid">
                 <div class="detail-item"><span>納品内容</span><strong>${escape(C.getLabel("deliveryType", delivery.delivery_type, "写真・商品"))}</strong></div>
                 <div class="detail-item"><span>受取方法</span><strong>${escape(C.getLabel("deliveryMethod", delivery.delivery_method, "写真館からご案内"))}</strong></div>
@@ -1005,7 +1026,7 @@ function reservationResourceDisplay(reservation) {
                 <div class="detail-item"><span>状態</span><strong>${escape(C.getLabel("deliveryStatus", status, status))}</strong></div>
               </div>
               <div class="action-row">
-                ${referenceUrl ? `<a class="btn btn-secondary btn-small" href="${escape(referenceUrl)}" target="_blank" rel="noopener">納品案内を開く</a>` : ""}
+                ${referenceUrl ? `<a class="btn btn-secondary btn-small" href="${escape(referenceUrl)}" target="_blank" rel="noopener noreferrer">納品案内を開く</a>` : ""}
                 <button class="btn btn-primary btn-small request-action" data-mode="reorder" data-id="${escape(reservation.id)}" type="button">再注文・アルバム相談</button>
                 <button class="btn btn-neutral btn-small request-action" data-mode="contact" data-id="${escape(reservation.id)}" type="button">納品について問い合わせる</button>
               </div>
