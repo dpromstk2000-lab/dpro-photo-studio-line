@@ -925,25 +925,51 @@ function reservationResourceDisplay(reservation) {
       }
 
       function selectionCardHtml(reservation) {
+        /* DPRO-PHOTO-MEMBER-SELECTION-PUBLICATION-GUARD-V1-20261009 */
         const guide = reservation.selection_guide || {};
-        const ready = Boolean(guide.selection_url) && ["ready", "guided", "selected"].includes(guide.guide_status);
-        const deadline = guide.selection_deadline ? C.formatDate(guide.selection_deadline, { weekday: "short" }) : "期限は写真館からご案内します";
+        const guideStatus = String(guide.guide_status || "draft");
+        const galleryUrl = String(guide.selection_url || "").trim();
+        let safeGalleryUrl = false;
+        try {
+          const parsed = new URL(galleryUrl);
+          safeGalleryUrl = parsed.protocol === "https:" && Boolean(parsed.hostname);
+        } catch (_) { /* Missing or invalid URL: no public link. */ }
+        const date = Date.parse(reservation.start_at || "");
+        const beforeShooting = Number.isFinite(date) && date > Date.now()
+          && reservation.visit_status === "scheduled"
+          && ["reserved", "confirmed"].includes(reservation.reservation_status);
+        // 'ready' is an internal preparation stage; it is not public approval.
+        const published = safeGalleryUrl && !beforeShooting
+          && !["cancelled", "no_show"].includes(reservation.reservation_status)
+          && ["guided", "selected"].includes(guideStatus);
+        const publicStatus = beforeShooting ? "撮影前" : published
+          ? C.getLabel("guideStatus", guideStatus, "案内済み") : "準備中";
+        const publicTitle = beforeShooting ? "撮影後に写真セレクトをご案内します"
+          : published ? "写真を選ぶ準備ができました"
+          : "写真館でセレクト案内を準備しています";
+        // Never reveal an unannounced URL, access notes or password guidance in the page.
+        const publicMessage = beforeShooting ? "撮影後、写真館で写真セレクトの準備を進めます。"
+          : published ? (guide.customer_message || guide.access_note || "写真セレクトをご確認ください。")
+          : "案内が準備できると、この画面にボタンが表示されます。";
+        const deadline = published && guide.selection_deadline
+          ? C.formatDate(guide.selection_deadline, { weekday: "short" })
+          : "期限は写真館からご案内します";
         return `
           <article class="reservation-card open">
             <div class="reservation-head">
               ${dateBoxHtml(reservation)}
               <div class="reservation-main"><strong>${escape(reservationPlanDisplay(reservation) || "撮影")}</strong><p>撮影日：${escape(C.formatDate(reservation.start_at, { weekday: "short" }))}</p></div>
-              <span class="status-badge ${ready ? "" : "warn"}">${escape(C.getLabel("guideStatus", guide.guide_status || "draft", "準備中"))}</span>
+              <span class="status-badge ${published ? "" : "warn"}">${escape(publicStatus)}</span>
             </div>
             <div class="reservation-detail">
-              <div class="info-panel ${ready ? "" : "amber"}">
-                <h4>${ready ? "写真を選ぶ準備ができました" : "写真館でセレクト案内を準備しています"}</h4>
-                <p>${escape(guide.customer_message || guide.access_note || (ready ? `セレクト期限：${deadline}` : "案内が準備できると、この画面にボタンが表示されます。"))}</p>
+              <div class="info-panel ${published ? "" : "amber"}">
+                <h4>${escape(publicTitle)}</h4>
+                <p>${escape(publicMessage)}</p>
               </div>
-              ${ready ? `<div class="action-row"><a class="btn btn-primary" href="${escape(guide.selection_url)}" target="_blank" rel="noopener">写真セレクトを開く</a></div>` : ""}
+              ${published ? `<div class="action-row"><a class="btn btn-primary" href="${escape(galleryUrl)}" target="_blank" rel="noopener noreferrer">写真セレクトを開く</a></div>` : ""}
               <div class="detail-grid">
                 <div class="detail-item"><span>セレクト期限</span><strong>${escape(deadline)}</strong></div>
-                <div class="detail-item"><span>案内サービス</span><strong>${escape(guide.provider_name || "写真館指定サービス")}</strong></div>
+                <div class="detail-item"><span>案内サービス</span><strong>${escape(published ? (guide.provider_name || "写真館指定サービス") : "写真館指定サービス")}</strong></div>
               </div>
               ${actionButtons(reservation)}
             </div>
