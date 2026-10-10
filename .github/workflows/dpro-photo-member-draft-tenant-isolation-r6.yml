@@ -1,0 +1,113 @@
+name: DPRO PHOTO Member Draft Tenant Isolation R6
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-draft-tenant-isolation-r6.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-member-r6-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  tenant-safe-member-drafts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Patch member draft isolation (idempotent and guarded)
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('member.html')
+          s=p.read_text(encoding='utf8')
+          old='      function requestDraftKey(mode, reservation) {\n        return "dpro_photo_member_request_v2:" + String(reservation?.reservation_no || "") + ":" + String(mode || "");\n      }\n      function loadRequestDraft(mode, reservation) {\n        try { return sessionStorage.getItem(requestDraftKey(mode, reservation)) || ""; }\n        catch { return ""; }\n      }\n      function saveRequestDraft(mode, reservation, text) {\n        if (!reservation || !mode) return;\n        try { sessionStorage.setItem(requestDraftKey(mode, reservation), text); }\n        catch {}\n      }\n      function clearRequestDraft(mode, reservation) {\n        try { sessionStorage.removeItem(requestDraftKey(mode, reservation)); }\n        catch {}\n      }\n'
+          new='      // DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010\n      // Browser draft isolation only, not a server-side authorization mechanism.\n      // Old v2 drafts are left untouched; auto-migrating ambiguous v2 keys could\n      // display another member\'s text when reservation numbers coincide.\n      function requestDraftKey(mode, reservation) {\n        const studio = String(C.APP?.studioCode || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 70);\n        const reservationId = String(reservation?.id || "").trim().toLowerCase();\n        const kind = String(mode || "").trim();\n        const line = String(state.lookup.line_user_id || "").trim();\n        const token = String(state.lookup.public_token || "").trim();\n        const identity = line ? "line:" + line : token ? "token:" + token : "";\n        if (!studio || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(reservationId)\n            || !["change", "cancel", "contact", "reorder"].includes(kind) || !identity) return "";\n        // Never put a bearer token or LINE user ID in a readable storage key.\n        let hash = 0xcbf29ce484222325n;\n        for (let i = 0; i < identity.length; i++) {\n          hash = ((hash ^ BigInt(identity.charCodeAt(i))) * 0x100000001b3n) & 0xffffffffffffffffn;\n        }\n        return "dpro_photo_member_request_v3:" + studio + ":" + reservationId + ":"\n          + hash.toString(16).padStart(16, "0") + ":" + kind;\n      }\n      function loadRequestDraft(mode, reservation) {\n        try { const key = requestDraftKey(mode, reservation); return key ? (sessionStorage.getItem(key) || "") : ""; }\n        catch { return ""; }\n      }\n      function saveRequestDraft(mode, reservation, text) {\n        if (!reservation || !mode) return;\n        try { const key = requestDraftKey(mode, reservation); if (key) sessionStorage.setItem(key, text); }\n        catch {}\n      }\n      function clearRequestDraft(mode, reservation) {\n        try { const key = requestDraftKey(mode, reservation); if (key) sessionStorage.removeItem(key); }\n        catch {}\n      }\n'
+          marker='DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010'
+          if marker in s:
+              print('R6 marker already present; no change')
+          elif s.count(old)!=1:
+              raise SystemExit('R6 STOP: expected unique member draft v2 block, no files changed')
+          else:
+              p.write_text(s.replace(old,new,1),encoding='utf8')
+              print('R6 member draft key isolation patched')
+          PY
+      - name: R6 regression and cross-account isolation tests
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const vm = require('node:vm');
+          const assert = require('node:assert/strict');
+          const html = fs.readFileSync('member.html','utf8');
+          const marker = 'DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010';
+          assert(html.includes(marker),'R6 patch marker absent');
+          for(const page of ['index.html','member.html','owner.html','staff.html','owner-ipad.html','system-check.html']){
+           const h=fs.readFileSync(page,'utf8');
+           let count=0;
+           for(const m of h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+             const js=m[2];if(!js.trim() || /\btype\s*=\s*["'](?:application\/json|importmap)["']/i.test(m[1]))continue;
+             new vm.Script(js,{filename:page+'#'+(++count)});
+           }
+           assert(count>0,page+' has no inline scripts');
+          }
+          // Isolate only these pure functions, without loading network or the full page.
+          const start=html.indexOf('      function requestDraftKey(mode, reservation) {');
+          const end=html.indexOf('      async function refreshMemberSessionForRequest()',start);
+          assert(start>0&&end>start,'draft function extraction failed');
+          const functions=html.slice(start,end);
+          const data=new Map();
+          const context={C:{APP:{studioCode:'dpro_photo_demo'}},state:{lookup:{line_user_id:'demo_photo_line_001',public_token:''}},
+           sessionStorage:{getItem:k=>data.has(k)?data.get(k):null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}};
+          vm.createContext(context);
+          vm.runInContext(functions,context);
+          const a={id:'11111111-1111-4111-8111-111111111111',reservation_no:'P-100'};
+          const b={id:'22222222-2222-4222-8222-222222222222',reservation_no:'P-100'};
+          const tests=[];
+          function check(name,fn){fn();tests.push(name);}
+          check('key stable same studio and customer',()=>assert.equal(context.requestDraftKey('contact',a),context.requestDraftKey('contact',a)));
+          check('different reservation UUID despite same reservation_no',()=>assert.notEqual(context.requestDraftKey('contact',a),context.requestDraftKey('contact',b)));
+          check('different message mode',()=>assert.notEqual(context.requestDraftKey('contact',a),context.requestDraftKey('cancel',a)));
+          const original=context.requestDraftKey('contact',a);
+          check('different studio',()=>{context.C.APP.studioCode='another_photo_studio';assert.notEqual(context.requestDraftKey('contact',a),original);context.C.APP.studioCode='dpro_photo_demo';});
+          check('different LINE identity',()=>{context.state.lookup.line_user_id='demo_photo_line_002';assert.notEqual(context.requestDraftKey('contact',a),original);context.state.lookup.line_user_id='demo_photo_line_001';});
+          check('separate public token identity',()=>{context.state.lookup={line_user_id:'',public_token:'sensitive-test-token-A'};const t=context.requestDraftKey('contact',a);assert(t&&!t.includes('sensitive-test-token-A'));context.state.lookup.public_token='sensitive-test-token-B';assert.notEqual(context.requestDraftKey('contact',a),t);context.state.lookup={line_user_id:'demo_photo_line_001',public_token:''};});
+          check('no raw member ID in key',()=>assert(!original.includes('demo_photo_line_001')));
+          check('draft storage roundtrip',()=>{context.saveRequestDraft('contact',a,'下書きテスト');assert.equal(context.loadRequestDraft('contact',a),'下書きテスト');});
+          check('draft cannot cross customer',()=>{context.state.lookup.line_user_id='demo_photo_line_002';assert.equal(context.loadRequestDraft('contact',a),'');context.state.lookup.line_user_id='demo_photo_line_001';});
+          check('draft cannot cross booking',()=>assert.equal(context.loadRequestDraft('contact',b),''));
+          check('draft cannot cross studio',()=>{context.C.APP.studioCode='another_photo_studio';assert.equal(context.loadRequestDraft('contact',a),'');context.C.APP.studioCode='dpro_photo_demo';});
+          check('draft cannot cross mode',()=>assert.equal(context.loadRequestDraft('change',a),''));
+          check('clear only own draft',()=>{context.clearRequestDraft('contact',a);assert.equal(context.loadRequestDraft('contact',a),'');});
+          check('no identity means no persistent storage',()=>{context.state.lookup={line_user_id:'',public_token:''};context.saveRequestDraft('contact',a,'must-not-save');assert.equal(context.loadRequestDraft('contact',a),'');context.state.lookup={line_user_id:'demo_photo_line_001',public_token:''};});
+          check('missing reservation UUID means no persistent storage',()=>assert.equal(context.requestDraftKey('contact',{reservation_no:'P-100'}),''));
+          check('invalid mode means no storage',()=>assert.equal(context.requestDraftKey('invalid',a),''));
+          check('legacy v2 draft untouched',()=>{const key='dpro_photo_member_request_v2:P-100:contact';data.set(key,'legacy safely retained');context.saveRequestDraft('contact',a,'v3');assert.equal(data.get(key),'legacy safely retained');assert.equal(context.loadRequestDraft('contact',a),'v3');});
+          check('member R2 auth and tab markers preserved',()=>{assert(html.includes('DPRO-PHOTO-MEMBER-AUTH-DRAFT-TABS-R2-20261010'));assert(html.includes('await refreshMemberSessionForRequest();'));assert(html.includes('C.openMemberSession({ line_id_token: idToken })'));});
+          check('member existing form preserved',()=>{assert(html.includes('requestNote.addEventListener("input"'));assert(html.includes('function submitRequest()'));});
+          check('all common pages remain present',()=>assert(['index.html','owner.html','staff.html','owner-ipad.html','system-check.html'].every(f=>fs.existsSync(f))));
+          console.log(JSON.stringify({standard:'DPRO PHOTO MEMBER DRAFT TENANT ISOLATION R6',checksPassed:tests.length,checksFailed:0,legacyDraftsRemoved:false,mutatedData:false,productionReady:false,tests},null,2));
+          fs.writeFileSync('DPRO_PHOTO_R6_VERIFY.json',JSON.stringify({standard:'R6',passed:tests.length,failed:0,tests,productionReady:false,legacyDraftsRemoved:false},null,2)+'\n');
+          NODE
+          git diff --check
+      - name: Commit verified frontend patch
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo 'No frontend changes needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'DPRO PHOTO R6 scope member request drafts by studio, booking and member'
+          git push
+      - name: Preserve R6 test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R6
+          path: DPRO_PHOTO_R6_VERIFY.json
+          if-no-files-found: warn
