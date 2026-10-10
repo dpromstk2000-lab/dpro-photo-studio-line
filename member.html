@@ -184,10 +184,11 @@
       font-weight: 800;
     }
 
+    /* DPRO-PHOTO-MEMBER-AUTH-DRAFT-TABS-R2-20261010 */
     .tabs-wrap {
-      position: sticky;
-      top: 0;
-      z-index: 20;
+      position: static;
+      top: auto;
+      z-index: auto;
       margin: 16px 0 0;
       padding: 8px;
       border: 1px solid var(--line);
@@ -442,7 +443,7 @@
       .page { width: min(100% - 18px, 900px); margin-top: 10px; }
       .hero { padding: 23px 20px 24px; border-radius: 22px; }
       .card { padding: 18px; border-radius: 18px; }
-      .tabs-wrap { top: 4px; }
+      .tabs-wrap { top: auto; }
       .tabs { grid-template-columns: repeat(2, 1fr); }
       .summary-grid { grid-template-columns: 1fr 1fr; }
       .profile-card { grid-template-columns: 1fr; }
@@ -1138,7 +1139,7 @@ function actionButtons(reservation) {
         els.requestModalLead.textContent = `${reservation.reservation_no}｜${reservationPlanDisplay(reservation) || "撮影予約"}`;
         els.requestNoteLabel.textContent = config.label;
         els.requestNote.placeholder = config.placeholder;
-        els.requestNote.value = "";
+        els.requestNote.value = loadRequestDraft(mode, reservation);
         els.requestTypeField.hidden = mode !== "reorder";
         els.submitRequestButton.textContent = config.button;
         els.requestModal.classList.add("open");
@@ -1160,6 +1161,41 @@ function actionButtons(reservation) {
         }
         if (reservation.public_token) return { public_token: reservation.public_token };
         throw new Error("予約確認情報が不足しています。マイページを開き直してください。");
+      }
+
+      function requestDraftKey(mode, reservation) {
+        return "dpro_photo_member_request_v2:" + String(reservation?.reservation_no || "") + ":" + String(mode || "");
+      }
+      function loadRequestDraft(mode, reservation) {
+        try { return sessionStorage.getItem(requestDraftKey(mode, reservation)) || ""; }
+        catch { return ""; }
+      }
+      function saveRequestDraft(mode, reservation, text) {
+        if (!reservation || !mode) return;
+        try { sessionStorage.setItem(requestDraftKey(mode, reservation), text); }
+        catch {}
+      }
+      function clearRequestDraft(mode, reservation) {
+        try { sessionStorage.removeItem(requestDraftKey(mode, reservation)); }
+        catch {}
+      }
+      async function refreshMemberSessionForRequest() {
+        if (C.isDemoMode()) {
+          const id = String(state.lookup.line_user_id || "").trim();
+          if (!["demo_photo_line_001", "demo_photo_line_002", "demo_photo_line_003"].includes(id)) {
+            throw new Error("デモ用の本人確認ができません。");
+          }
+          C.clearSessionToken("member");
+          await C.openMemberSession({ line_user_id: id });
+          return;
+        }
+        const idToken = typeof window.liff?.getIDToken === "function"
+          ? String(window.liff.getIDToken() || "").trim() : "";
+        if (idToken) {
+          await C.openMemberSession({ line_id_token: idToken });
+        } else if (!C.getSessionToken("member")) {
+          throw new Error("認証の有効期限が切れました。入力内容は保持されています。LINEからマイページを開き直してください。");
+        }
       }
 
       async function submitRequest() {
@@ -1193,13 +1229,17 @@ function actionButtons(reservation) {
           body = { ...auth, message: note };
         }
         try {
-          setLoading(true, "送信しています");
+          setLoading(true, "本人確認後に送信しています");
+          await refreshMemberSessionForRequest();
           const result = await C.apiPost(endpoint, body);
+          clearRequestDraft(state.modalMode, reservation);
           closeRequestModal();
           showToast(result.message || "送信しました。");
           await loadMember({ silent: true });
         } catch (error) {
-          showToast(errorMessage(error), "error");
+          const message = String(errorMessage(error) || "");
+          const expired = Number(error?.status) === 401 || /member session required|session expired|session_required/i.test(message);
+          showToast(expired ? "認証の有効期限が切れました。入力内容は保持されています。LINEからマイページを開き直してください。" : message, "error");
         } finally {
           setLoading(false);
         }
@@ -1360,6 +1400,7 @@ function actionButtons(reservation) {
         $$('[data-close-modal]').forEach((button) => button.addEventListener("click", closeRequestModal));
         els.requestModal.addEventListener("click", (event) => { if (event.target === els.requestModal) closeRequestModal(); });
         els.submitRequestButton.addEventListener("click", submitRequest);
+        els.requestNote.addEventListener("input", () => saveRequestDraft(state.modalMode, state.modalReservation, els.requestNote.value));
         document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeRequestModal(); });
       }
 
