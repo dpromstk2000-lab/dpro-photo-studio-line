@@ -1,0 +1,143 @@
+name: DPRO PHOTO Booking Calendar Async Safety R8
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-booking-calendar-async-safety-r8.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-booking-calendar-r8-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  r8-calendar-race-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Patch only booking calendar and index cache version (guarded)
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          js=Path('photo-booking-calendar-v2.js')
+          index=Path('index.html')
+          if not js.is_file() or not index.is_file():
+              raise SystemExit('R8 STOP: expected main branch calendar source or index missing')
+          s=js.read_text(encoding='utf-8')
+          h=index.read_text(encoding='utf-8')
+          old_version='DPRO-PHOTO-RESERVATION-CALENDAR-V2-BRUSHUP-8-3-1-POLISH1-20260919'
+          new_version='DPRO-PHOTO-CALENDAR-R8-STABLE-ASYNCHRONOUS-STATE-20261010'
+          patches=[('    if (!planId) {\n      state.days = [];\n      $("dproCalendarBody").innerHTML = `<div class="dpro-cal-empty">先に撮影プランを選択してください。</div>`;\n      return;\n    }', '    if (!planId) {\n      // R8: invalidate any earlier availability response when the selected plan disappears.\n      ++state.requestSeq;\n      if (state.abort) state.abort.abort();\n      state.abort = null;\n      state.days = [];\n      const body = $("dproCalendarBody");\n      if (body) body.innerHTML = `<div class="dpro-cal-empty">先に撮影プランを選択してください。</div>`;\n      return;\n    }'), ('    } catch (error) {\n      if (error?.name === "AbortError") return;\n      console.warn("DPRO Calendar V2 summary failed", error);', '    } catch (error) {\n      // R8: an old failure must not overwrite a more recent successful calendar view.\n      if (seq !== state.requestSeq || error?.name === "AbortError") return;\n      console.warn("DPRO Calendar V2 summary failed", error);'), ('      localStorage.setItem("dpro-photo-calendar-v2-view", state.view);\n      refresh();', '      try { localStorage.setItem("dpro-photo-calendar-v2-view", state.view); }\n      catch { /* Private browsing can restrict storage; keep the in-memory view. */ }\n      refresh();'), ('    const saved = localStorage.getItem("dpro-photo-calendar-v2-view");\n    const defaults = state.config?.settings?.ui_settings?.booking_v2?.default_view || "month";\n    state.view = ["month", "week", "day", "list"].includes(saved) ? saved : defaults;', '    let saved = "";\n    try { saved = localStorage.getItem("dpro-photo-calendar-v2-view") || ""; }\n    catch { /* Storage unavailable: use the configured default view. */ }\n    const defaults = state.config?.settings?.ui_settings?.booking_v2?.default_view || "month";\n    const permitted = enabledViews();\n    state.view = permitted.includes(saved) ? saved\n      : permitted.includes(defaults) ? defaults : permitted[0] || "month";')]
+          new_url='photo-booking-calendar-v2.js?v='+new_version
+          old_url='photo-booking-calendar-v2.js?v='+old_version
+          if new_version in s:
+              if new_url not in h:
+                  raise SystemExit('R8 STOP: JS updated but index cache-busting value was not updated')
+              print('R8 already in calendar and index; idempotent')
+          else:
+              for before,after in patches:
+                  if s.count(before)!=1:
+                      raise SystemExit('R8 STOP: calendar anchor changed; review before applying. Anchor: '+before[:80])
+                  s=s.replace(before,after,1)
+              if s.count(old_version)!=1 or h.count(old_url)!=1:
+                  raise SystemExit('R8 STOP: original version/cache URL not uniquely present')
+              s=s.replace(old_version,new_version,1)
+              h=h.replace(old_url,new_url,1)
+              js.write_text(s,encoding='utf-8')
+              index.write_text(h,encoding='utf-8')
+              print('R8 calendar async-state and storage patch installed')
+          PY
+      - name: Syntax and browser-like async regression tests (offline)
+        shell: bash
+        run: |
+          node --check photo-booking-calendar-v2.js
+          cat > __r8_calendar_regression.js <<'JS'
+          'use strict';
+          const fs=require('node:fs');
+          const vm=require('node:vm');
+          const assert=require('node:assert/strict');
+          const code=fs.readFileSync('photo-booking-calendar-v2.js','utf8');
+          const index=fs.readFileSync('index.html','utf8');
+          const version='DPRO-PHOTO-CALENDAR-R8-STABLE-ASYNCHRONOUS-STATE-20261010';
+          const checks=[];
+          function ok(name,fn){fn();checks.push(name);}
+          function deferred(){let resolve,reject;const promise=new Promise((res,rej)=>{resolve=res;reject=rej});return {promise,resolve,reject};}
+          function harness(opts={}){
+           const events={},calls=[],delays=[],els={},dateCard={hidden:false,parentNode:{insertBefore(){}}};
+           const make=(id)=>els[id]||=({id,innerHTML:'',value:'',textContent:'',listeners:{},addEventListener(name,cb){this.listeners[name]=cb},scrollIntoView(){}});
+           make('reservationDate').min='2026-10-10';make('reservationDate').max='2027-04-10';
+           make('planGrid');make('staffGrid');make('availabilityState');make('dproCalendarBody');
+           make('dproCalendarCaption');make('dproCalendarViews');make('dproCalendarPrev');make('dproCalendarNext');make('dproCalendarToday');
+           const document={readyState:'complete',getElementById:make,createElement(){return {innerHTML:'',firstElementChild:{}}},
+            querySelector(sel){if(sel.includes('.date-card'))return dateCard;if(sel.startsWith('#planGrid'))return opts.selectedPlan===false?null:{dataset:{planId:opts.selectedPlan||'planA'}};return null;},addEventListener(name,cb){events[name]=cb}};
+           let interval;
+           const localStorage={getItem(){if(opts.storageThrows)throw Error('STORAGE_RESTRICTED');return opts.savedView||''},setItem(){if(opts.storageThrows)throw Error('STORAGE_RESTRICTED')}};
+           const fetch=async (url)=>{const path=new URL(url).pathname;
+            if(path.endsWith('/api/public/config'))return {ok:true,json:async()=>({ok:true,settings:{feature_flags:{reservation_calendar_v2:true},ui_settings:{booking_v2:{enabled_views:['month','week'],default_view:'month'}}}})};
+            if(path.endsWith('/api/public/calendar-summary')){const d=deferred();calls.push({url:String(url),...d});return d.promise;}
+            throw Error('unexpected fetch '+url);
+           };
+           const win={DPRO_STUDIO:{CALENDAR_API_BASE_URL:'https://example.invalid/functions/v1/calendar',todayYmd:()=> '2026-10-10'},
+            setInterval(fn){interval=fn;return 10;},clearInterval(){},setTimeout(fn){delays.push(fn);return 1;}};
+           const ctx={window:win,document,localStorage,fetch,URL,Date,AbortController,Event,console:{warn(){}},setTimeout:win.setTimeout};
+           vm.runInNewContext(code,ctx,{filename:'photo-booking-calendar-v2.js'});
+           return {win,make,dateCard,calls,opts,tick(){interval()},events,delays};
+          }
+          async function flush(){for(let i=0;i<8;i++)await Promise.resolve();}
+          async function run(){
+           ok('R8 JS wrapper/version',()=>assert(code.includes(version)));
+           ok('R8 public index cache-bust',()=>assert(index.includes('photo-booking-calendar-v2.js?v='+version)));
+           const h=harness({selectedPlan:'planA',storageThrows:true});h.tick();await flush();
+           ok('Private browsing does not prevent calendar mount',()=>assert.equal(h.calls.length,1));
+           h.calls[0].resolve({ok:true,json:async()=>({ok:true,days:[{date:'2026-10-12',status:'available',available_slot_count:2}]})});await flush();
+           ok('Calendar renders selected plan before switch',()=>assert(h.make('dproCalendarBody').innerHTML.includes('10月')));
+           h.make('dproCalendarViews').listeners.click({target:{closest:()=>({dataset:{calendarView:'week'}})}});
+           await flush();
+           ok('Storage-denied view change does not crash',()=>assert.equal(h.calls.length,2));
+           h.calls[1].resolve({ok:true,json:async()=>({ok:true,days:[{date:'2026-10-13',status:'available'}]})});await flush();
+           ok('Week view loads in private browsing',()=>assert(h.make('dproCalendarBody').innerHTML.includes('dpro-cal-week-grid')));
+           const k=harness({selectedPlan:'planA'});k.tick();await flush();
+           ok('First plan initiates calendar fetch',()=>assert.equal(k.calls.length,1));
+           k.opts.selectedPlan=false;await k.win.DPRO_PHOTO_BOOKING_CALENDAR_V2.refresh();
+           ok('No-plan state clears old availability',()=>assert(k.make('dproCalendarBody').innerHTML.includes('先に撮影プラン')));
+           k.calls[0].resolve({ok:true,json:async()=>({ok:true,days:[{date:'2026-10-18',status:'available'}]})});await flush();
+           ok('Old success cannot replace cleared plan',()=>assert(k.make('dproCalendarBody').innerHTML.includes('先に撮影プラン')));
+           k.opts.selectedPlan='planB';const first=k.win.DPRO_PHOTO_BOOKING_CALENDAR_V2.refresh();await flush();
+           k.opts.selectedPlan='planC';const second=k.win.DPRO_PHOTO_BOOKING_CALENDAR_V2.refresh();await flush();
+           ok('Consecutive plan changes spawn requests',()=>assert.equal(k.calls.length,3));
+           k.calls[2].resolve({ok:true,json:async()=>({ok:true,days:[{date:'2026-10-20',status:'available',available_slot_count:1}]})});await second;await flush();
+           ok('Newest plan C is rendered',()=>assert(k.make('dproCalendarBody').innerHTML.includes('10月')));
+           k.calls[1].reject(new Error('Old plan B network failure'));await first;await flush();
+           ok('Old plan B error cannot override new plan C',()=>assert(!k.make('dproCalendarBody').innerHTML.includes('dpro-cal-error')));
+           ok('Stale fallback date selector remains hidden',()=>assert.equal(k.dateCard.hidden,true));
+           const report={standard:'DPRO PHOTO R8 CALENDAR RACE AND STORAGE QA',passed:checks.length,failed:0,checks,productionReady:false,fixtureOnly:true};
+           fs.writeFileSync('DPRO_PHOTO_R8_VERIFY.json',JSON.stringify(report,null,2)+'\n');
+           console.log(JSON.stringify({passed:checks.length,failed:0,tests:checks},null,2));
+          }
+          run().catch(e=>{console.error(e.stack||e);process.exitCode=1});
+          JS
+          node __r8_calendar_regression.js
+          rm -f __r8_calendar_regression.js
+          git diff --check
+      - name: Commit only verified frontend files
+        shell: bash
+        run: |
+          if git diff --quiet -- photo-booking-calendar-v2.js index.html; then
+            echo 'R8 already applied; no changes necessary.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- photo-booking-calendar-v2.js index.html
+          git commit -m 'DPRO PHOTO R8 prevent stale calendar responses and handle restricted storage'
+          git push
+      - name: Preserve R8 offline regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R8
+          path: DPRO_PHOTO_R8_VERIFY.json
+          if-no-files-found: warn
