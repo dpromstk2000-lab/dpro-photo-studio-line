@@ -624,6 +624,8 @@
       planStartRule: { mode: "interval", interval_minutes: 30, anchor_time: "00:00", fixed_times: [] },
       planStartRulePlanId: "",
       planStartRulePromise: null,
+      planStartRulePromisePlanId: "", // R13: a pending start rule belongs to exactly one plan.
+      planStartRuleRequestSeq: 0, // R13: reject stale A->B->A results.
       member: null,
       existingSubjects: [],
       subjectCounter: 0,
@@ -873,36 +875,50 @@
       return ((start - anchor + 1440) % Math.max(30, Number(rule.interval_minutes || 30))) === 0;
     }
 
+    // DPRO-PHOTO-R13-PLAN-START-RULE-LATEST-REQUEST-SCOPE-20261010
     async function ensurePlanStartRule() {
       const planId = state.selectedPlan?.id || "";
       if (!planId) {
+        ++state.planStartRuleRequestSeq;
         state.planStartRule = defaultPlanStartRule();
         state.planStartRulePlanId = "";
+        state.planStartRulePromise = null;
+        state.planStartRulePromisePlanId = "";
         return state.planStartRule;
       }
       if (state.planStartRulePlanId === planId) return state.planStartRule;
-      if (state.planStartRulePromise) return state.planStartRulePromise;
+      if (state.planStartRulePromise && state.planStartRulePromisePlanId === planId) {
+        return state.planStartRulePromise;
+      }
 
+      const seq = ++state.planStartRuleRequestSeq;
       const task = (async () => {
         const url = new URL(`${C.CALENDAR_API_BASE_URL}/api/public/plan-start-rule`);
         url.searchParams.set("plan_id", planId);
         const response = await fetch(url.toString(), { headers: { Accept: "application/json" }, cache: "no-store" });
         const payload = await response.json().catch(() => null);
-        if (!response.ok || payload?.ok === false || !payload?.plan?.start_rule) {
+        // A wrong-plan reply must never silently overwrite the selected rule.
+        if (!response.ok || payload?.ok === false || !payload?.plan?.start_rule
+            || String(payload.plan.id || "") !== planId) {
           throw new Error(payload?.error || "予約開始時間の設定を確認できませんでした。");
         }
-        if (state.selectedPlan?.id === planId) {
-          state.planStartRule = normalizePlanStartRule(payload.plan.start_rule);
+        const rule = normalizePlanStartRule(payload.plan.start_rule);
+        if (seq === state.planStartRuleRequestSeq && state.selectedPlan?.id === planId) {
+          state.planStartRule = rule;
           state.planStartRulePlanId = planId;
         }
-        return state.planStartRule;
+        return rule;
       })();
 
       state.planStartRulePromise = task;
+      state.planStartRulePromisePlanId = planId;
       try {
         return await task;
       } finally {
-        if (state.planStartRulePromise === task) state.planStartRulePromise = null;
+        if (state.planStartRulePromise === task) {
+          state.planStartRulePromise = null;
+          state.planStartRulePromisePlanId = "";
+        }
       }
     }
 
@@ -919,9 +935,11 @@
         state.selectedDate = "";
         state.selectedSlot = null;
         state.availability = null;
+        ++state.planStartRuleRequestSeq; // R13: invalidate requests from earlier plan selections.
         state.planStartRule = defaultPlanStartRule();
         state.planStartRulePlanId = "";
         state.planStartRulePromise = null;
+        state.planStartRulePromisePlanId = "";
         els.reservationDate.value = "";
         ensurePlanStartRule().catch((error) => console.warn("plan start rule load failed", error));
       }
@@ -1445,6 +1463,11 @@
 
     function resetFormForNewReservation() {
       ++state.availabilityRequestSeq; // Old responses must not repopulate a fresh booking.
+      ++state.planStartRuleRequestSeq; // R13: old rule responses must not repopulate a fresh booking.
+      state.planStartRule = defaultPlanStartRule();
+      state.planStartRulePlanId = "";
+      state.planStartRulePromise = null;
+      state.planStartRulePromisePlanId = "";
       state.selectedPlan = null; state.selectedOptions.clear(); state.selectedStaffId = ""; state.selectedDate = ""; state.selectedSlot = null; state.availability = null; state.completed = false; state.reservationResult = null;
       els.reservationDate.value = ""; els.agreementCheck.checked = false;
       els.shootingPurpose.value = ""; els.desiredMood.value = ""; els.desiredShots.value = ""; els.accommodationNote.value = ""; els.customerNote.value = ""; els.bringCostume.checked = false; els.socialMediaConsult.checked = false;
