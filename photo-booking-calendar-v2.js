@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "DPRO-PHOTO-RESERVATION-CALENDAR-V2-BRUSHUP-8-3-1-POLISH1-20260919";
+  const VERSION = "DPRO-PHOTO-CALENDAR-R8-STABLE-ASYNCHRONOUS-STATE-20261010";
   const FALLBACK_API_BASE = "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v8";
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG || null;
   if (!C) return;
@@ -313,8 +313,13 @@
     if (!state.enabled || !state.mounted) return;
     const planId = selectedPlanId();
     if (!planId) {
+      // R8: invalidate any earlier availability response when the selected plan disappears.
+      ++state.requestSeq;
+      if (state.abort) state.abort.abort();
+      state.abort = null;
       state.days = [];
-      $("dproCalendarBody").innerHTML = `<div class="dpro-cal-empty">先に撮影プランを選択してください。</div>`;
+      const body = $("dproCalendarBody");
+      if (body) body.innerHTML = `<div class="dpro-cal-empty">先に撮影プランを選択してください。</div>`;
       return;
     }
 
@@ -341,7 +346,8 @@
       if (dateCard) dateCard.hidden = true;
       renderBody();
     } catch (error) {
-      if (error?.name === "AbortError") return;
+      // R8: an old failure must not overwrite a more recent successful calendar view.
+      if (seq !== state.requestSeq || error?.name === "AbortError") return;
       console.warn("DPRO Calendar V2 summary failed", error);
       showLegacyFallback(error.message);
     }
@@ -382,7 +388,8 @@
       const button = event.target.closest("[data-calendar-view]");
       if (!button) return;
       state.view = button.dataset.calendarView;
-      localStorage.setItem("dpro-photo-calendar-v2-view", state.view);
+      try { localStorage.setItem("dpro-photo-calendar-v2-view", state.view); }
+      catch { /* Private browsing can restrict storage; keep the in-memory view. */ }
       refresh();
     });
 
@@ -421,9 +428,13 @@
     dateCard.parentNode.insertBefore(root, dateCard);
     dateCard.hidden = true;
 
-    const saved = localStorage.getItem("dpro-photo-calendar-v2-view");
+    let saved = "";
+    try { saved = localStorage.getItem("dpro-photo-calendar-v2-view") || ""; }
+    catch { /* Storage unavailable: use the configured default view. */ }
     const defaults = state.config?.settings?.ui_settings?.booking_v2?.default_view || "month";
-    state.view = ["month", "week", "day", "list"].includes(saved) ? saved : defaults;
+    const permitted = enabledViews();
+    state.view = permitted.includes(saved) ? saved
+      : permitted.includes(defaults) ? defaults : permitted[0] || "month";
     state.anchor = clampAnchor(nativeDate()?.value || limits().min || "");
     bind();
     refresh({ preserveAnchor: false });
