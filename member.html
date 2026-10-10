@@ -637,6 +637,8 @@
         modalMode: "",
         modalReservation: null,
         busy: false,
+        memberLoadSeq: 0, // R14: previous member loads never overwrite a new identity.
+        loadedLookup: null, // Only used in memory; no token or ID is written to test artifacts.
       };
 
       const $ = (selector, root = document) => root.querySelector(selector);
@@ -1320,6 +1322,9 @@ function actionButtons(reservation) {
       }
 
       function resetMemberLookup() {
+        ++state.memberLoadSeq; // R14: discard every unfinished member response.
+        state.loadedLookup = null;
+        setLoading(false);
         state.lookup = { line_user_id: "", public_token: "" };
         state.customer = null;
         state.profile = null;
@@ -1337,25 +1342,49 @@ function actionButtons(reservation) {
         els.accessSection.scrollIntoView({ behavior: "smooth", block: "start" });
       }
 
+      // DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010
       async function loadMember(options = {}) {
-        if (!state.lookup.line_user_id && !state.lookup.public_token) {
+        const seq = ++state.memberLoadSeq;
+        const lookup = {
+          line_user_id: String(state.lookup.line_user_id || ""),
+          public_token: String(state.lookup.public_token || ""),
+        };
+        const isCurrent = () => seq === state.memberLoadSeq
+          && String(state.lookup.line_user_id || "") === lookup.line_user_id
+          && String(state.lookup.public_token || "") === lookup.public_token;
+        const prior = state.loadedLookup;
+        if (prior && (prior.line_user_id !== lookup.line_user_id || prior.public_token !== lookup.public_token)) {
+          // Remove the previous person's visible data before starting a different lookup.
+          state.customer = null;
+          state.profile = null;
+          state.reservations = [];
+          state.selectedReservationId = "";
+          state.loadedLookup = null;
           els.memberArea.hidden = true;
           setAccessMode("entry");
+        }
+        if (!lookup.line_user_id && !lookup.public_token) {
+          if (isCurrent()) {
+            els.memberArea.hidden = true;
+            setAccessMode("entry");
+          }
           return;
         }
         try {
           if (!options.silent) setLoading(true, "予約情報を読み込んでいます");
-          const query = state.lookup.line_user_id
-            ? { line_user_id: state.lookup.line_user_id }
-            : { public_token: state.lookup.public_token };
+          const query = lookup.line_user_id
+            ? { line_user_id: lookup.line_user_id }
+            : { public_token: lookup.public_token };
           const reservationsPromise = C.apiGet(C.ENDPOINTS.MEMBER_RESERVATIONS, query);
-          const profilePromise = state.lookup.line_user_id
-            ? C.apiGet(C.ENDPOINTS.MEMBER_PROFILE, { line_user_id: state.lookup.line_user_id })
+          const profilePromise = lookup.line_user_id
+            ? C.apiGet(C.ENDPOINTS.MEMBER_PROFILE, { line_user_id: lookup.line_user_id })
             : Promise.resolve({ found: false, customer: null, subjects: [] });
           const [reservationResult, profileResult] = await Promise.all([reservationsPromise, profilePromise]);
+          if (!isCurrent()) return; // Never render or persist an obsolete identity.
           state.customer = reservationResult.customer || profileResult.customer || null;
           state.profile = profileResult;
           state.reservations = Array.isArray(reservationResult.reservations) ? reservationResult.reservations : [];
+          state.loadedLookup = { ...lookup };
           persistLookup();
           const url = new URL(location.href);
           const requestedReservation = url.searchParams.get("reservation_no");
@@ -1368,14 +1397,20 @@ function actionButtons(reservation) {
           renderAll();
           const section = url.searchParams.get("section") || "reservations";
           setSection(section);
-          // Only after a successful lookup + rendering: remove credentials from shareable browser URL.
+          // Retain R12: scrub credentials only after a successful render.
           scrubMemberQueryFromAddressBar();
         } catch (error) {
+          if (!isCurrent()) return; // Old errors cannot hide a new person's profile.
+          state.customer = null;
+          state.profile = null;
+          state.reservations = [];
+          state.selectedReservationId = "";
+          state.loadedLookup = null;
           els.memberArea.hidden = true;
           setAccessMode("entry");
           showToast(errorMessage(error), "error");
         } finally {
-          if (!options.silent) setLoading(false);
+          if (!options.silent && isCurrent()) setLoading(false);
         }
       }
 
@@ -1390,6 +1425,9 @@ function actionButtons(reservation) {
           return;
         }
         try {
+          ++state.memberLoadSeq; // Invalidate unfinished reads before switching the demo session.
+          state.loadedLookup = null;
+          els.memberArea.hidden = true;
           setLoading(true, "デモ顧客を切り替えています");
           C.clearSessionToken("member");
           await C.openMemberSession({ line_user_id: id });
