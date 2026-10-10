@@ -1,0 +1,147 @@
+name: DPRO PHOTO Member URL Privacy Guard R12
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-url-privacy-r12.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-member-r12-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  member-privacy-r12:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Apply guarded, idempotent member URL privacy patch
+        shell: bash
+        run: |
+          python - <<'PY_PATCH'
+          from pathlib import Path
+          p=Path('member.html')
+          s=p.read_text(encoding='utf-8')
+          marker='DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010'
+          meta_old='  <meta name="theme-color" content="#0f5d53" />'
+          meta_new='  <meta name="referrer" content="no-referrer" />\n  <meta name="theme-color" content="#0f5d53" />'
+          point_old='      function getInitialLookup() {'
+          point_new='      // DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010\n      // Keep incoming deep-link credentials until member data loads successfully.\n      // Never erase the URL if the lookup fails, so the user can retry the same link.\n      function scrubMemberQueryFromAddressBar() {\n        try {\n          const url = new URL(location.href);\n          let changed = false;\n          for (const name of ["public_token", "line_user_id", "phone", "customer_no", "reservation_no"]) {\n            if (url.searchParams.has(name)) {\n              url.searchParams.delete(name);\n              changed = true;\n            }\n          }\n          if (changed) history.replaceState(history.state, "", url.pathname + url.search + url.hash);\n        } catch {\n          // History APIs can be limited inside some embedded LINE/browser views.\n        }\n      }\n\n      function getInitialLookup() {'
+          success_old='          const section = url.searchParams.get("section") || "reservations";\n          setSection(section);'
+          success_new='          const section = url.searchParams.get("section") || "reservations";\n          setSection(section);\n          // Only after a successful lookup + rendering: remove credentials from shareable browser URL.\n          scrubMemberQueryFromAddressBar();'
+          if marker in s:
+              assert s.count(marker)==1 and meta_new in s and success_new in s, 'R12 partial/inconsistent source'
+              print('R12 already applied; idempotent verification')
+          else:
+              assert s.count(meta_old)==1, 'R12 STOP unexpected header source'
+              assert s.count(point_old)==1, 'R12 STOP unique initial lookup source not found'
+              assert s.count(success_old)==1, 'R12 STOP unique success path missing'
+              s=s.replace(meta_old,meta_new).replace(point_old,point_new).replace(success_old,success_new)
+              p.write_text(s,encoding='utf8')
+              print('R12 member URL privacy hardening installed')
+          assert s.count(marker)==1
+          PY_PATCH
+      - name: Verify URL cleanup and preserve R6 behavior
+        shell: bash
+        run: |
+          node - <<'NODE'
+          "use strict";
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const html=fs.readFileSync('member.html','utf8'),checks=[];
+          function check(name,f){f();checks.push(name)}
+          const marker='DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010';
+          check('R12 marker one occurrence',()=>assert.equal(html.split(marker).length-1,1));
+          check('no-referrer meta installed',()=>assert(html.includes('<meta name="referrer" content="no-referrer" />')));
+          check('referrer policy before config.js',()=>assert(html.indexOf('name="referrer"')<html.indexOf('<script src="./config.js')));
+          check('R6 member draft boundary preserved',()=>assert(html.includes('DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010')));
+          check('R2 session refresh preserved',()=>assert(html.includes('await refreshMemberSessionForRequest()')));
+          check('lookup retains public token source',()=>assert(html.includes('public_token: String(fromConfig.public_token || "").trim()')));
+          check('success only cleanup call',()=>{
+            assert.equal(html.split('scrubMemberQueryFromAddressBar();').length-1,1);
+            const x=html.indexOf('scrubMemberQueryFromAddressBar();');
+            const load=html.indexOf('async function loadMember(options = {})');
+            const initial=html.indexOf('async function initialize()');
+            assert(x>load&&x<initial);
+            const part=html.slice(load,x);
+            assert(part.includes('persistLookup();')&&part.includes('renderAll();')&&part.includes('setSection(section);'));
+          });
+          check('cleaner not called before successful member load',()=>{
+            const x=html.indexOf('scrubMemberQueryFromAddressBar();');
+            const successful=html.indexOf('setSection(section);',html.indexOf('async function loadMember(options'));
+            assert(x>successful);
+          });
+          // Extract the actual function body. Fail closed if ambiguous anchors change.
+          const start=html.indexOf('      function scrubMemberQueryFromAddressBar() {');
+          const end=html.indexOf('\n      function getInitialLookup()',start);
+          assert(start>0&&end>start);
+          const actual=html.slice(start,end);
+          function run(url,opt={}){
+           let received=[],stored=opt.state??{from:'before'};
+           const current={href:url};
+           const ctx={URL,location:current,history:{state:stored,replaceState:(state,title,target)=>{
+            received.push({state,title,target});
+            if(opt.historyFails)throw Error('history blocked');
+            current.href=new URL(target,current.href).toString();
+           }}};
+           vm.runInNewContext(actual+'\nscrubMemberQueryFromAddressBar();',ctx,{timeout:700});
+           return {url:new URL(current.href),calls:received};
+          }
+          const input='https://example.test/dpro-photo-studio-line/member.html?public_token=secret%2Fvalue&line_user_id=user%3A123&phone=09011112222&customer_no=C001&reservation_no=R001&section=delivery&demo=1&utm_source=line#gallery';
+          const good=run(input);
+          check('sensitive public_token removed',()=>assert.equal(good.url.searchParams.has('public_token'),false));
+          check('sensitive line_user_id removed',()=>assert.equal(good.url.searchParams.has('line_user_id'),false));
+          check('sensitive phone removed',()=>assert.equal(good.url.searchParams.has('phone'),false));
+          check('sensitive customer_no removed',()=>assert.equal(good.url.searchParams.has('customer_no'),false));
+          check('sensitive reservation_no removed',()=>assert.equal(good.url.searchParams.has('reservation_no'),false));
+          check('section navigation preserved',()=>assert.equal(good.url.searchParams.get('section'),'delivery'));
+          check('demo toggle preserved',()=>assert.equal(good.url.searchParams.get('demo'),'1'));
+          check('UTM preserved',()=>assert.equal(good.url.searchParams.get('utm_source'),'line'));
+          check('fragment preserved',()=>assert.equal(good.url.hash,'#gallery'));
+          check('repo path preserved',()=>assert.equal(good.url.pathname,'/dpro-photo-studio-line/member.html'));
+          check('history updated once',()=>assert.equal(good.calls.length,1));
+          check('history state preserved',()=>assert.equal(good.calls[0].state.from,'before'));
+          const clean=run('https://example.test/repo/member.html?section=reservations#section');
+          check('unchanged URL not touched',()=>assert.equal(clean.calls.length,0));
+          check('safe URL unchanged',()=>assert.equal(clean.url.searchParams.get('section'),'reservations'));
+          const duplicated=run('https://example.test/member.html?public_token=a&public_token=b&line_user_id=a&line_user_id=b&safe=yes');
+          check('duplicate sensitive parameters all removed',()=>assert(!duplicated.url.searchParams.has('public_token')&&!duplicated.url.searchParams.has('line_user_id')));
+          check('duplicate cleanup retains unrelated fields',()=>assert.equal(duplicated.url.searchParams.get('safe'),'yes'));
+          check('history blocked does not throw',()=>assert.doesNotThrow(()=>run(input,{historyFails:true})));
+          // Parse each JS body independently; type=application/json excluded.
+          let scripts=0;for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)){
+            if(!match[2].trim())continue;
+            if(/type\s*=\s*["'](?:application\/json|importmap)["']/i.test(match[1]))continue;
+            new vm.Script(match[2],{filename:'member inline script #'+(++scripts)});
+          }
+          check('member inline JS syntax valid',()=>assert(scripts>=1));
+          check('no server/api code modified',()=>assert(!html.includes('R12_PRODUCTION_READY_TRUE')));
+          const report={standard:'DPRO PHOTO R12 MEMBER LINK URL PRIVACY',mode:'OFFLINE_BROWSER_LIKE_VM',counts:{passed:checks.length,failed:0},checks,productionReady:false,dataWrites:0,liveApiRequests:0};
+          fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R12.json',JSON.stringify(report,null,2)+'\n');
+          console.log('R12 member link privacy and R6 regression: '+checks.length+' PASS; 0 FAIL');
+          NODE
+          git diff --check
+          test "$(git diff --name-only | wc -l)" -le 1
+          if ! git diff --quiet; then
+            test "$(git diff --name-only)" = 'member.html'
+          fi
+      - name: Commit validated member-only change
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo 'R12 already applied; nothing to commit'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'DPRO PHOTO R12 scrub member link credentials after successful load'
+          git push
+      - name: Preserve R12 regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R12
+          path: DPRO_PHOTO_PRODUCT_GATE_R12.json
+          if-no-files-found: warn
