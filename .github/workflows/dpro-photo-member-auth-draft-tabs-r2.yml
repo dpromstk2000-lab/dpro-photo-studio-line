@@ -1,0 +1,86 @@
+name: DPRO PHOTO Member Auth Draft Tabs R2
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-auth-draft-tabs-r2.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-member-auth-draft-tabs-r2
+  cancel-in-progress: false
+jobs:
+  patch-member:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Fix session expiry drafts and overlapping customer tabs
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const file = "member.html";
+          let source = fs.readFileSync(file, "utf8");
+          const mark = "DPRO-PHOTO-MEMBER-AUTH-DRAFT-TABS-R2-20261010";
+          if (source.includes(mark)) {
+            console.log("Already patched");
+            process.exit(0);
+          }
+          for (const guard of [
+            "DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH-V1-20261010",
+            "DPRO-PHOTO-MEMBER-SELECTION-PUBLICATION-GUARD-V1-20261009",
+            "DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009"
+          ]) if (!source.includes(guard)) throw Error("Prerequisite missing: " + guard);
+          function replaceOnce(label, oldText, newText) {
+            const count = source.split(oldText).length - 1;
+            if (count !== 1) throw Error("Unexpected source for " + label + ": " + count);
+            source = source.replace(oldText, newText);
+          }
+          replaceOnce("tabs CSS",
+            "    .tabs-wrap {\n      position: sticky;\n      top: 0;\n      z-index: 20;",
+            "    /* " + mark + " */\n    .tabs-wrap {\n      position: static;\n      top: auto;\n      z-index: auto;");
+          replaceOnce("mobile tabs", "      .tabs-wrap { top: 4px; }",
+            "      .tabs-wrap { top: auto; }");
+          replaceOnce("restore draft",
+            '        els.requestNote.value = "";',
+            "        els.requestNote.value = loadRequestDraft(mode, reservation);");
+          replaceOnce("submit authentication",
+            '          setLoading(true, "送信しています");\n          const result = await C.apiPost(endpoint, body);\n          closeRequestModal();',
+            '          setLoading(true, "本人確認後に送信しています");\n          await refreshMemberSessionForRequest();\n          const result = await C.apiPost(endpoint, body);\n          clearRequestDraft(state.modalMode, reservation);\n          closeRequestModal();');
+          replaceOnce("draft input listener",
+            '        els.submitRequestButton.addEventListener("click", submitRequest);',
+            '        els.submitRequestButton.addEventListener("click", submitRequest);\n        els.requestNote.addEventListener("input", () => saveRequestDraft(state.modalMode, state.modalReservation, els.requestNote.value));');
+          const helpers = "      function requestDraftKey(mode, reservation) {\n        return \"dpro_photo_member_request_v2:\" + String(reservation?.reservation_no || \"\") + \":\" + String(mode || \"\");\n      }\n      function loadRequestDraft(mode, reservation) {\n        try { return sessionStorage.getItem(requestDraftKey(mode, reservation)) || \"\"; }\n        catch { return \"\"; }\n      }\n      function saveRequestDraft(mode, reservation, text) {\n        if (!reservation || !mode) return;\n        try { sessionStorage.setItem(requestDraftKey(mode, reservation), text); }\n        catch {}\n      }\n      function clearRequestDraft(mode, reservation) {\n        try { sessionStorage.removeItem(requestDraftKey(mode, reservation)); }\n        catch {}\n      }\n      async function refreshMemberSessionForRequest() {\n        if (C.isDemoMode()) {\n          const id = String(state.lookup.line_user_id || \"\").trim();\n          if (![\"demo_photo_line_001\", \"demo_photo_line_002\", \"demo_photo_line_003\"].includes(id)) {\n            throw new Error(\"デモ用の本人確認ができません。\");\n          }\n          C.clearSessionToken(\"member\");\n          await C.openMemberSession({ line_user_id: id });\n          return;\n        }\n        const idToken = typeof window.liff?.getIDToken === \"function\"\n          ? String(window.liff.getIDToken() || \"\").trim() : \"\";\n        if (idToken) {\n          await C.openMemberSession({ line_id_token: idToken });\n        } else if (!C.getSessionToken(\"member\")) {\n          throw new Error(\"認証の有効期限が切れました。入力内容は保持されています。LINEからマイページを開き直してください。\");\n        }\n      }\n\n";
+          
+          replaceOnce("helper injection", "      async function submitRequest() {",
+            helpers + "      async function submitRequest() {");
+          replaceOnce("expired session feedback",
+            '        } catch (error) {\n          showToast(errorMessage(error), "error");\n        } finally {\n          setLoading(false);\n        }\n      }\n\n      function getInitialLookup() {',
+            '        } catch (error) {\n          const message = String(errorMessage(error) || "");\n          const expired = Number(error?.status) === 401 || /member session required|session expired|session_required/i.test(message);\n          showToast(expired ? "認証の有効期限が切れました。入力内容は保持されています。LINEからマイページを開き直してください。" : message, "error");\n        } finally {\n          setLoading(false);\n        }\n      }\n\n      function getInitialLookup() {');
+          const scripts = [...source.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]).filter(Boolean);
+          for (const script of scripts) new Function(script);
+          if (!source.includes(mark) || source.includes("position: sticky;\n      top: 0;\n      z-index: 20;"))
+            throw Error("Visual/marker test failed");
+          if (source.indexOf("await refreshMemberSessionForRequest();") > source.indexOf("const result = await C.apiPost(endpoint, body);"))
+            throw Error("Auth must precede POST");
+          fs.writeFileSync(file, source, "utf8");
+          console.log("PASS: member.html only; JS syntax / auth before submit / draft restore / tabs");
+          
+          NODE
+          git diff --check
+      - name: Commit member page only
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo 'No file change required'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'fix(photo): preserve request draft, refresh identity, fix tab overlay'
+          git push origin HEAD:main
