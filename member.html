@@ -639,6 +639,7 @@
         busy: false,
         requestSubmitting: false, // R15: prevent identity or modal switching during member request sends.
         memberLoadSeq: 0, // R14: previous member loads never overwrite a new identity.
+        refreshFeedbackSeq: 0, // R17: old refresh status timers cannot overwrite new status.
         loadedLookup: null, // Only used in memory; no token or ID is written to test artifacts.
       };
 
@@ -1410,7 +1411,7 @@ function actionButtons(reservation) {
             els.memberArea.hidden = true;
             setAccessMode("entry");
           }
-          return;
+          return "missing";
         }
         try {
           if (!options.silent) setLoading(true, "予約情報を読み込んでいます");
@@ -1422,7 +1423,7 @@ function actionButtons(reservation) {
             ? C.apiGet(C.ENDPOINTS.MEMBER_PROFILE, { line_user_id: lookup.line_user_id })
             : Promise.resolve({ found: false, customer: null, subjects: [] });
           const [reservationResult, profileResult] = await Promise.all([reservationsPromise, profilePromise]);
-          if (!isCurrent()) return; // Never render or persist an obsolete identity.
+          if (!isCurrent()) return "stale"; // Never render or persist an obsolete identity.
           state.customer = reservationResult.customer || profileResult.customer || null;
           state.profile = profileResult;
           state.reservations = Array.isArray(reservationResult.reservations) ? reservationResult.reservations : [];
@@ -1441,8 +1442,9 @@ function actionButtons(reservation) {
           setSection(section);
           // Retain R12: scrub credentials only after a successful render.
           scrubMemberQueryFromAddressBar();
+          return "success"; // R17: refresh must not claim success until render completes.
         } catch (error) {
-          if (!isCurrent()) return; // Old errors cannot hide a new person's profile.
+          if (!isCurrent()) return "stale"; // Old errors cannot hide a new person's profile.
           state.customer = null;
           state.profile = null;
           state.reservations = [];
@@ -1451,6 +1453,7 @@ function actionButtons(reservation) {
           els.memberArea.hidden = true;
           setAccessMode("entry");
           showToast(errorMessage(error), "error");
+          return "failure"; // R17: distinguish rejected network loads from success.
         } finally {
           if (!options.silent && isCurrent()) setLoading(false);
         }
@@ -1510,15 +1513,26 @@ function actionButtons(reservation) {
           await loadMember();
         });
         els.anotherReservationButton.addEventListener("click", resetMemberLookup);
+        // DPRO-PHOTO-R17-MEMBER-REFRESH-TRUTHFUL-STATUS-20261010
         els.refreshButton.addEventListener("click", async () => {
-          if (state.requestSubmitting) return;
-          const original = els.refreshButton.textContent;
+          if (state.requestSubmitting || els.refreshButton.disabled) return;
+          const seq = ++state.refreshFeedbackSeq;
           els.refreshButton.disabled = true;
           els.refreshButton.textContent = "更新中…";
-          await loadMember({ silent: true });
-          els.refreshButton.disabled = false;
-          els.refreshButton.textContent = "更新しました";
-          setTimeout(() => { els.refreshButton.textContent = original; }, 1400);
+          let status = "failure";
+          try {
+            status = await loadMember({ silent: true });
+          } catch {
+            status = "failure";
+          } finally {
+            if (seq === state.refreshFeedbackSeq) {
+              els.refreshButton.disabled = false;
+              els.refreshButton.textContent = status === "success" ? "更新しました" : status === "failure" ? "再試行" : "更新";
+              setTimeout(() => {
+                if (seq === state.refreshFeedbackSeq) els.refreshButton.textContent = "更新";
+              }, 1400);
+            }
+          }
         });
         $$('.tab').forEach((tab) => tab.addEventListener("click", () => setSection(tab.dataset.section, true)));
         $$('.demo-person').forEach((button) => button.addEventListener("click", () => useDemoPerson(button.dataset.lineId)));
