@@ -1,0 +1,165 @@
+name: DPRO PHOTO Member Exclusive Identity From Deep Links R16
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-deep-link-identity-r16.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-member-r16-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  member-link-r16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check baseline and patch exclusive member identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R16_BASE'
+          from pathlib import Path
+          import hashlib
+          p=Path('member.html')
+          s=p.read_text(encoding='utf8')
+          marker='DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY-20261010'
+          if marker not in s:
+              actual=hashlib.sha256(p.read_bytes()).hexdigest()
+              if actual!='9fdafff4417c918e944ad33bebf5d130c2085e4ebd1053584de168808f288c1c':
+                  raise SystemExit('R16 STOP: source is not the validated R15 baseline')
+          else:
+              assert s.count(marker)==1, 'R16 STOP: duplicate marker'
+          print('R16 source integrity accepted (R15 baseline or approved R16 patch)')
+          PY_R16_BASE
+          cat > /tmp/dpro_photo_r16_patch.py <<'PY_R16_PATCH'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1] if len(sys.argv)>1 else 'member.html')
+          s=p.read_text(encoding='utf8')
+          old='      function getInitialLookup() {\n        const fromConfig = C.getMemberLookupFromUrl();\n        const url = new URL(location.href);\n        const lookup = {\n          line_user_id: String(fromConfig.line_user_id || "").trim(),\n          public_token: String(fromConfig.public_token || "").trim(),\n        };\n        if (C.isDemoMode() && !lookup.line_user_id && !lookup.public_token) lookup.line_user_id = "demo_photo_line_001";\n        if (url.searchParams.get("line_user_id")) lookup.line_user_id = url.searchParams.get("line_user_id").trim();\n        if (url.searchParams.get("public_token")) lookup.public_token = url.searchParams.get("public_token").trim();\n        return lookup;\n      }\n\n      function persistLookup() {\n        if (state.lookup.line_user_id) C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, state.lookup.line_user_id);\n        if (state.lookup.public_token) C.setStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN, state.lookup.public_token);\n      }\n'
+          new='      // DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY-20261010\n      // Explicit links take precedence over older browser storage. Never combine two identities.\n      // Ambiguous links or storage fail closed instead of silently choosing another member.\n      function getInitialLookup() {\n        const blank = { line_user_id: "", public_token: "" };\n        const url = new URL(location.href);\n        const urlLine = String(url.searchParams.get("line_user_id") || "").trim();\n        const urlToken = String(url.searchParams.get("public_token") || "").trim();\n        if (urlLine && urlToken) return blank; // Conflicting credentials in a single link.\n        if (urlToken) return { line_user_id: "", public_token: urlToken };\n        if (urlLine) return { line_user_id: urlLine, public_token: "" };\n\n        const remembered = C.getMemberLookupFromUrl();\n        const storedLine = String(remembered.line_user_id || "").trim();\n        const storedToken = String(remembered.public_token || "").trim();\n        if (storedLine && storedToken) return blank; // Older mixed storage is not a valid identity.\n        if (storedToken) return { line_user_id: "", public_token: storedToken };\n        if (storedLine) return { line_user_id: storedLine, public_token: "" };\n        if (C.isDemoMode()) return { line_user_id: "demo_photo_line_001", public_token: "" };\n        return blank;\n      }\n\n      function persistLookup() {\n        const line = String(state.lookup.line_user_id || "").trim();\n        const token = String(state.lookup.public_token || "").trim();\n        if (line && !token) {\n          C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, line);\n          C.removeStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN);\n        } else if (token && !line) {\n          C.setStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN, token);\n          C.removeStoredValue(C.STORAGE_KEYS.LINE_USER_ID);\n        }\n      }\n'
+          marker='DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY-20261010'
+          if marker in s:
+              assert s.count(marker)==1 and new in s, 'R16 STOP partial prior patch'
+              print('R16 already installed; safe idempotent verification')
+          else:
+              assert s.count(old)==1, 'R16 STOP unique source block missing'
+              p.write_text(s.replace(old,new), encoding='utf8')
+              print('R16 exclusive deep-link identity installed; member only')
+          PY_R16_PATCH
+          python /tmp/dpro_photo_r16_patch.py member.html
+          python /tmp/dpro_photo_r16_patch.py member.html
+      - name: Verify member identity isolation and earlier guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > __dpro_photo_r16_regression.js <<'JS_R16_TEST'
+          "use strict";
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const html=fs.readFileSync('member.html','utf8');
+          const marker='DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY-20261010';
+          const checks=[];
+          const ok=(name,fn)=>{fn();checks.push(name)};
+          const begin=html.indexOf('      // '+marker);
+          const end=html.indexOf('      function setAccessMode(',begin);
+          assert(begin>0&&end>begin,'R16 functions not found');
+          const fragment=html.slice(begin,end);
+          function harness({url='https://demo.example/member.html',storedLine='',storedToken='',demo=false}={}) {
+           const storage=new Map();if(storedLine)storage.set('LINE',storedLine);if(storedToken)storage.set('TOKEN',storedToken);
+           const mutations=[];
+           const location={href:url};
+           const state={lookup:{line_user_id:'',public_token:''}};
+           const C={
+            STORAGE_KEYS:{LINE_USER_ID:'LINE',PUBLIC_TOKEN:'TOKEN'},
+            isDemoMode:()=>demo,
+            getMemberLookupFromUrl:()=>{
+             const u=new URL(location.href);
+             return {line_user_id:u.searchParams.get('line_user_id')||storage.get('LINE')||'',public_token:u.searchParams.get('public_token')||storage.get('TOKEN')||''};
+            },
+            setStoredValue:(key,value)=>{mutations.push(['set',key]);storage.set(key,value)},
+            removeStoredValue:key=>{mutations.push(['remove',key]);storage.delete(key)}
+           };
+           const ctx={C,location,state,URL};vm.createContext(ctx);
+           new vm.Script(fragment+'\n globalThis.readLookup=getInitialLookup;globalThis.saveLookup=persistLookup;').runInContext(ctx);
+           return {read:()=>JSON.parse(JSON.stringify(ctx.readLookup())),persist:x=>{state.lookup=x;ctx.saveLookup()},storage,mutations,location};
+          }
+          const expected=(line='',token='')=>({line_user_id:line,public_token:token});
+          ok('one R16 marker',()=>assert.equal(html.split(marker).length-1,1));
+          ok('member script syntax',()=>{const m=html.match(/<script>\s*\(\(\) => \{([\s\S]*?)\}\)\(\);\s*<\/script>/);assert(m);new vm.Script('(()=>{'+m[1]+'})();');});
+          ok('R6 tenant draft isolation retained',()=>assert(html.includes('DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6')));
+          ok('R12 URL cleanup retained',()=>assert(html.includes('DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD')));
+          ok('R14 async identity isolation retained',()=>assert(html.includes('DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION')));
+          ok('R15 request context lock retained',()=>assert(html.includes('DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK')));
+          ok('R15 clear session on reset retained',()=>assert(html.includes('C.clearSessionToken("member"); // R15: do not keep the previous member session')));
+          const cases=[
+           ['URL token overrides stored line',{url:'https://demo.example/member.html?public_token=TOKEN_NEW',storedLine:'LINE_OLD'},expected('','TOKEN_NEW')],
+           ['URL line overrides stored token',{url:'https://demo.example/member.html?line_user_id=LINE_NEW',storedToken:'TOKEN_OLD'},expected('LINE_NEW','')],
+           ['URL token overrides both stored',{url:'https://demo.example/member.html?public_token=NEW',storedLine:'OLD_LINE',storedToken:'OLD_TOKEN'},expected('','NEW')],
+           ['URL line overrides both stored',{url:'https://demo.example/member.html?line_user_id=NEW',storedLine:'OLD_LINE',storedToken:'OLD_TOKEN'},expected('NEW','')],
+           ['both URL identities fail closed',{url:'https://demo.example/member.html?public_token=T&line_user_id=L'},expected()],
+           ['both URL identities fail closed despite demo',{url:'https://demo.example/member.html?demo=1&public_token=T&line_user_id=L',demo:true},expected()],
+           ['both stored identities fail closed',{storedLine:'LINE_A',storedToken:'TOKEN_A'},expected()],
+           ['stored token only restored',{storedToken:'TOK_A'},expected('','TOK_A')],
+           ['stored line only restored',{storedLine:'LIN_A'},expected('LIN_A','')],
+           ['no identity outside demo',{url:'https://demo.example/member.html?section=delivery'},expected()],
+           ['demo fallback only if no existing identity',{url:'https://demo.example/member.html?demo=1',demo:true},expected('demo_photo_line_001','')],
+           ['demo token link overrides fallback',{url:'https://demo.example/member.html?demo=1&public_token=T',demo:true},expected('','T')],
+           ['demo line link overrides fallback',{url:'https://demo.example/member.html?demo=1&line_user_id=L',demo:true},expected('L','')],
+           ['stale dual identity not demo auto selected',{url:'https://demo.example/member.html?demo=1',storedLine:'A',storedToken:'B',demo:true},expected()],
+           ['URL token whitespace trimmed',{url:'https://demo.example/member.html?public_token=%20TOK%20'},expected('','TOK')],
+           ['URL line whitespace trimmed',{url:'https://demo.example/member.html?line_user_id=%20LIN%20'},expected('LIN','')],
+           ['explicit token supersedes same type stored',{url:'https://demo.example/member.html?public_token=NEW',storedToken:'OLD'},expected('','NEW')],
+           ['explicit line supersedes same type stored',{url:'https://demo.example/member.html?line_user_id=NEW',storedLine:'OLD'},expected('NEW','')],
+           ['reservation number alone does not override stored token',{url:'https://demo.example/member.html?reservation_no=TEST',storedToken:'TOKEN'},expected('','TOKEN')],
+           ['URL token encoded chars preserved',{url:'https://demo.example/member.html?public_token=A%2BB%2FC%3D'},expected('','A+B/C=')],
+          ];
+          for(const [name,opt,exp] of cases)ok(name,()=>assert.deepEqual(harness(opt).read(),exp));
+          ok('persist line removes token key',()=>{let h=harness({storedToken:'STALE'});h.persist(expected('NEWLINE'));assert.equal(h.storage.get('LINE'),'NEWLINE');assert(!h.storage.has('TOKEN'));});
+          ok('persist token removes line key',()=>{let h=harness({storedLine:'STALE'});h.persist(expected('','NEWTOKEN'));assert.equal(h.storage.get('TOKEN'),'NEWTOKEN');assert(!h.storage.has('LINE'));});
+          ok('blank identity never alters storage',()=>{let h=harness({storedToken:'KEEP'});h.persist(expected());assert.equal(h.storage.get('TOKEN'),'KEEP');assert.equal(h.mutations.length,0);});
+          ok('ambiguous identity never overwrites storage',()=>{let h=harness({storedLine:'L',storedToken:'T'});h.persist(expected('A','B'));assert.equal(h.mutations.length,0);});
+          ok('persist trims spaces and clears opposite',()=>{let h=harness({storedLine:'OLD'});h.persist(expected('','  GOOD  '));assert.equal(h.storage.get('TOKEN'),'GOOD');assert(!h.storage.has('LINE'));});
+          ok('token-link then persist remains exclusive across refresh',()=>{let h=harness({storedLine:'OLD',url:'https://demo.example/member.html?public_token=NEW'});const choice=h.read();h.persist(choice);h.location.href='https://demo.example/member.html?section=reservations';assert.deepEqual(h.read(),expected('','NEW'));});
+          ok('line-link then persist remains exclusive across refresh',()=>{let h=harness({storedToken:'OLD',url:'https://demo.example/member.html?line_user_id=NEW'});const choice=h.read();h.persist(choice);h.location.href='https://demo.example/member.html';assert.deepEqual(h.read(),expected('NEW',''));});
+          ok('R16 no fetch/POST in patched functions',()=>assert(!/\b(fetch|apiPost|apiGet|openMemberSession)\s*\(/.test(fragment)));
+          ok('R16 URL never saved in log',()=>assert(!/\b(console|localStorage|sessionStorage)\./.test(fragment)));
+          const report={product:'DPRO PHOTO',standard:'R16 EXCLUSIVE MEMBER LINK IDENTITY AND STORAGE',mode:'OFFLINE_BROWSER_VM_SYNTHETIC',counts:{passed:checks.length,failed:0},checks,productionReady:false,liveRequests:0,dataMutations:0};
+          fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R16.json',JSON.stringify(report,null,2)+'\n');
+          console.log('DPRO PHOTO R16 '+checks.length+' PASS 0 FAIL');
+          JS_R16_TEST
+          node --check __dpro_photo_r16_regression.js
+          node __dpro_photo_r16_regression.js
+          rm __dpro_photo_r16_regression.js
+          git diff --check
+          python - <<'PY_SCOPE'
+          import subprocess
+          touched=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()
+          assert touched in ([],['member.html']), f'R16 STOP unexpected file modification: {touched}'
+          print('R16 verified only member.html changed')
+          PY_SCOPE
+      - name: Commit only verified member update
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- member.html; then
+            echo 'R16 already applied; no commit needed'
+            exit 0
+          fi
+          test "$(git diff --name-only | wc -l)" -eq 1
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'DPRO PHOTO R16 prevent mixed member identities from saved credentials and links'
+          git push
+      - name: Preserve R16 offline regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R16
+          path: DPRO_PHOTO_PRODUCT_GATE_R16.json
+          if-no-files-found: warn
