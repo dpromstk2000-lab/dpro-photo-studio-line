@@ -1,0 +1,297 @@
+name: DPRO PHOTO Member Request Modal Identity Isolation R18
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-modal-context-isolation-r18.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-member-modal-r18-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  member-modal-r18:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout current product code
+        uses: actions/checkout@v4
+      - name: Apply source-hash-guarded R18 member.html-only improvement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R18_PATCH'
+          from pathlib import Path
+          import hashlib,os,sys
+          p=Path('member.html')
+          s=p.read_text(encoding='utf-8')
+          marker='DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION-20261010'
+          expected_hash='dab413a3627ce5d7cb92e37ca3f2be7c037d3a1ee7030acba6bd0607f8d5b4e2'
+          if marker in s:
+              assert s.count(marker)==1 and 'function discardRequestModalForIdentityChange()' in s and 'if (!currentReservation || !currentLoaded || currentLoaded.line_user_id' in s
+              print('R18 already applied; no changes');sys.exit(0)
+          assert hashlib.sha256(s.encode()).hexdigest()==expected_hash, 'R18 STOP: production member.html source no longer matches validated R17 baseline'
+          def replace_exact(old,new,label):
+           global s
+           assert s.count(old)==1, f'R18 STOP expected unique source not found for {label}: {s.count(old)}'
+           s=s.replace(old,new,1)
+          replace_exact('''      function closeRequestModal(force = false) {
+                  if (state.requestSubmitting && !force) return; // R15: modal remains tied to in-flight request.
+                  els.requestModal.classList.remove("open");
+                  state.modalMode = "";
+                  state.modalReservation = null;
+                }
+          ''','''      function closeRequestModal(force = false) {
+                  if (state.requestSubmitting && !force) return; // R15: modal remains tied to in-flight request.
+                  els.requestModal.classList.remove("open");
+                  state.modalMode = "";
+                  state.modalReservation = null;
+                }
+          
+                // DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION-20261010
+                // On member identity switches, discard only the visible input, not R6's
+                // identity-scoped sessionStorage draft. Never close while a POST is in flight.
+                function discardRequestModalForIdentityChange() {
+                  if (state.requestSubmitting) return false;
+                  closeRequestModal(true);
+                  els.requestNote.value = "";
+                  return true;
+                }
+          ''','modal helper')
+          replace_exact('''        const reservation = state.modalReservation;
+                  const mode = state.modalMode;
+                  const currentStatus = reservation.reservation_status;''','''        const reservation = state.modalReservation;
+                  const mode = state.modalMode;
+                  const currentLoaded = state.loadedLookup;
+                  const currentReservation = state.reservations.find((item) => String(item.id || "") === String(reservation.id || "")
+                    && String(item.reservation_no || "") === String(reservation.reservation_no || ""));
+                  if (!currentReservation || !currentLoaded || currentLoaded.line_user_id !== String(state.lookup.line_user_id || "")
+                    || currentLoaded.public_token !== String(state.lookup.public_token || "")) {
+                    discardRequestModalForIdentityChange();
+                    showToast("予約の確認情報が更新されました。対象の予約を開き直してください。", "error");
+                    return;
+                  }
+                  const currentStatus = currentReservation.reservation_status;''','send guard')
+          replace_exact('''        C.clearSessionToken("member"); // R15: do not keep the previous member session on account switch.
+                  ++state.memberLoadSeq;''','''        discardRequestModalForIdentityChange(); // R18: no previous person's modal survives reset.
+                  C.clearSessionToken("member"); // R15: do not keep the previous member session on account switch.
+                  ++state.memberLoadSeq;''','reset cleanup')
+          replace_exact('''        if (prior && (prior.line_user_id !== lookup.line_user_id || prior.public_token !== lookup.public_token)) {
+                    // Remove the previous person's visible data before starting a different lookup.
+                    state.customer = null;''','''        if (prior && (prior.line_user_id !== lookup.line_user_id || prior.public_token !== lookup.public_token)) {
+                    // Remove the previous person's visible data before starting a different lookup.
+                    discardRequestModalForIdentityChange(); // R18: close any old reservation request dialog.
+                    state.customer = null;''','async switch')
+          replace_exact('''        try {
+                    ++state.memberLoadSeq; // Invalidate unfinished reads before switching the demo session.
+                    state.loadedLookup = null;''','''        try {
+                    discardRequestModalForIdentityChange(); // R18: do not carry an old modal into demo user B.
+                    ++state.memberLoadSeq; // Invalidate unfinished reads before switching the demo session.
+                    state.loadedLookup = null;''','demo switch')
+          replace_exact('''          if (state.lookup.public_token !== token || state.lookup.line_user_id) {
+                      C.clearSessionToken("member"); // R15: a new token never inherits the old member session.
+                    }''','''          if (state.lookup.public_token !== token || state.lookup.line_user_id) {
+                      discardRequestModalForIdentityChange(); // R18: the previous token's modal must close.
+                      C.clearSessionToken("member"); // R15: a new token never inherits the old member session.
+                    }''','token switch')
+          # before writing validate the only original program modification is in member.html
+          assert s.count(marker)==1
+          p.write_text(s,encoding='utf-8')
+          print('R18 member modal context isolation applied')
+          PY_R18_PATCH
+      - name: Run R18 synthetic browser and R17 regression gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > __r18_regression.js <<'NODE_R18_TEST'
+          'use strict';
+          const fs=require('node:fs'),assert=require('node:assert/strict'),vm=require('node:vm');
+          const source=fs.readFileSync('member.html','utf8'),passed=[];
+          const ok=(name,fn)=>{fn();passed.push(name)};
+          const aok=async(name,fn)=>{await fn();passed.push(name)};
+          const part=(a,b)=>{const start=source.indexOf(a),end=source.indexOf(b,start+a.length);assert(start>=0&&end>start,'R18 expected code block not found: '+a);return source.slice(start,end)};
+          const modal=part('      function closeRequestModal(force = false) {','      function reservationAuthPayload(');
+          const submit=part('      async function submitRequest() {','      // DPRO-PHOTO-R12-');
+          const reset=part('      function resetMemberLookup() {','      // DPRO-PHOTO-R14-');
+          const token=part('        els.openMemberButton.addEventListener("click", async () => {','        els.anotherReservationButton.addEventListener(');
+          const demo=part('      async function useDemoPerson(lineUserId) {','      function bindStaticEvents() {');
+          const load=part('      async function loadMember(options = {}) {','      /* DPRO-PHOTO-MEMBER-DEMO-SESSION');
+          function env(opts={}){
+           const reserve={id:'11111111-1111-4111-8111-111111111111',reservation_no:'PUBLIC-1',public_token:'token-a',reservation_status:'confirmed'};
+           const state={lookup:{line_user_id:'line-a',public_token:''},loadedLookup:{line_user_id:'line-a',public_token:''},reservations:[reserve],modalReservation:reserve,modalMode:'contact',requestSubmitting:false,busy:false,memberLoadSeq:2,customer:{customer_name:'A'},profile:{},selectedReservationId:reserve.id,refreshFeedbackSeq:0, ...opts};
+           const modalClasses=new Set(['open']),actions=[],stored=[],handlers={};
+           const node=()=>({value:'typed-private-draft',textContent:'',hidden:false,style:{},classList:{contains:(k)=>modalClasses.has(k),add:k=>modalClasses.add(k),remove:k=>modalClasses.delete(k)}});
+           const els={requestModal:node(),requestNote:node(),publicTokenInput:{value:'token-b'},memberArea:{hidden:false},accessSection:{scrollIntoView:()=>actions.push('scroll')},openMemberButton:{addEventListener:(event,fn)=>handlers.open=fn}};
+           const C={normalizeWhitespace:x=>String(x).trim(),ENDPOINTS:{PUBLIC_CHANGE_REQUEST:'change',PUBLIC_CANCEL_REQUEST:'cancel',PUBLIC_REORDER_REQUEST:'reorder',PUBLIC_CONTACT:'contact'},STORAGE_KEYS:{LINE_USER_ID:'l',PUBLIC_TOKEN:'p'},clearSessionToken:()=>actions.push('clearSession'),removeStoredValue:x=>stored.push(x),apiPost:async()=>{actions.push('post');return {message:'sent'};}};
+           const context={state,els,C,location:{href:'https://example.org/member.html?public_token=secret'},URL,history:{replaceState:()=>actions.push('history')},setLoading:x=>actions.push(x?'loading-on':'loading-off'),setAccessMode:x=>actions.push('access-'+x),closeRequestModal:null,refreshMemberSessionForRequest:async()=>actions.push('auth'),reservationAuthPayload:r=>({public_token:r.public_token}),clearRequestDraft:()=>actions.push('clearDraft'),loadMember:async()=>actions.push('reload'),showToast:msg=>actions.push('toast'),errorMessage:e=>e?.message||'',setFieldError(){},setTimeout(){},console};
+           context.els.requestModal.classList.contains=k=>modalClasses.has(k);
+           vm.createContext(context);
+           vm.runInContext(modal+'\n'+submit+'\n'+reset+'\n globalThis.test={close:closeRequestModal,discard:discardRequestModalForIdentityChange,submit:submitRequest,reset:resetMemberLookup};',context);
+           return {state,els,modalClasses,actions,stored,reserve,context,handlers};
+          }
+          (async()=>{
+           ok('R18 marker once',()=>assert.equal(source.split('DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION-20261010').length-1,1));
+           for(const [label,mark] of [['R6','DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6'],['R12','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD'],['R14','DPRO-PHOTO-R14-MEMBER-LOADING'],['R15','DPRO-PHOTO-R15-MEMBER-REQUEST'],['R16','DPRO-PHOTO-R16-EXCLUSIVE'],['R17','DPRO-PHOTO-R17-MEMBER-REFRESH']]) ok('earlier '+label+' marker retained',()=>assert(source.includes(mark)));
+           ok('referrer policy preserved',()=>assert(source.includes('content="no-referrer"')));
+           ok('request helper is after existing modal close',()=>assert(modal.indexOf('function discardRequestModalForIdentityChange')>modal.indexOf('function closeRequestModal')));
+           ok('helper never clears draft storage',()=>assert(!modal.includes('clearRequestDraft(')&&!modal.includes('sessionStorage.')));
+           ok('helper preserves in-flight writes',()=>assert(modal.includes('if (state.requestSubmitting) return false;')));
+           ok('reset modal before identity erase',()=>assert(reset.indexOf('discardRequestModalForIdentityChange')<reset.indexOf('state.lookup =')));
+           ok('reset still clears session token',()=>assert(reset.includes('C.clearSessionToken("member")')));
+           ok('reset still invalidates unfinished reads',()=>assert(reset.includes('++state.memberLoadSeq')));
+           ok('demo switch closes old modal',()=>assert(demo.includes('discardRequestModalForIdentityChange()')));
+           ok('demo switch keeps R14 invalidation',()=>assert(demo.includes('++state.memberLoadSeq')));
+           ok('token switch closes only when identity different',()=>assert(token.indexOf('if (state.lookup.public_token !== token')<token.indexOf('discardRequestModalForIdentityChange()')));
+           ok('member async identity switch closes old modal',()=>assert(load.includes('discardRequestModalForIdentityChange()')));
+           ok('member stale result remains guarded',()=>assert(load.includes('if (!isCurrent()) return "stale"')));
+           ok('request uses current reservation membership',()=>assert(submit.includes('state.reservations.find')));
+           ok('request uses latest loaded lookup',()=>assert(submit.includes('state.loadedLookup')));
+           ok('request validates both identity components',()=>assert(submit.includes('currentLoaded.line_user_id')&&submit.includes('currentLoaded.public_token')));
+           ok('request does not POST before context check',()=>assert(submit.indexOf('if (!currentReservation ||')<submit.indexOf('const auth =')));
+           ok('request rejects old reservation number',()=>assert(submit.includes('item.reservation_no')));
+           ok('request status checks current record',()=>assert(submit.includes('const currentStatus = currentReservation.reservation_status')));
+           ok('request retains R15 after-auth guard',()=>assert(submit.includes('if (!isOriginalContext()) return;')));
+           ok('request retains R15 same-captured-mode cleanup',()=>assert(submit.includes('clearRequestDraft(mode, reservation)')));
+           ok('embedded scripts pass JS parse',()=>{for(const m of source.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) if(m[1].trim())new vm.Script(m[1]);});
+           await aok('discard closes old modal on identity change',async()=>{let h=env();assert.equal(h.context.test.discard(),true);assert(!h.modalClasses.has('open'));assert.equal(h.state.modalReservation,null);});
+           await aok('discard empties visible note',async()=>{let h=env();h.context.test.discard();assert.equal(h.els.requestNote.value,'');});
+           await aok('discard preserves old draft',async()=>{let h=env();h.context.test.discard();assert(!h.actions.includes('clearDraft'));});
+           await aok('discard blocked during send',async()=>{let h=env({requestSubmitting:true});assert.equal(h.context.test.discard(),false);assert(h.modalClasses.has('open'));assert.equal(h.els.requestNote.value,'typed-private-draft');});
+           await aok('normal reset closes old dialog',async()=>{let h=env();h.context.test.reset();assert(!h.modalClasses.has('open'));assert.equal(h.state.lookup.line_user_id,'');assert(h.actions.includes('clearSession'));});
+           await aok('reset does not erase stored draft',async()=>{let h=env();h.context.test.reset();assert(!h.actions.includes('clearDraft'));});
+           await aok('reset leaves no visible profile',async()=>{let h=env();h.context.test.reset();assert.equal(h.state.reservations.length,0);assert(h.els.memberArea.hidden);});
+           await aok('reset refuses while POST in flight',async()=>{let h=env({requestSubmitting:true});h.context.test.reset();assert(h.modalClasses.has('open'));assert.equal(h.state.lookup.line_user_id,'line-a');});
+           await aok('old reservation no longer loaded => no POST',async()=>{let h=env({reservations:[]});await h.context.test.submit();assert(!h.actions.includes('post'));assert(!h.modalClasses.has('open'));});
+           await aok('old id with new reservation number => no POST',async()=>{let h=env();h.state.reservations=[{...h.reserve,reservation_no:'NEW-1'}];await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('loaded member identity mismatch => no POST',async()=>{let h=env({loadedLookup:{line_user_id:'line-b',public_token:''}});await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('missing loaded member => no POST',async()=>{let h=env({loadedLookup:null});await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('token identity mismatch => no POST',async()=>{let h=env({lookup:{line_user_id:'',public_token:'token-a'},loadedLookup:{line_user_id:'',public_token:'token-b'}});await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('valid loaded member contact posts only once',async()=>{let h=env();await h.context.test.submit();assert.equal(h.actions.filter(x=>x==='post').length,1);});
+           await aok('valid send still clears draft after success',async()=>{let h=env();await h.context.test.submit();assert(h.actions.indexOf('post')<h.actions.indexOf('clearDraft'));});
+           await aok('valid send still refetches member',async()=>{let h=env();await h.context.test.submit();assert(h.actions.includes('reload'));});
+           await aok('valid send closes modal after success',async()=>{let h=env();await h.context.test.submit();assert(!h.modalClasses.has('open'));});
+           await aok('loaded new status blocks duplicate change',async()=>{let h=env({modalMode:'change'});h.state.reservations=[{...h.reserve,reservation_status:'change_requested'}];await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('loaded new status blocks duplicate cancel',async()=>{let h=env({modalMode:'cancel'});h.state.reservations=[{...h.reserve,reservation_status:'cancel_requested'}];await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('submission lock prevents new POST',async()=>{let h=env({requestSubmitting:true});await h.context.test.submit();assert(!h.actions.includes('post'));});
+           ok('no real tokens in test report names',()=>assert(passed.every(v=>!v.includes('token-a')&&!v.includes('line-a'))));
+           const report={product:'DPRO PHOTO',gate:'R18 MEMBER REQUEST MODAL CONTEXT ISOLATION',mode:'OFFLINE_BROWSER_VM_SYNTHETIC',counts:{passed:passed.length,failed:0},checks:passed,productionReady:false,realApiRequests:0,reservationMutations:0,customerMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R18.json',JSON.stringify(report,null,2)+'\n');console.log(`DPRO PHOTO R18 ${passed.length} PASS 0 FAIL`);
+          })().catch(e=>{console.error('R18 REGRESSION FAILURE:',String(e?.stack||e));process.exitCode=1;});
+          NODE_R18_TEST
+          node __r18_regression.js
+          cat > __r17_regression.js <<'NODE_R17_REGRESSION'
+          'use strict';
+          const fs=require('fs'),assert=require('node:assert/strict'),vm=require('vm');
+          const html=fs.readFileSync('member.html','utf8');
+          const checks=[];
+          const ok=(name,fn)=>{fn();checks.push(name)};
+          const aok=async(name,fn)=>{await fn();checks.push(name)};
+          function deferred(){let resolve,reject;const promise=new Promise((res,rej)=>{resolve=res;reject=rej});return {promise,resolve,reject,settled:false}}
+          const marker='DPRO-PHOTO-R17-MEMBER-REFRESH-TRUTHFUL-STATUS-20261010';
+          const loadBegin=html.indexOf('      async function loadMember(options = {}) {');
+          const loadEnd=html.indexOf('      /* DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH',loadBegin);
+          const refreshBegin=html.indexOf('        // '+marker);
+          const refreshEnd=html.indexOf("        $$('.tab').forEach",refreshBegin);
+          assert(loadBegin>0&&loadEnd>loadBegin&&refreshBegin>0&&refreshEnd>refreshBegin,'R17 unexpected source boundaries');
+          const loadCode=html.slice(loadBegin,loadEnd),refreshCode=html.slice(refreshBegin,refreshEnd);
+          function harness(kind='line',id='demo_photo_line_001'){
+           const state={lookup:kind==='line'?{line_user_id:id,public_token:''}:{line_user_id:'',public_token:id},customer:null,profile:null,reservations:[],selectedReservationId:'',memberLoadSeq:0,loadedLookup:null,refreshFeedbackSeq:0,requestSubmitting:false};
+           const calls=[],effects=[],timers=[],handlers={};
+           const refreshButton={textContent:'更新',disabled:false,addEventListener(_evt,fn){handlers.refresh=fn}};
+           const els={memberArea:{hidden:true},refreshButton};
+           const location={href:'https://dpromstk2000-lab.github.io/dpro-photo-studio-line/member.html?demo=1&section=reservations'};
+           const context={state,els,location,URL,
+            C:{ENDPOINTS:{MEMBER_RESERVATIONS:'/api/member/reservations',MEMBER_PROFILE:'/api/member/profile'},apiGet(path,query){let d=deferred();calls.push({path,query,d});return d.promise}},
+            setLoading(b){effects.push(b?'loading-on':'loading-off')},setAccessMode(x){effects.push('access-'+x)},persistLookup(){effects.push('persist')},renderAll(){effects.push('render')},setSection(){effects.push('section')},scrubMemberQueryFromAddressBar(){effects.push('scrub')},showToast(t){effects.push('toast')},errorMessage:e=>e?.message||'unknown',setTimeout(fn){timers.push(fn)},console};
+           vm.createContext(context);vm.runInContext(loadCode+'\nglobalThis.loadMemberTest=loadMember;',context);vm.runInContext(refreshCode,context);
+           function pending(which=id){return calls.filter(x=>Object.values(x.query).includes(which)&&!x.d.settled)}
+           function finish(which,label){let arr=pending(which);assert.equal(arr.length,kind==='token'||String(which).startsWith('token')?1:2,'expected pending API requests');for(let x of arr){x.d.settled=true;x.d.resolve(x.path.includes('/profile')?{customer:{customer_name:'profile-'+label}}:{customer:{customer_name:label},reservations:[{id:'reservation-'+label,reservation_no:label}]})}}
+           function fail(which,message='network-error'){let arr=pending(which);assert(arr.length>0);for(let x of arr){x.d.settled=true;x.d.reject(new Error(message));}}
+           function tick(){const xs=timers.splice(0);for(const f of xs)f()}
+           return {state,calls,effects,timers,els,load:context.loadMemberTest,refresh:()=>handlers.refresh(),finish,fail,tick};
+          }
+          const swap=(h,id)=>{h.state.lookup={line_user_id:id,public_token:''}};
+          (async()=>{
+           ok('R17 marker exactly once',()=>assert.equal(html.split(marker).length-1,1));
+           for(const [n,m] of [['R6','DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6'],['R12','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010'],['R14','DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010'],['R15','DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK-20261010'],['R16','DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY-20261010']])ok('preserve '+n+' guard',()=>assert(html.includes(m)));
+           ok('R12 no-referrer policy',()=>assert(html.includes('<meta name="referrer" content="no-referrer"')));
+           ok('refresh sequence state field',()=>assert(html.includes('refreshFeedbackSeq: 0')));
+           ok('load current success return',()=>assert(loadCode.includes('return "success"')));
+           ok('load failure return',()=>assert(loadCode.includes('return "failure"')));
+           ok('load missing return',()=>assert(loadCode.includes('return "missing"')));
+           ok('load stale guard returns stale',()=>assert.equal(loadCode.split('return "stale"').length-1,2));
+           ok('only successful load scrubs URL',()=>assert(loadCode.indexOf('scrubMemberQueryFromAddressBar();')<loadCode.indexOf('return "success"')));
+           ok('R17 button guarded against duplicate clicks',()=>assert(refreshCode.includes('els.refreshButton.disabled) return')));
+           ok('R17 context lock preserved in refresh',()=>assert(refreshCode.includes('state.requestSubmitting')));
+           ok('R17 status strings visible',()=>assert(refreshCode.includes('"更新しました"')&&refreshCode.includes('"再試行"')&&refreshCode.includes('"更新"')));
+           ok('R17 feedback timer scoped',()=>assert(refreshCode.includes('seq === state.refreshFeedbackSeq')));
+           ok('inline script source syntax valid',()=>{for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))if(m[1].trim())new vm.Script(m[1]);});
+           await aok('LINE current success returns success',async()=>{let h=harness(),p=h.load();h.finish('demo_photo_line_001','A');assert.equal(await p,'success');assert.equal(h.state.customer.customer_name,'A');});
+           await aok('token success skips profile and returns success',async()=>{let h=harness('token','token-01'),p=h.load();assert.equal(h.calls.length,1);h.finish('token-01','T');assert.equal(await p,'success');});
+           await aok('network failure returns failure',async()=>{let h=harness(),p=h.load();h.fail('demo_photo_line_001');assert.equal(await p,'failure');});
+           await aok('missing lookup returns missing without GET',async()=>{let h=harness();h.state.lookup={line_user_id:'',public_token:''};assert.equal(await h.load(),'missing');assert.equal(h.calls.length,0);});
+           await aok('stale completed GET returns stale',async()=>{let h=harness(),p=h.load();swap(h,'demo_photo_line_002');let q=h.load();h.finish('demo_photo_line_002','B');assert.equal(await q,'success');h.finish('demo_photo_line_001','A');assert.equal(await p,'stale');assert.equal(h.state.customer.customer_name,'B');});
+           await aok('stale failed GET returns stale',async()=>{let h=harness(),p=h.load();swap(h,'demo_photo_line_002');let q=h.load();h.finish('demo_photo_line_002','B');await q;h.fail('demo_photo_line_001');assert.equal(await p,'stale');});
+           await aok('A to B to A only latest success',async()=>{let h=harness(),a=h.load();swap(h,'demo_photo_line_002');let b=h.load();swap(h,'demo_photo_line_001');let c=h.load();const newest=h.calls.slice(-2);for(let x of newest){x.d.settled=true;x.d.resolve(x.path.includes('/profile')?{customer:{}}:{customer:{customer_name:'newA'},reservations:[]})}assert.equal(await c,'success');h.finish('demo_photo_line_002','B');assert.equal(await b,'stale');const oldest=h.calls.slice(0,2);for(let x of oldest){x.d.settled=true;x.d.resolve(x.path.includes('/profile')?{customer:{}}:{customer:{customer_name:'oldA'},reservations:[]})}assert.equal(await a,'stale');assert.equal(h.state.customer.customer_name,'newA');});
+           await aok('success persists then renders then scrubs',async()=>{let h=harness(),p=h.load();h.finish('demo_photo_line_001','A');await p;let e=h.effects;assert(e.indexOf('persist')<e.indexOf('render')&&e.indexOf('render')<e.indexOf('scrub'));});
+           await aok('failed response never scrubs',async()=>{let h=harness(),p=h.load();h.fail('demo_photo_line_001');await p;assert(!h.effects.includes('scrub'));});
+           await aok('silent refresh never activates blocking loader',async()=>{let h=harness(),p=h.load({silent:true});h.finish('demo_photo_line_001','A');await p;assert(!h.effects.includes('loading-on'));});
+           await aok('non-silent refresh activates and releases loader',async()=>{let h=harness(),p=h.load();h.finish('demo_photo_line_001','A');await p;assert(h.effects.includes('loading-on')&&h.effects.includes('loading-off'));});
+           await aok('button stays disabled until success resolves',async()=>{let h=harness(),p=h.refresh();assert(h.els.refreshButton.disabled);assert.equal(h.els.refreshButton.textContent,'更新中…');h.finish('demo_photo_line_001','A');await p;assert(!h.els.refreshButton.disabled);});
+           await aok('button displays success only when read success',async()=>{let h=harness(),p=h.refresh();h.finish('demo_photo_line_001','A');await p;assert.equal(h.els.refreshButton.textContent,'更新しました');});
+           await aok('button displays retry after rejected read',async()=>{let h=harness(),p=h.refresh();h.fail('demo_photo_line_001');await p;assert.equal(h.els.refreshButton.textContent,'再試行');});
+           await aok('successful feedback returns to update after timeout',async()=>{let h=harness(),p=h.refresh();h.finish('demo_photo_line_001','A');await p;h.tick();assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('failure feedback returns to update after timeout',async()=>{let h=harness(),p=h.refresh();h.fail('demo_photo_line_001');await p;h.tick();assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('stale refresh does not claim success',async()=>{let h=harness(),p=h.refresh();swap(h,'demo_photo_line_002');h.finish('demo_photo_line_001','A');await p;assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('missing lookup does not claim success',async()=>{let h=harness();h.state.lookup={line_user_id:'',public_token:''};await h.refresh();assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('double click does not start second fetch',async()=>{let h=harness(),p=h.refresh();await h.refresh();assert.equal(h.calls.length,2);h.finish('demo_photo_line_001','A');await p;});
+           await aok('request submission prevents refresh',async()=>{let h=harness();h.state.requestSubmitting=true;await h.refresh();assert.equal(h.calls.length,0);});
+           await aok('old success timer cannot overwrite later in-progress refresh',async()=>{let h=harness(),p=h.refresh();h.finish('demo_photo_line_001','A');await p;assert.equal(h.timers.length,1);let q=h.refresh();assert(h.els.refreshButton.disabled);h.tick();assert.equal(h.els.refreshButton.textContent,'更新中…');h.finish('demo_photo_line_001','B');await q;assert.equal(h.els.refreshButton.textContent,'更新しました');});
+           await aok('retry succeeds after earlier error',async()=>{let h=harness(),p=h.refresh();h.fail('demo_photo_line_001');await p;assert.equal(h.els.refreshButton.textContent,'再試行');let q=h.refresh();h.finish('demo_photo_line_001','fixed');await q;assert.equal(h.state.customer.customer_name,'fixed');assert.equal(h.els.refreshButton.textContent,'更新しました');});
+           ok('no user credentials embedded in check names',()=>assert(checks.every(x=>!x.includes('demo_photo_line')&&!x.includes('token-01'))));
+           const report={product:'DPRO PHOTO',standard:'R17 MEMBER READ RESULT AND REFRESH FEEDBACK',mode:'OFFLINE_BROWSER_VM',counts:{passed:checks.length,failed:0},checks,productionReady:false,liveRequests:0,dbMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R17.json',JSON.stringify(report,null,2)+'\n');
+           console.log(`DPRO PHOTO R17 ${checks.length} PASS 0 FAIL`);
+          })().catch(e=>{console.error('R17 REGRESSION FAILURE',e?.stack||String(e));process.exitCode=1});
+          NODE_R17_REGRESSION
+          node __r17_regression.js
+          rm -f __r18_regression.js __r17_regression.js
+          git diff --check
+          python - <<'PY_R18_VERIFY'
+          import json,subprocess
+          from pathlib import Path
+          changed=subprocess.check_output(['git','diff','--name-only'],text=True).strip().splitlines()
+          assert changed in [[],['member.html']],f'R18 STOP unexpected modified paths: {changed}'
+          a=json.loads(Path('DPRO_PHOTO_PRODUCT_GATE_R18.json').read_text())
+          b=json.loads(Path('DPRO_PHOTO_PRODUCT_GATE_R17.json').read_text())
+          assert a['counts']=={'passed':49,'failed':0},a['counts']
+          assert b['counts']=={'passed':41,'failed':0},b['counts']
+          assert a['realApiRequests']==0 and a['reservationMutations']==0 and a['customerMutations']==0
+          assert not a['productionReady'] and not b['productionReady']
+          print('R18 gates: 49 + 41 PASS / 0 FAIL; member.html only; demo data unchanged')
+          PY_R18_VERIFY
+      - name: Commit only verified member frontend changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- member.html; then
+            echo 'R18 already applied; no changes to commit'
+            exit 0
+          fi
+          test "$(git diff --name-only | wc -l)" -eq 1
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'DPRO PHOTO R18 isolate member request dialog across identity changes'
+          git push
+      - name: Preserve R18 and R17 QA reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R18
+          path: |
+            DPRO_PHOTO_PRODUCT_GATE_R18.json
+            DPRO_PHOTO_PRODUCT_GATE_R17.json
+          if-no-files-found: warn
