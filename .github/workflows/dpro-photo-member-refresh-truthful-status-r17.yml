@@ -1,0 +1,219 @@
+name: DPRO PHOTO Member Truthful Refresh Feedback R17
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-refresh-truthful-status-r17.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-member-refresh-r17-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  member-refresh-r17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Checkout existing product source
+        uses: actions/checkout@v4
+      - name: Apply source-guarded R17 member-only improvement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R17_PATCH'
+          from pathlib import Path
+          import hashlib, sys
+          p=Path('member.html')
+          s=p.read_text(encoding='utf-8')
+          marker='DPRO-PHOTO-R17-MEMBER-REFRESH-TRUTHFUL-STATUS-20261010'
+          source_sha='275bf59ae7a9da624a942318275a674ebf6db24a7f5f9831415da2972ed17c79'
+          if marker in s:
+              assert s.count(marker)==1 and 'return "success"' in s and 'refreshFeedbackSeq: 0' in s, 'R17 partial patch; STOP'
+              print('R17 already installed; no changes')
+              sys.exit(0)
+          assert hashlib.sha256(p.read_bytes()).hexdigest()==source_sha,'R17 STOP: member.html has changed; verify current source before applying'
+
+          def sub(old,new,count=1):
+              global s
+              assert s.count(old)==count,f'R17 STOP: source mismatch (matches={s.count(old)} expected={count}) {old[:100]!r}'
+              s=s.replace(old,new)
+
+          sub('        memberLoadSeq: 0, // R14: previous member loads never overwrite a new identity.',
+              '        memberLoadSeq: 0, // R14: previous member loads never overwrite a new identity.\n        refreshFeedbackSeq: 0, // R17: old refresh status timers cannot overwrite new status.')
+
+          start=s.index('      async function loadMember(options = {}) {')
+          end=s.index('      /* DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH',start)
+          old=s[start:end]
+          new=old
+          replacements=[
+           ('            setAccessMode("entry");\n          }\n          return;\n        }\n        try {',
+            '            setAccessMode("entry");\n          }\n          return "missing";\n        }\n        try {'),
+           ('if (!isCurrent()) return; // Never render or persist an obsolete identity.',
+            'if (!isCurrent()) return "stale"; // Never render or persist an obsolete identity.'),
+           ('          scrubMemberQueryFromAddressBar();\n        } catch (error) {',
+            '          scrubMemberQueryFromAddressBar();\n          return "success"; // R17: refresh must not claim success until render completes.\n        } catch (error) {'),
+           ('if (!isCurrent()) return; // Old errors cannot hide a new person\'s profile.',
+            'if (!isCurrent()) return "stale"; // Old errors cannot hide a new person\'s profile.'),
+           ('          showToast(errorMessage(error), "error");\n        } finally {',
+            '          showToast(errorMessage(error), "error");\n          return "failure"; // R17: distinguish rejected network loads from success.\n        } finally {'),
+          ]
+          for a,b in replacements:
+              assert new.count(a)==1,'R17 STOP: loadMember replacement mismatch '+a[:80]
+              new=new.replace(a,b)
+          assert new!=old
+          s=s[:start]+new+s[end:]
+          old_handler='''        els.refreshButton.addEventListener("click", async () => {
+                    if (state.requestSubmitting) return;
+                    const original = els.refreshButton.textContent;
+                    els.refreshButton.disabled = true;
+                    els.refreshButton.textContent = "更新中…";
+                    await loadMember({ silent: true });
+                    els.refreshButton.disabled = false;
+                    els.refreshButton.textContent = "更新しました";
+                    setTimeout(() => { els.refreshButton.textContent = original; }, 1400);
+                  });'''
+          new_handler=f'''        // {marker}
+                  els.refreshButton.addEventListener("click", async () => {{
+                    if (state.requestSubmitting || els.refreshButton.disabled) return;
+                    const seq = ++state.refreshFeedbackSeq;
+                    els.refreshButton.disabled = true;
+                    els.refreshButton.textContent = "更新中…";
+                    let status = "failure";
+                    try {{
+                      status = await loadMember({{ silent: true }});
+                    }} catch {{
+                      status = "failure";
+                    }} finally {{
+                      if (seq === state.refreshFeedbackSeq) {{
+                        els.refreshButton.disabled = false;
+                        els.refreshButton.textContent = status === "success" ? "更新しました" : status === "failure" ? "再試行" : "更新";
+                        setTimeout(() => {{
+                          if (seq === state.refreshFeedbackSeq) els.refreshButton.textContent = "更新";
+                        }}, 1400);
+                      }}
+                    }}
+                  }});'''
+          sub(old_handler,new_handler)
+          for mark in ['DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010','DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010','DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK-20261010','DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY-20261010']:
+              assert mark in s,'R17 STOP: earlier product guard missing '+mark
+          assert s.count(marker)==1
+          p.write_text(s,encoding='utf-8')
+          print('R17 member refresh status and retry handling installed')
+          PY_R17_PATCH
+      - name: Verify R16 compatibility and R17 status regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > __dpro_photo_r17_test.js <<'JS_R17_TEST'
+          'use strict';
+          const fs=require('fs'),assert=require('node:assert/strict'),vm=require('vm');
+          const html=fs.readFileSync('member.html','utf8');
+          const checks=[];
+          const ok=(name,fn)=>{fn();checks.push(name)};
+          const aok=async(name,fn)=>{await fn();checks.push(name)};
+          function deferred(){let resolve,reject;const promise=new Promise((res,rej)=>{resolve=res;reject=rej});return {promise,resolve,reject,settled:false}}
+          const marker='DPRO-PHOTO-R17-MEMBER-REFRESH-TRUTHFUL-STATUS-20261010';
+          const loadBegin=html.indexOf('      async function loadMember(options = {}) {');
+          const loadEnd=html.indexOf('      /* DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH',loadBegin);
+          const refreshBegin=html.indexOf('        // '+marker);
+          const refreshEnd=html.indexOf("        $$('.tab').forEach",refreshBegin);
+          assert(loadBegin>0&&loadEnd>loadBegin&&refreshBegin>0&&refreshEnd>refreshBegin,'R17 unexpected source boundaries');
+          const loadCode=html.slice(loadBegin,loadEnd),refreshCode=html.slice(refreshBegin,refreshEnd);
+          function harness(kind='line',id='demo_photo_line_001'){
+           const state={lookup:kind==='line'?{line_user_id:id,public_token:''}:{line_user_id:'',public_token:id},customer:null,profile:null,reservations:[],selectedReservationId:'',memberLoadSeq:0,loadedLookup:null,refreshFeedbackSeq:0,requestSubmitting:false};
+           const calls=[],effects=[],timers=[],handlers={};
+           const refreshButton={textContent:'更新',disabled:false,addEventListener(_evt,fn){handlers.refresh=fn}};
+           const els={memberArea:{hidden:true},refreshButton};
+           const location={href:'https://dpromstk2000-lab.github.io/dpro-photo-studio-line/member.html?demo=1&section=reservations'};
+           const context={state,els,location,URL,
+            C:{ENDPOINTS:{MEMBER_RESERVATIONS:'/api/member/reservations',MEMBER_PROFILE:'/api/member/profile'},apiGet(path,query){let d=deferred();calls.push({path,query,d});return d.promise}},
+            setLoading(b){effects.push(b?'loading-on':'loading-off')},setAccessMode(x){effects.push('access-'+x)},persistLookup(){effects.push('persist')},renderAll(){effects.push('render')},setSection(){effects.push('section')},scrubMemberQueryFromAddressBar(){effects.push('scrub')},showToast(t){effects.push('toast')},errorMessage:e=>e?.message||'unknown',setTimeout(fn){timers.push(fn)},console};
+           vm.createContext(context);vm.runInContext(loadCode+'\nglobalThis.loadMemberTest=loadMember;',context);vm.runInContext(refreshCode,context);
+           function pending(which=id){return calls.filter(x=>Object.values(x.query).includes(which)&&!x.d.settled)}
+           function finish(which,label){let arr=pending(which);assert.equal(arr.length,kind==='token'||String(which).startsWith('token')?1:2,'expected pending API requests');for(let x of arr){x.d.settled=true;x.d.resolve(x.path.includes('/profile')?{customer:{customer_name:'profile-'+label}}:{customer:{customer_name:label},reservations:[{id:'reservation-'+label,reservation_no:label}]})}}
+           function fail(which,message='network-error'){let arr=pending(which);assert(arr.length>0);for(let x of arr){x.d.settled=true;x.d.reject(new Error(message));}}
+           function tick(){const xs=timers.splice(0);for(const f of xs)f()}
+           return {state,calls,effects,timers,els,load:context.loadMemberTest,refresh:()=>handlers.refresh(),finish,fail,tick};
+          }
+          const swap=(h,id)=>{h.state.lookup={line_user_id:id,public_token:''}};
+          (async()=>{
+           ok('R17 marker exactly once',()=>assert.equal(html.split(marker).length-1,1));
+           for(const [n,m] of [['R6','DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6'],['R12','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010'],['R14','DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010'],['R15','DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK-20261010'],['R16','DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY-20261010']])ok('preserve '+n+' guard',()=>assert(html.includes(m)));
+           ok('R12 no-referrer policy',()=>assert(html.includes('<meta name="referrer" content="no-referrer"')));
+           ok('refresh sequence state field',()=>assert(html.includes('refreshFeedbackSeq: 0')));
+           ok('load current success return',()=>assert(loadCode.includes('return "success"')));
+           ok('load failure return',()=>assert(loadCode.includes('return "failure"')));
+           ok('load missing return',()=>assert(loadCode.includes('return "missing"')));
+           ok('load stale guard returns stale',()=>assert.equal(loadCode.split('return "stale"').length-1,2));
+           ok('only successful load scrubs URL',()=>assert(loadCode.indexOf('scrubMemberQueryFromAddressBar();')<loadCode.indexOf('return "success"')));
+           ok('R17 button guarded against duplicate clicks',()=>assert(refreshCode.includes('els.refreshButton.disabled) return')));
+           ok('R17 context lock preserved in refresh',()=>assert(refreshCode.includes('state.requestSubmitting')));
+           ok('R17 status strings visible',()=>assert(refreshCode.includes('"更新しました"')&&refreshCode.includes('"再試行"')&&refreshCode.includes('"更新"')));
+           ok('R17 feedback timer scoped',()=>assert(refreshCode.includes('seq === state.refreshFeedbackSeq')));
+           ok('inline script source syntax valid',()=>{for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))if(m[1].trim())new vm.Script(m[1]);});
+           await aok('LINE current success returns success',async()=>{let h=harness(),p=h.load();h.finish('demo_photo_line_001','A');assert.equal(await p,'success');assert.equal(h.state.customer.customer_name,'A');});
+           await aok('token success skips profile and returns success',async()=>{let h=harness('token','token-01'),p=h.load();assert.equal(h.calls.length,1);h.finish('token-01','T');assert.equal(await p,'success');});
+           await aok('network failure returns failure',async()=>{let h=harness(),p=h.load();h.fail('demo_photo_line_001');assert.equal(await p,'failure');});
+           await aok('missing lookup returns missing without GET',async()=>{let h=harness();h.state.lookup={line_user_id:'',public_token:''};assert.equal(await h.load(),'missing');assert.equal(h.calls.length,0);});
+           await aok('stale completed GET returns stale',async()=>{let h=harness(),p=h.load();swap(h,'demo_photo_line_002');let q=h.load();h.finish('demo_photo_line_002','B');assert.equal(await q,'success');h.finish('demo_photo_line_001','A');assert.equal(await p,'stale');assert.equal(h.state.customer.customer_name,'B');});
+           await aok('stale failed GET returns stale',async()=>{let h=harness(),p=h.load();swap(h,'demo_photo_line_002');let q=h.load();h.finish('demo_photo_line_002','B');await q;h.fail('demo_photo_line_001');assert.equal(await p,'stale');});
+           await aok('A to B to A only latest success',async()=>{let h=harness(),a=h.load();swap(h,'demo_photo_line_002');let b=h.load();swap(h,'demo_photo_line_001');let c=h.load();const newest=h.calls.slice(-2);for(let x of newest){x.d.settled=true;x.d.resolve(x.path.includes('/profile')?{customer:{}}:{customer:{customer_name:'newA'},reservations:[]})}assert.equal(await c,'success');h.finish('demo_photo_line_002','B');assert.equal(await b,'stale');const oldest=h.calls.slice(0,2);for(let x of oldest){x.d.settled=true;x.d.resolve(x.path.includes('/profile')?{customer:{}}:{customer:{customer_name:'oldA'},reservations:[]})}assert.equal(await a,'stale');assert.equal(h.state.customer.customer_name,'newA');});
+           await aok('success persists then renders then scrubs',async()=>{let h=harness(),p=h.load();h.finish('demo_photo_line_001','A');await p;let e=h.effects;assert(e.indexOf('persist')<e.indexOf('render')&&e.indexOf('render')<e.indexOf('scrub'));});
+           await aok('failed response never scrubs',async()=>{let h=harness(),p=h.load();h.fail('demo_photo_line_001');await p;assert(!h.effects.includes('scrub'));});
+           await aok('silent refresh never activates blocking loader',async()=>{let h=harness(),p=h.load({silent:true});h.finish('demo_photo_line_001','A');await p;assert(!h.effects.includes('loading-on'));});
+           await aok('non-silent refresh activates and releases loader',async()=>{let h=harness(),p=h.load();h.finish('demo_photo_line_001','A');await p;assert(h.effects.includes('loading-on')&&h.effects.includes('loading-off'));});
+           await aok('button stays disabled until success resolves',async()=>{let h=harness(),p=h.refresh();assert(h.els.refreshButton.disabled);assert.equal(h.els.refreshButton.textContent,'更新中…');h.finish('demo_photo_line_001','A');await p;assert(!h.els.refreshButton.disabled);});
+           await aok('button displays success only when read success',async()=>{let h=harness(),p=h.refresh();h.finish('demo_photo_line_001','A');await p;assert.equal(h.els.refreshButton.textContent,'更新しました');});
+           await aok('button displays retry after rejected read',async()=>{let h=harness(),p=h.refresh();h.fail('demo_photo_line_001');await p;assert.equal(h.els.refreshButton.textContent,'再試行');});
+           await aok('successful feedback returns to update after timeout',async()=>{let h=harness(),p=h.refresh();h.finish('demo_photo_line_001','A');await p;h.tick();assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('failure feedback returns to update after timeout',async()=>{let h=harness(),p=h.refresh();h.fail('demo_photo_line_001');await p;h.tick();assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('stale refresh does not claim success',async()=>{let h=harness(),p=h.refresh();swap(h,'demo_photo_line_002');h.finish('demo_photo_line_001','A');await p;assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('missing lookup does not claim success',async()=>{let h=harness();h.state.lookup={line_user_id:'',public_token:''};await h.refresh();assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('double click does not start second fetch',async()=>{let h=harness(),p=h.refresh();await h.refresh();assert.equal(h.calls.length,2);h.finish('demo_photo_line_001','A');await p;});
+           await aok('request submission prevents refresh',async()=>{let h=harness();h.state.requestSubmitting=true;await h.refresh();assert.equal(h.calls.length,0);});
+           await aok('old success timer cannot overwrite later in-progress refresh',async()=>{let h=harness(),p=h.refresh();h.finish('demo_photo_line_001','A');await p;assert.equal(h.timers.length,1);let q=h.refresh();assert(h.els.refreshButton.disabled);h.tick();assert.equal(h.els.refreshButton.textContent,'更新中…');h.finish('demo_photo_line_001','B');await q;assert.equal(h.els.refreshButton.textContent,'更新しました');});
+           await aok('retry succeeds after earlier error',async()=>{let h=harness(),p=h.refresh();h.fail('demo_photo_line_001');await p;assert.equal(h.els.refreshButton.textContent,'再試行');let q=h.refresh();h.finish('demo_photo_line_001','fixed');await q;assert.equal(h.state.customer.customer_name,'fixed');assert.equal(h.els.refreshButton.textContent,'更新しました');});
+           ok('no user credentials embedded in check names',()=>assert(checks.every(x=>!x.includes('demo_photo_line')&&!x.includes('token-01'))));
+           const report={product:'DPRO PHOTO',standard:'R17 MEMBER READ RESULT AND REFRESH FEEDBACK',mode:'OFFLINE_BROWSER_VM',counts:{passed:checks.length,failed:0},checks,productionReady:false,liveRequests:0,dbMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R17.json',JSON.stringify(report,null,2)+'\n');
+           console.log(`DPRO PHOTO R17 ${checks.length} PASS 0 FAIL`);
+          })().catch(e=>{console.error('R17 REGRESSION FAILURE',e?.stack||String(e));process.exitCode=1});
+          JS_R17_TEST
+          node --check __dpro_photo_r17_test.js
+          node __dpro_photo_r17_test.js
+          rm -f __dpro_photo_r17_test.js
+          git diff --check
+          python - <<'PY_R17_VERIFY'
+          import subprocess
+          from pathlib import Path
+          import json
+          changed=subprocess.check_output(['git','diff','--name-only'],text=True).strip().splitlines()
+          assert changed in [[],['member.html']],f'R17 STOP unexpected modifications: {changed}'
+          report=json.loads(Path('DPRO_PHOTO_PRODUCT_GATE_R17.json').read_text())
+          assert report['counts']['passed']==41 and report['counts']['failed']==0
+          assert not report['productionReady'] and report['liveRequests']==0 and report['dbMutations']==0
+          print('R17 guarded member-only regression gate: PASS 41 FAIL 0')
+          PY_R17_VERIFY
+      - name: Commit verified member.html only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- member.html; then
+            echo 'R17 already present; no commit necessary'
+            exit 0
+          fi
+          test "$(git diff --name-only | wc -l)" -eq 1
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'DPRO PHOTO R17 show accurate member refresh and retry status'
+          git push
+      - name: Archive R17 offline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R17
+          path: DPRO_PHOTO_PRODUCT_GATE_R17.json
+          if-no-files-found: warn
