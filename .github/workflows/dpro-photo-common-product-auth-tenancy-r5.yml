@@ -1,0 +1,129 @@
+name: DPRO PHOTO Common Product Auth Tenancy Gate R5
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-common-product-auth-tenancy-r5.yml'
+      - '*.html'
+      - '*.js'
+      - '*.css'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auth-tenancy-gate-r5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Checkout source (read-only)
+        uses: actions/checkout@v4
+      - name: Verify public route denial and auth source
+        shell: bash
+        run: |
+          node - <<'NODE'
+          // DPRO PHOTO R5 AUTH/TENANT READ-ONLY AUTOMATED QA; no writes, no demo reset.
+          'use strict';
+          const fs=require('node:fs');
+          const vm=require('node:vm');
+          const baseline=['config.js','index.html','member.html','owner.html','staff.html','owner-ipad.html','system-check.html'];
+          const checks=[],pending=[];
+          const check=(id,ok,detail='')=>checks.push({id,status:ok?'PASS':'FAIL',detail});
+          const defer=(id,reason,kind='HUMAN_OR_CONTRACT')=>pending.push({id,reason,kind});
+          const source={};
+          for(const file of baseline){
+           const present=fs.existsSync(file)&&fs.statSync(file).isFile();
+           check('required/'+file,present);
+           source[file]=present?fs.readFileSync(file,'utf8'):'';
+          }
+          const cfg=source['config.js'],mem=source['member.html'],owner=source['owner.html'],idx=source['index.html'];
+          check('config/demo-studio',cfg.includes('const STUDIO_CODE = "dpro_photo_demo"'));
+          check('config/demo-gateway-v3',cfg.includes('dpro-photo-product-ready-gateway-v3'));
+          check('config/calendar-automation-gateway-v9',cfg.includes('dpro-photo-product-ready-gateway-v9'));
+          check('config/30min-baseline',/const SLOT_MINUTES\s*=\s*30\s*;/.test(cfg));
+          check('config/required-owner-session',cfg.includes('OWNER_SESSION: "/api/owner/session"'));
+          check('config/required-staff-session',cfg.includes('STAFF_SESSION: "/api/staff/session"'));
+          check('config/required-member-session',cfg.includes('MEMBER_SESSION: "/api/member/session"'));
+          check('member/demo-separated',mem.includes('C.isDemoMode()')&&mem.includes('demo_photo_line_001'));
+          check('member/production-id-token',mem.includes('C.openMemberSession({ line_id_token: idToken })'));
+          check('member/reauth-before-message',mem.includes('await refreshMemberSessionForRequest();'));
+          check('member/draft-preservation',mem.includes('function saveRequestDraft(')&&mem.includes('function loadRequestDraft(')&&mem.includes('sessionStorage'));
+          check('member/draft-event',mem.includes('els.requestNote.addEventListener("input"'));
+          check('member/R2-fix-present',mem.includes('DPRO-PHOTO-MEMBER-AUTH-DRAFT-TABS-R2-20261010'));
+          check('booking/new-reservation-dto',idx.includes('function buildReservationPayload()'));
+          check('owner/booking-and-tasks',owner.includes('タスク')&&owner.includes('予約'));
+          // Confirm public pages contain valid inline JS (source-only, no API mutation).
+          for(const file of baseline.filter(x=>x.endsWith('.html'))){
+           const s=source[file];let cnt=0,errors=[];
+           for(const m of s.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)){
+            if(!m[2].trim()||/\btype\s*=\s*["'](?:application\/json|importmap)["']/i.test(m[1]))continue;
+            try{new vm.Script(m[2],{filename:file+'#'+(++cnt)});}catch(e){errors.push(String(e.message||e));}
+           }
+           check('inline-js/'+file,cnt>0&&errors.length===0,errors.join('; '));
+          }
+          const API='https://cbknucemarcpbscirzyv.supabase.co/functions/v1';
+          const tests=[
+           {id:'v3/staff-settings/anonymous',fn:'dpro-photo-product-ready-gateway-v3',path:'/api/admin/settings'},
+           {id:'v3/staff-settings/invalid-session',fn:'dpro-photo-product-ready-gateway-v3',path:'/api/admin/settings',headers:{'X-Staff-Session':'r5-known-invalid-test-session'}},
+           {id:'v3/reservation-detail/anonymous',fn:'dpro-photo-product-ready-gateway-v3',path:'/api/admin/reservation-detail'},
+           {id:'v3/customer-search/anonymous',fn:'dpro-photo-product-ready-gateway-v3',path:'/api/admin/search'},
+           {id:'v3/customer-detail/anonymous',fn:'dpro-photo-product-ready-gateway-v3',path:'/api/admin/customer-detail'},
+           {id:'v9/automation-settings/anonymous',fn:'dpro-photo-product-ready-gateway-v9',path:'/api/admin/reservation-automation'},
+           {id:'v9/automation-settings/invalid-owner',fn:'dpro-photo-product-ready-gateway-v9',path:'/api/admin/reservation-automation',headers:{'X-Owner-Session':'r5-known-invalid-test-session'}},
+           {id:'v9/waitlist/anonymous',fn:'dpro-photo-product-ready-gateway-v9',path:'/api/admin/waitlist'},
+          ];
+          async function liveDenyOnlyGET(t){
+           const url=API+'/'+t.fn+t.path;
+           const r=await fetch(url,{method:'GET',redirect:'manual',headers:{Accept:'application/json',Origin:'https://dpromstk2000-lab.github.io',...(t.headers||{})},signal:AbortSignal.timeout(12000)});
+           // Deliberately do not read/record bodies or sensitive data.
+           const allow=r.headers.get('access-control-allow-origin')||'';
+           return {ok:(r.status===401||r.status===403)&&allow!=='*',status:r.status,cors:allow==='*'?'UNSAFE_WILDCARD':(allow?'RESTRICTED':'NONE')};
+          }
+          async function main(){
+           const networkDisabled=process.env.R5_OFFLINE_TEST==='1'&&process.env.GITHUB_ACTIONS!=='true';
+           for(const t of tests){
+            if(networkDisabled){check('live-denial/'+t.id,true,'OFFLINE_FIXTURE_ONLY (not a real request)');continue;}
+            try{const r=await liveDenyOnlyGET(t);check('live-denial/'+t.id,r.ok,'HTTP '+r.status+'; CORS '+r.cors);}
+            catch(err){check('live-denial/'+t.id,false,'NETWORK_OR_TIMEOUT: '+String(err?.name||'Unknown'))}
+           }
+           defer('auth/studio-session-cross-tenant','Requires separate tenant & independently issued signed sessions; current project contains demo only','SECURITY');
+           defer('auth/v3-staff-demo-boundary','Supabase v3 adapter was updated to v9 on 2026-10-10: confirm with runtime valid demo and non-demo staff sessions','SECURITY');
+           defer('auth/line-id-token-real-device','Real LINE/LIFF login and token refresh require customer-specific LINE account and consent','CONTRACT_STAGE');
+           defer('auth/URL-public-token','Assess sharing, expiry, referer policy and logging of reservation public tokens in links','SECURITY');
+           defer('auth/demo-admin-code','Public demo admin code and legacy gateway must not be reused in production','SECURITY');
+           defer('auth/draft-scope','Review per-person/studio draft isolation; current browser storage keys are based on reservation_no + mode','SECURITY');
+           defer('qa/browser-functional','Real booking, changes, cancellation and messaging with user-approved test records','HUMAN_QA');
+           defer('qa/google-oauth','Google OAuth approval and token refresh/revoke live flows not verified','HUMAN_QA');
+           defer('tenant/customer-production','Customer domain/workspace/studio/owner/staff/LINE provisioning only after contract','CONTRACT_STAGE');
+           const failures=checks.filter(x=>x.status==='FAIL'),passed=checks.filter(x=>x.status==='PASS');
+           const report={product:'DPRO PHOTO',standard:'COMMON PRODUCT AUTH AND TENANCY GATE R5',
+            checkedAtUtc:new Date().toISOString(),commit:process.env.GITHUB_SHA||null,
+            mode:networkDisabled?'OFFLINE_MOCK_NOT_RELEASE_QA':'LIVE_NEGATIVE_GETS_AND_STATIC',
+            readOnly:true,demoReset:false,changesToData:0,
+            staticAndAuthGate:failures.length?'FAIL':'PASS',productionReady:false,releaseStatus:'BLOCKED_PENDING_REAL_TENANT_AUTH_QA',
+            counts:{pass:passed.length,fail:failures.length,deferred:pending.length,liveProbes:tests.length},
+            checked:checks,failed:failures,deferred:pending};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R5.json',JSON.stringify(report,null,2)+'\n');
+           const summary=['# DPRO PHOTO R5 Auth + Tenancy Gate','',
+            '**Static and live negative-auth gate:** '+report.staticAndAuthGate,
+            '**Production release:** '+report.releaseStatus,
+            'Passed: '+passed.length+'; Failed: '+failures.length+'; Deferred: '+pending.length,
+            'Only anonymous/invalid-session **GET** requests. No live authenticated requests or database writes.',
+            '', '## Failed checks',...(failures.length?failures.map(x=>'- '+x.id+': '+x.detail):['- None']),
+            '', '## Remaining work',...pending.map(x=>'- ['+x.kind+'] '+x.id+': '+x.reason),
+            '', 'External service verification cannot be simulated by offline fixture.'].join('\n');
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R5_SUMMARY.md',summary+'\n');
+           if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary+'\n');
+           console.log(summary);
+           if(failures.length)process.exitCode=1;
+          }
+          main().catch(e=>{console.error('R5 unexpected:',String(e?.message||e));process.exitCode=1});
+          NODE
+      - name: Preserve gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R5
+          path: |
+            DPRO_PHOTO_PRODUCT_GATE_R5.json
+            DPRO_PHOTO_PRODUCT_GATE_R5_SUMMARY.md
+          if-no-files-found: warn
