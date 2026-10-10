@@ -1,0 +1,266 @@
+name: DPRO PHOTO Member Identity Async Isolation R14
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-identity-async-isolation-r14.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-member-r14-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  member-identity-r14:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Patch member async identity guard safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R14_PATCH'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1] if len(sys.argv)>1 else 'member.html')
+          s=p.read_text(encoding='utf-8')
+          marker='DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010'
+          if marker in s:
+              assert s.count(marker)==1
+              assert 'memberLoadSeq: 0' in s and 'loadedLookup: null' in s
+              assert 'if (!isCurrent()) return;' in s
+              print('R14 source already updated and verified')
+              raise SystemExit(0)
+          old='''        modalReservation: null,
+                  busy: false,
+                };'''
+          new='''        modalReservation: null,
+                  busy: false,
+                  memberLoadSeq: 0, // R14: previous member loads never overwrite a new identity.
+                  loadedLookup: null, // Only used in memory; no token or ID is written to test artifacts.
+                };'''
+          assert s.count(old)==1
+          s=s.replace(old,new)
+          old='''      function resetMemberLookup() {
+                  state.lookup = { line_user_id: "", public_token: "" };'''
+          new='''      function resetMemberLookup() {
+                  ++state.memberLoadSeq; // R14: discard every unfinished member response.
+                  state.loadedLookup = null;
+                  setLoading(false);
+                  state.lookup = { line_user_id: "", public_token: "" };'''
+          assert s.count(old)==1
+          s=s.replace(old,new)
+          a=s.index('      async function loadMember(options = {}) {')
+          b=s.index('      /* DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH',a)
+          old_block=s[a:b]
+          new_block='''      // DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010
+                async function loadMember(options = {}) {
+                  const seq = ++state.memberLoadSeq;
+                  const lookup = {
+                    line_user_id: String(state.lookup.line_user_id || ""),
+                    public_token: String(state.lookup.public_token || ""),
+                  };
+                  const isCurrent = () => seq === state.memberLoadSeq
+                    && String(state.lookup.line_user_id || "") === lookup.line_user_id
+                    && String(state.lookup.public_token || "") === lookup.public_token;
+                  const prior = state.loadedLookup;
+                  if (prior && (prior.line_user_id !== lookup.line_user_id || prior.public_token !== lookup.public_token)) {
+                    // Remove the previous person's visible data before starting a different lookup.
+                    state.customer = null;
+                    state.profile = null;
+                    state.reservations = [];
+                    state.selectedReservationId = "";
+                    state.loadedLookup = null;
+                    els.memberArea.hidden = true;
+                    setAccessMode("entry");
+                  }
+                  if (!lookup.line_user_id && !lookup.public_token) {
+                    if (isCurrent()) {
+                      els.memberArea.hidden = true;
+                      setAccessMode("entry");
+                    }
+                    return;
+                  }
+                  try {
+                    if (!options.silent) setLoading(true, "予約情報を読み込んでいます");
+                    const query = lookup.line_user_id
+                      ? { line_user_id: lookup.line_user_id }
+                      : { public_token: lookup.public_token };
+                    const reservationsPromise = C.apiGet(C.ENDPOINTS.MEMBER_RESERVATIONS, query);
+                    const profilePromise = lookup.line_user_id
+                      ? C.apiGet(C.ENDPOINTS.MEMBER_PROFILE, { line_user_id: lookup.line_user_id })
+                      : Promise.resolve({ found: false, customer: null, subjects: [] });
+                    const [reservationResult, profileResult] = await Promise.all([reservationsPromise, profilePromise]);
+                    if (!isCurrent()) return; // Never render or persist an obsolete identity.
+                    state.customer = reservationResult.customer || profileResult.customer || null;
+                    state.profile = profileResult;
+                    state.reservations = Array.isArray(reservationResult.reservations) ? reservationResult.reservations : [];
+                    state.loadedLookup = { ...lookup };
+                    persistLookup();
+                    const url = new URL(location.href);
+                    const requestedReservation = url.searchParams.get("reservation_no");
+                    if (requestedReservation) {
+                      const row = state.reservations.find((r) => r.reservation_no === requestedReservation);
+                      if (row) state.selectedReservationId = row.id;
+                    }
+                    els.memberArea.hidden = false;
+                    setAccessMode("resolved");
+                    renderAll();
+                    const section = url.searchParams.get("section") || "reservations";
+                    setSection(section);
+                    // Retain R12: scrub credentials only after a successful render.
+                    scrubMemberQueryFromAddressBar();
+                  } catch (error) {
+                    if (!isCurrent()) return; // Old errors cannot hide a new person's profile.
+                    state.customer = null;
+                    state.profile = null;
+                    state.reservations = [];
+                    state.selectedReservationId = "";
+                    state.loadedLookup = null;
+                    els.memberArea.hidden = true;
+                    setAccessMode("entry");
+                    showToast(errorMessage(error), "error");
+                  } finally {
+                    if (!options.silent && isCurrent()) setLoading(false);
+                  }
+                }
+
+          '''
+          assert old_block.count('async function loadMember')==1
+          s=s[:a]+new_block+s[b:]
+          old='''        try {
+                    setLoading(true, "デモ顧客を切り替えています");
+                    C.clearSessionToken("member");'''
+          new='''        try {
+                    ++state.memberLoadSeq; // Invalidate unfinished reads before switching the demo session.
+                    state.loadedLookup = null;
+                    els.memberArea.hidden = true;
+                    setLoading(true, "デモ顧客を切り替えています");
+                    C.clearSessionToken("member");'''
+          assert s.count(old)==1
+          s=s.replace(old,new)
+          assert s.count(marker)==1
+          assert s.count('function loadMember(')==1
+          p.write_text(s,encoding='utf-8')
+          print('R14 patch successful',len(s),'chars')
+          PY_R14_PATCH
+      - name: Run R14 regression tests (synthetic identities, offline)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE_R14_REGRESSION'
+          'use strict';
+          const fs=require('fs'),assert=require('assert/strict'),vm=require('vm');
+          const html=fs.readFileSync('member.html','utf8');
+          const checks=[];
+          function ok(name,fn){fn();checks.push(name);}
+          async function aok(name,fn){await fn();checks.push(name);}
+          function deferred(){let rs,rj;const promise=new Promise((res,rej)=>{rs=res;rj=rej});const d={promise,settled:false,resolve(value){if(d.settled)return;d.settled=true;rs(value)},reject(err){if(d.settled)return;d.settled=true;rj(err)}};return d;}
+          const flush=()=>new Promise(r=>setImmediate(r));
+          const start=html.indexOf('      function resetMemberLookup() {');
+          const end=html.indexOf('      function bindStaticEvents() {',start);
+          assert(start>0 && end>start,'R14 unexpected member source boundaries');
+          const code=html.slice(start,end);
+          function harness(mode='line',identity='demo_photo_line_001'){
+           const state={lookup:mode==='line'?{line_user_id:identity,public_token:''}:{line_user_id:'',public_token:identity},
+            customer:null,profile:null,reservations:[],selectedReservationId:'',activeSection:'reservations',modalMode:'',modalReservation:null,
+            busy:false,memberLoadSeq:0,loadedLookup:null};
+           const calls=[],effects=[],sessions=[];
+           const els={memberArea:{hidden:true},publicTokenInput:{value:''},accessSection:{scrollIntoView(){}},requestModal:{classList:{remove(){}}}};
+           const location={href:'https://dpromstk2000-lab.github.io/dpro-photo-studio-line/member.html?demo=1&line_user_id=demo_photo_line_001&section=reservations'};
+           const history={state:null,replaceState(_a,_b,url){location.href=String(url);effects.push('history')}};
+           const C={isDemoMode:()=>true,ENDPOINTS:{MEMBER_RESERVATIONS:'/api/member/reservations',MEMBER_PROFILE:'/api/member/profile'},
+           apiGet(path,query){const d=deferred();calls.push({path,query,d});return d.promise},
+           clearSessionToken(){effects.push('clear-session')},openMemberSession(payload){const d=deferred();sessions.push({payload,d});return d.promise},
+           setStoredValue(){effects.push('storage-set')},removeStoredValue(){effects.push('storage-remove')},STORAGE_KEYS:{LINE_USER_ID:'line',PUBLIC_TOKEN:'token'}};
+           const context={state,C,els,location,history,URL,
+           setLoading(show){state.busy=show;effects.push(show?'loader-on':'loader-off')},
+           setAccessMode(mode){effects.push('access-'+mode)},
+           persistLookup(){effects.push('persist')},renderAll(){effects.push('render')},
+           setSection(){effects.push('section')},scrubMemberQueryFromAddressBar(){effects.push('scrub')},
+           showToast(){effects.push('toast')},errorMessage:e=>e?.message||'error',
+           document:{},window:{},setTimeout:()=>{},console
+           };
+           vm.createContext(context);
+           vm.runInContext(code+'\n globalThis.loadFn=loadMember;globalThis.resetFn=resetMemberLookup;globalThis.demoFn=useDemoPerson;',context);
+           function settle(id,label){
+            const mine=calls.filter(x=>Object.values(x.query).includes(id) && !x.d.settled);
+            assert.equal(mine.length,String(id).startsWith('token-')?1:2,'incorrect GETs for identity '+String(id).slice(0,4));
+            for(const x of mine)x.d.resolve(x.path.includes('/profile')?{customer:{customer_name:'profile-'+label}}:{customer:{customer_name:label},reservations:[{id:'r-'+label,reservation_no:label}]});
+           }
+           function reject(id,msg){for(const x of calls.filter(x=>Object.values(x.query).includes(id) && !x.d.settled))x.d.reject(new Error(msg));}
+           return {state,calls,effects,sessions,els,location,history,load:context.loadFn,reset:context.resetFn,demo:context.demoFn,settle,reject};
+          }
+          function setLine(h,id){h.state.lookup={line_user_id:id,public_token:''};}
+          function setToken(h,id){h.state.lookup={line_user_id:'',public_token:id};}
+          (async()=>{
+           ok('R14 marker one occurrence',()=>assert.equal(html.split('DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010').length-1,1));
+           ok('R6 draft isolation marker preserved',()=>assert(html.includes('DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6')));
+           ok('R12 privacy marker preserved',()=>assert(html.includes('DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010')));
+           ok('R12 no-referrer remains',()=>assert(html.includes('<meta name="referrer" content="no-referrer"')));
+           ok('R14 request seq state exists',()=>assert(html.includes('memberLoadSeq: 0')));
+           ok('R14 current identity guard exists',()=>assert(code.includes('String(state.lookup.public_token || "") === lookup.public_token')));
+           ok('R14 old result return is before mutation',()=>assert(code.indexOf('if (!isCurrent()) return; // Never render')<code.indexOf('state.customer = reservationResult.customer')));
+           ok('R14 old error guard exists',()=>assert(code.includes('if (!isCurrent()) return; // Old errors')));
+           ok('R14 reset invalidates pending',()=>assert(code.includes('++state.memberLoadSeq; // R14: discard')));
+           ok('R14 demo session invalidates pending',()=>assert(code.includes('++state.memberLoadSeq; // Invalidate')));
+           ok('R14 URL scrub only after render',()=>assert(code.indexOf('renderAll();')<code.indexOf('scrubMemberQueryFromAddressBar();')));
+           ok('R14 inline JS syntax',()=>{
+            const matches=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
+            for(const m of matches)if(m[1].trim())new vm.Script(m[1]);
+           });
+           await aok('single LINE member load succeeds',async()=>{let h=harness(),p=h.load();assert.equal(h.calls.length,2);h.settle('demo_photo_line_001','A');await p;assert.equal(h.state.customer.customer_name,'A');});
+           await aok('single token load does not query profile',async()=>{let h=harness('token','token-a'),p=h.load();assert.equal(h.calls.length,1);h.settle('token-a','A');await p;assert.equal(h.state.customer.customer_name,'A');});
+           await aok('successful render followed by R12 URL scrub',async()=>{let h=harness(),p=h.load();h.settle('demo_photo_line_001','A');await p;const k=h.effects;assert(k.indexOf('persist')>=0&&k.indexOf('persist')<k.indexOf('render')&&k.indexOf('render')<k.indexOf('scrub'));});
+           await aok('new LINE identity clears previous visible details before GET completes',async()=>{let h=harness(),p=h.load();h.settle('demo_photo_line_001','A');await p;assert(!h.els.memberArea.hidden);setLine(h,'demo_photo_line_002');const q=h.load();assert(h.els.memberArea.hidden);assert.equal(h.state.customer,null);assert.equal(h.state.reservations.length,0);h.settle('demo_photo_line_002','B');await q;});
+           await aok('A response after B success cannot display previous member',async()=>{let h=harness(),a=h.load();setLine(h,'demo_photo_line_002');let b=h.load();h.settle('demo_photo_line_002','B');await b;const before=h.effects.length;h.settle('demo_photo_line_001','A');await a;assert.equal(h.state.customer.customer_name,'B');assert.equal(h.effects.length,before);});
+           await aok('A error after B success cannot hide B',async()=>{let h=harness(),a=h.load();setLine(h,'demo_photo_line_002');let b=h.load();h.settle('demo_photo_line_002','B');await b;const before=h.effects.length;h.reject('demo_photo_line_001','old-error');await a;assert.equal(h.state.customer.customer_name,'B');assert(!h.els.memberArea.hidden);assert.equal(h.effects.length,before);});
+           await aok('A-to-B-to-A chooses only newest A response',async()=>{let h=harness(),a=h.load();setLine(h,'demo_photo_line_002');let b=h.load();setLine(h,'demo_photo_line_001');let c=h.load();const last=h.calls.slice(-2);for(const x of last)x.d.resolve(x.path.includes('profile')?{customer:{}}:{customer:{customer_name:'newA'},reservations:[{id:'r-newA'}]});await c;h.settle('demo_photo_line_002','B');await b;const first=h.calls.slice(0,2);for(const x of first)x.d.resolve(x.path.includes('profile')?{customer:{}}:{customer:{customer_name:'oldA'},reservations:[]});await a;assert.equal(h.state.customer.customer_name,'newA');});
+           await aok('reset prevents late responses from restoring old profile',async()=>{let h=harness(),a=h.load();h.reset();h.settle('demo_photo_line_001','A');await a;assert.equal(h.state.customer,null);assert(h.els.memberArea.hidden);assert.equal(h.state.loadedLookup,null);});
+           await aok('reset clears loading overlay from obsolete read',async()=>{let h=harness(),a=h.load();assert(h.state.busy);h.reset();assert(!h.state.busy);h.settle('demo_photo_line_001','A');await a;assert(!h.state.busy);});
+           await aok('token identity change skips old token response',async()=>{let h=harness('token','token-a'),a=h.load();setToken(h,'token-b');let b=h.load();h.settle('token-b','B');await b;h.settle('token-a','A');await a;assert.equal(h.state.customer.customer_name,'B');});
+           await aok('token-to-LINE identity change uses LINE result only',async()=>{let h=harness('token','token-a'),a=h.load();setLine(h,'demo_photo_line_002');let b=h.load();h.settle('demo_photo_line_002','B');await b;h.settle('token-a','A');await a;assert.equal(h.state.customer.customer_name,'B');});
+           await aok('empty identity fails closed without API access',async()=>{let h=harness();h.state.lookup={line_user_id:'',public_token:''};await h.load();assert.equal(h.calls.length,0);assert(h.els.memberArea.hidden);});
+           await aok('latest network failure hides member data',async()=>{let h=harness(),p=h.load();h.reject('demo_photo_line_001','offline');await p;assert(h.els.memberArea.hidden);assert.equal(h.state.customer,null);assert(h.effects.includes('toast'));});
+           await aok('latest failure clears previously loaded profile',async()=>{let h=harness(),p=h.load();h.settle('demo_photo_line_001','A');await p;let q=h.load();h.reject('demo_photo_line_001','failed-current');await q;assert.equal(h.state.customer,null);assert.equal(h.state.loadedLookup,null);});
+           await aok('stale read cannot turn off newer loading state',async()=>{let h=harness(),a=h.load();setLine(h,'demo_photo_line_002');let b=h.load();h.settle('demo_photo_line_001','A');await a;assert(h.state.busy);h.settle('demo_photo_line_002','B');await b;assert(!h.state.busy);});
+           await aok('silent refresh does not toggle busy overlay',async()=>{let h=harness(),p=h.load({silent:true});h.settle('demo_photo_line_001','A');await p;assert(!h.effects.includes('loader-on'));assert.equal(h.state.customer.customer_name,'A');});
+           await aok('reset after successful load clears visible data',async()=>{let h=harness(),p=h.load();h.settle('demo_photo_line_001','A');await p;h.reset();assert.equal(h.state.customer,null);assert.equal(h.state.reservations.length,0);assert(h.els.memberArea.hidden);});
+           await aok('demo switch invalidates unfinished prior load before new session',async()=>{let h=harness(),p=h.load({silent:true});const switching=h.demo('demo_photo_line_002');assert.equal(h.sessions.length,1);h.settle('demo_photo_line_001','A');await p;assert.equal(h.state.customer,null);h.sessions[0].d.resolve({});await flush();let next=h.calls.filter(x=>x.query.line_user_id==='demo_photo_line_002');assert.equal(next.length,2);h.settle('demo_photo_line_002','B');await switching;assert.equal(h.state.customer.customer_name,'B');});
+           await aok('invalid demo identity never starts new API session',async()=>{let h=harness();await h.demo('invalid-demo');assert.equal(h.sessions.length,0);assert.equal(h.calls.length,0);});
+           await aok('demo session failure leaves member area hidden',async()=>{let h=harness();const p=h.demo('demo_photo_line_002');h.sessions[0].d.reject(new Error('session-failure'));await p;assert(h.els.memberArea.hidden);assert.equal(h.state.customer,null);});
+           ok('no raw identity in report schema',()=>assert(checks.every(x=>!x.includes('token-a')&&!x.includes('demo_photo_line'))));
+           const report={product:'DPRO PHOTO',gate:'R14 MEMBER IDENTITY LOAD RACE PROTECTION',testMode:'OFFLINE_BROWSER_VM',counts:{passed:checks.length,failed:0},checks,productionReady:false,liveRequests:0,customerMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R14.json',JSON.stringify(report,null,2)+'\n');
+           console.log(`DPRO PHOTO R14 ${checks.length} PASS 0 FAIL`);
+          })().catch(err=>{console.error(err?.stack||String(err));process.exitCode=1;});
+          NODE_R14_REGRESSION
+          git diff --check
+      - name: Commit verified member-only update
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only)"
+          if [ -z "$changed" ]; then
+            echo 'R14 already applied; no commit needed.'
+            exit 0
+          fi
+          if [ "$changed" != 'member.html' ]; then
+            echo "R14 STOP unexpected modified files: $changed" >&2
+            exit 1
+          fi
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'DPRO PHOTO R14 isolate member responses by identity and request sequence'
+          git push
+      - name: Preserve R14 offline regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R14
+          path: DPRO_PHOTO_PRODUCT_GATE_R14.json
+          if-no-files-found: warn
