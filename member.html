@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-referrer" />
   <meta name="theme-color" content="#0f5d53" />
   <meta name="description" content="DPROフォトスタジオ お客様マイページ。撮影予約、事前案内、写真セレクト、納品状況、再注文相談を確認できます。" />
   <title>DPROフォトスタジオ｜お客様マイページ</title>
@@ -1263,6 +1264,25 @@ function actionButtons(reservation) {
         }
       }
 
+      // DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010
+      // Keep incoming deep-link credentials until member data loads successfully.
+      // Never erase the URL if the lookup fails, so the user can retry the same link.
+      function scrubMemberQueryFromAddressBar() {
+        try {
+          const url = new URL(location.href);
+          let changed = false;
+          for (const name of ["public_token", "line_user_id", "phone", "customer_no", "reservation_no"]) {
+            if (url.searchParams.has(name)) {
+              url.searchParams.delete(name);
+              changed = true;
+            }
+          }
+          if (changed) history.replaceState(history.state, "", url.pathname + url.search + url.hash);
+        } catch {
+          // History APIs can be limited inside some embedded LINE/browser views.
+        }
+      }
+
       function getInitialLookup() {
         const fromConfig = C.getMemberLookupFromUrl();
         const url = new URL(location.href);
@@ -1348,6 +1368,8 @@ function actionButtons(reservation) {
           renderAll();
           const section = url.searchParams.get("section") || "reservations";
           setSection(section);
+          // Only after a successful lookup + rendering: remove credentials from shareable browser URL.
+          scrubMemberQueryFromAddressBar();
         } catch (error) {
           els.memberArea.hidden = true;
           setAccessMode("entry");
