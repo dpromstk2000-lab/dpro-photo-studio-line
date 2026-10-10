@@ -1,0 +1,199 @@
+name: DPRO PHOTO Member Demo Session Refresh V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-demo-session-refresh-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-member-demo-session-refresh-v1
+  cancel-in-progress: false
+
+jobs:
+  patch-member:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Reissue demo member session when changing selected customer
+        shell: bash
+        run: |
+          python3 - <<'PYFIX'
+          from pathlib import Path
+          p = Path("member.html")
+          s = p.read_text(encoding="utf-8")
+          marker = "DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH-V1-20261010"
+          if marker in s:
+              print("Already patched; no changes.")
+              raise SystemExit(0)
+
+          required = [
+              "DPRO-PHOTO-MEMBER-SELECTION-PUBLICATION-GUARD-V1-20261009",
+              "DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009",
+              "DPRO-PHOTO-MEMBER-SHOOT-COMPLETION-CONSISTENCY-V1-20261009",
+          ]
+          for x in required:
+              if x not in s:
+                  raise SystemExit("QA STOP: expected prior safety guard missing: " + x)
+
+          old_button = '<button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_999" type="button">テスト顧客｜変更確認</button>'
+          new_button = '<button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_999" type="button" disabled title="LINE再紐付け検証済みのため旧IDからは切替できません">テスト顧客｜再紐付け済（切替不可）</button>'
+
+          old_switch = """      async function useDemoPerson(lineUserId) {
+                  state.lookup = { line_user_id: lineUserId, public_token: "" };
+                  C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, lineUserId);
+                  C.removeStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN);
+                  const url = new URL(location.href);
+                  url.searchParams.set("demo", "1");
+                  url.searchParams.set("line_user_id", lineUserId);
+                  url.searchParams.delete("public_token");
+                  history.replaceState(null, "", url);
+                  await loadMember();
+                }"""
+
+          new_switch = """      /* DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH-V1-20261010
+                   Do not reuse another customer's authenticated session in the sales demo. */
+                async function useDemoPerson(lineUserId) {
+                  if (!C.isDemoMode() || state.busy) return;
+                  const id = String(lineUserId || "").trim();
+                  const allowed = ["demo_photo_line_001", "demo_photo_line_002", "demo_photo_line_003"];
+                  if (!allowed.includes(id)) {
+                    showToast("このデモ顧客は現在切り替えできません。", "error");
+                    return;
+                  }
+                  try {
+                    setLoading(true, "デモ顧客を切り替えています");
+                    C.clearSessionToken("member");
+                    await C.openMemberSession({ line_user_id: id });
+                    state.lookup = { line_user_id: id, public_token: "" };
+                    state.customer = null;
+                    state.profile = null;
+                    state.reservations = [];
+                    state.selectedReservationId = "";
+                    C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, id);
+                    C.removeStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN);
+                    const url = new URL(location.href);
+                    url.searchParams.set("demo", "1");
+                    url.searchParams.set("line_user_id", id);
+                    url.searchParams.delete("public_token");
+                    url.searchParams.delete("reservation_no");
+                    url.searchParams.set("section", "reservations");
+                    history.replaceState(null, "", url);
+                    await loadMember({ silent: true });
+                  } catch (error) {
+                    C.clearSessionToken("member");
+                    els.memberArea.hidden = true;
+                    setAccessMode("entry");
+                    showToast(errorMessage(error), "error");
+                  } finally {
+                    setLoading(false);
+                  }
+                }"""
+
+          old_init = """        state.lookup = getInitialLookup();
+                  await loadMember();"""
+          new_init = """        state.lookup = getInitialLookup();
+                  // A different demo URL must not inherit a previous member's session.
+                  if (C.isDemoMode() && state.lookup.line_user_id) {
+                    try {
+                      C.clearSessionToken("member");
+                      await C.openMemberSession({ line_user_id: state.lookup.line_user_id });
+                    } catch (error) {
+                      els.memberArea.hidden = true;
+                      setAccessMode("entry");
+                      showToast(errorMessage(error), "error");
+                      return;
+                    }
+                  }
+                  await loadMember();"""
+
+          for label, old, new in [
+              ("demo button", old_button, new_button),
+              ("demo person switch", old_switch, new_switch),
+              ("demo initial session", old_init, new_init),
+          ]:
+              n = s.count(old)
+              if n != 1:
+                  raise SystemExit(f"QA STOP: source mismatch for {label}: {n} matches")
+              s = s.replace(old, new, 1)
+
+          if s.count(marker) != 1:
+              raise SystemExit("QA STOP: marker count incorrect")
+          for x in required:
+              if x not in s:
+                  raise SystemExit("QA STOP: prior protections were removed")
+          p.write_text(s, encoding="utf-8")
+          print("PASS: Only member.html changed; linked customer and reservation data unchanged.")
+          PYFIX
+      - name: Verify script syntax, identity isolation, and existing guards
+        shell: bash
+        run: |
+          node - <<'NODETEST'
+          const fs = require("fs");
+          const html = fs.readFileSync("member.html", "utf8");
+          const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
+            .map(x => x[1]).filter(Boolean);
+          if (!scripts.length) throw Error("No JavaScript found.");
+          for (const js of scripts) new Function(js);
+          const checks = [
+            "DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH-V1-20261010",
+            'await C.openMemberSession({ line_user_id: id });',
+            'C.clearSessionToken("member");',
+            "テスト顧客｜再紐付け済（切替不可）",
+            "DPRO-PHOTO-MEMBER-SELECTION-PUBLICATION-GUARD-V1-20261009",
+            "DPRO-PHOTO-MEMBER-DELIVERY-PUBLICATION-GUARD-V1-20261009",
+          ];
+          for (const x of checks) if (!html.includes(x)) throw Error("Missing safeguard: " + x);
+          const section = html.match(/async function useDemoPerson\(lineUserId\) \{[\s\S]*?\n      \}/);
+          if (!section) throw Error("Missing switch implementation");
+          const posClear = section[0].indexOf('C.clearSessionToken("member");');
+          const posAuth = section[0].indexOf("await C.openMemberSession(");
+          const posLoad = section[0].indexOf("await loadMember(");
+          if (!(posClear > 0 && posClear < posAuth && posAuth < posLoad)) {
+            throw Error("Session refresh must precede member data load");
+          }
+          const testFn = new Function("C","state","setLoading","showToast","location","history",
+           "loadMember","setAccessMode","els","errorMessage",
+           "return (" + section[0].trim() + ")")(
+            {isDemoMode:()=>true,
+             clearSessionToken(){trace.push("clear")},
+             async openMemberSession({line_user_id}){trace.push("auth:"+line_user_id)},
+             setStoredValue(){},removeStoredValue(){},
+             STORAGE_KEYS:{LINE_USER_ID:"line",PUBLIC_TOKEN:"token"}},
+            {busy:false,lookup:{line_user_id:"demo_photo_line_002"}},
+            ()=>{},(message)=>trace.push("error:"+message),
+            {href:"https://example.com/member.html?demo=1&line_user_id=demo_photo_line_002"},
+            {replaceState(){trace.push("history")}},
+            async()=>trace.push("load"),()=>{}, {memberArea:{hidden:false}},e=>String(e)
+          );
+          var trace = [];
+          (async()=>{
+            await testFn("demo_photo_line_001");
+            if (trace.join("|")!=="clear|auth:demo_photo_line_001|history|load")
+              throw Error("Switch sequence failed: "+trace.join("|"));
+            trace.length=0;
+            await testFn("demo_photo_line_999");
+            if (trace.length!==1||!trace[0].startsWith("error:"))throw Error("Old relinked QA ID not blocked");
+            console.log("PASS: JS syntax, switch session ordering, old QA ID guard, prior safety guards");
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          NODETEST
+          git diff --check
+      - name: Commit only member.html
+        shell: bash
+        run: |
+          if git diff --quiet -- member.html; then
+            echo 'No code change necessary'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'fix(photo): refresh member demo identity on switch without undoing LINE relink'
+          git push origin HEAD:main
