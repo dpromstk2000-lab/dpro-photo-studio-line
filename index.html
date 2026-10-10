@@ -619,6 +619,7 @@
       selectedStaffId: "",
       selectedDate: "",
       availability: null,
+      availabilityRequestSeq: 0, // R11: only the latest exact-availability request may update the UI.
       selectedSlot: null,
       planStartRule: { mode: "interval", interval_minutes: 30, anchor_time: "00:00", fixed_times: [] },
       planStartRulePlanId: "",
@@ -911,6 +912,8 @@
       const changed = state.selectedPlan?.id !== plan.id;
       state.selectedPlan = plan;
       if (changed) {
+        ++state.availabilityRequestSeq; // Cancel pending exact slot responses when plan changes.
+        els.availabilityState.innerHTML = `<div class="empty-box">撮影日を選択すると空き時間が表示されます。</div>`;
         state.selectedOptions.clear();
         state.selectedStaffId = "";
         state.selectedDate = "";
@@ -1005,14 +1008,25 @@
       els.dateRangeHelp.textContent = `${C.formatDate(min, { weekday: "short" })} 〜 ${C.formatDate(max, { weekday: "short" })} の間で選択できます。`;
     }
 
+    // DPRO-PHOTO-R11-EXACT-AVAILABILITY-LATEST-REQUEST-GUARD-20261010
     async function loadAvailability() {
-      state.selectedDate = els.reservationDate.value;
+      const seq = ++state.availabilityRequestSeq;
+      const date = els.reservationDate.value;
+      const planId = state.selectedPlan?.id || "";
+      const staffId = state.selectedStaffId;
+      state.selectedDate = date;
       state.selectedSlot = null;
-      if (!state.selectedPlan || !state.selectedDate) {
+      state.availability = null; // Never allow a stale slot to be selected during loading.
+      const isCurrent = () => seq === state.availabilityRequestSeq
+        && state.selectedPlan?.id === planId
+        && state.selectedStaffId === staffId
+        && state.selectedDate === date
+        && els.reservationDate.value === date;
+      if (!planId || !date) {
         els.availabilityState.innerHTML = `<div class="empty-box">撮影日を選択すると空き時間が表示されます。</div>`;
         return;
       }
-      const weekday = new Date(`${state.selectedDate}T12:00:00+09:00`).getDay();
+      const weekday = new Date(`${date}T12:00:00+09:00`).getDay();
       if (Array.isArray(state.selectedPlan.available_weekdays) && !state.selectedPlan.available_weekdays.includes(weekday)) {
         els.availabilityState.innerHTML = `<div class="empty-box">このプランは選択した曜日に受付していません。別の日付を選択してください。</div>`;
         return;
@@ -1020,11 +1034,15 @@
       els.availabilityState.innerHTML = `<div class="loading-box"><span class="spinner"></span>空き時間を確認しています</div>`;
       try {
         await ensurePlanStartRule();
-        const query = { date: state.selectedDate, plan_id: state.selectedPlan.id };
-        if (state.selectedStaffId) query.staff_id = state.selectedStaffId;
-        state.availability = await C.apiGet(C.ENDPOINTS.PUBLIC_AVAILABILITY, query);
+        if (!isCurrent()) return;
+        const query = { date, plan_id: planId };
+        if (staffId) query.staff_id = staffId;
+        const availability = await C.apiGet(C.ENDPOINTS.PUBLIC_AVAILABILITY, query);
+        if (!isCurrent()) return;
+        state.availability = availability;
         renderAvailability();
       } catch (error) {
+        if (!isCurrent()) return; // An obsolete error must not hide a newer result.
         state.availability = null;
         els.availabilityState.innerHTML = `<div class="empty-box">${esc(error.message || "空き時間を取得できませんでした。")}</div>`;
       }
@@ -1426,6 +1444,7 @@
     }
 
     function resetFormForNewReservation() {
+      ++state.availabilityRequestSeq; // Old responses must not repopulate a fresh booking.
       state.selectedPlan = null; state.selectedOptions.clear(); state.selectedStaffId = ""; state.selectedDate = ""; state.selectedSlot = null; state.availability = null; state.completed = false; state.reservationResult = null;
       els.reservationDate.value = ""; els.agreementCheck.checked = false;
       els.shootingPurpose.value = ""; els.desiredMood.value = ""; els.desiredShots.value = ""; els.accommodationNote.value = ""; els.customerNote.value = ""; els.bringCostume.checked = false; els.socialMediaConsult.checked = false;
@@ -1484,7 +1503,8 @@
       els.reservationDate.addEventListener("change", () => { clearDuplicateConflict(); loadAvailability(); });
       els.availabilityState.addEventListener("click", (event) => {
         const button = event.target.closest("[data-slot-time]"); if (!button || button.disabled) return;
-        state.selectedSlot = state.availability.slots.find((slot) => slot.start_at === button.dataset.slotTime) || null;
+        if (!Array.isArray(state.availability?.slots)) return; // R11: fail closed while new slots load.
+        state.selectedSlot = state.availability.slots.find((slot) => slot.start_at === button.dataset.slotTime && slot.available) || null;
         renderAvailability();
       });
       els.addSubjectButton.addEventListener("click", () => addSubject());
