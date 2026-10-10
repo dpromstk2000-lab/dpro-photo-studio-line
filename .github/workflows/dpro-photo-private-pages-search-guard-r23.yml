@@ -1,0 +1,121 @@
+name: DPRO PHOTO Private Management Pages Indexing Guard R23
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-private-pages-search-guard-r23.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-private-pages-r23-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  r23-private-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout current common product source
+        uses: actions/checkout@v4
+      - name: Apply exact-blob-guarded four-screen noindex patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R23_PATCH'
+          from pathlib import Path
+          import json,hashlib,re
+          paths=['member.html', 'staff.html', 'owner.html', 'owner-ipad.html']
+          base={'member.html': '437ab2407ace9cc473cf1800d4b33a36f104d13b', 'staff.html': 'b951f121a2752b6d0e1121db1a3c4359b269a629', 'owner.html': '9640f29ccb7c9e5a007f7def854eb4ffea0cc704', 'owner-ipad.html': '85ff4a48b882446c1fefc672988a8f03c6d50b2c'}
+          patched={'member.html': '10aae72aa487a64c7750125f6e6b163991cdc6fd', 'staff.html': 'f8b34d9f4832edaf8c3fdfb881e90aba4d27c983', 'owner.html': '75c016cdf2d0c577b9d99ebff3b3b5465efafcec', 'owner-ipad.html': 'f6777ca8327e25250f78ef9ffb357151e4835a6c'}
+          meta='  <meta name="robots" content="noindex, nofollow" />\n'
+          viewport='  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />\n'
+          checks=[]
+          def ck(id,ok):
+           checks.append({'id':id,'result':'PASS' if ok else 'FAIL'})
+           if not ok:raise SystemExit('R23 STOP: '+id)
+          def gitblob(b):return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+          for path in paths:
+           p=Path(path);raw=p.read_bytes();current=gitblob(raw)
+           ck('source-git-blob/'+path,current in (base[path],patched[path]))
+           s=raw.decode('utf-8')
+           if current==base[path]:
+            ck('unique-original-viewport/'+path,s.count(viewport)==1)
+            ck('no-existing-robots/'+path,not re.search(r'<meta\s+name=["\']robots["\']',s,re.I))
+            s=s.replace(viewport,viewport+meta,1)
+            p.write_bytes(s.encode('utf-8'))
+           else: ck('idempotent-existing-meta/'+path,s.count(meta)==1)
+           ck('exact-patched-blob/'+path,gitblob(p.read_bytes())==patched[path])
+           ck('single-search-directive/'+path,p.read_text().count(meta)==1)
+          control=Path('system-check.html').read_text(encoding='utf-8')
+          ck('system-check-was-already-protected',bool(re.search(r'<meta\s+name=["\']robots["\'][^>]*noindex',control,re.I)))
+          ck('booking-index-still-index-policy-decision',Path('index.html').is_file())
+          report={'product':'DPRO PHOTO','gate':'R23 PRIVATE UI NOINDEX SOURCE GUARD','mode':'GITHUB_ACTIONS_SOURCE_REGRESSION','checks':checks,'counts':{'passed':len(checks),'failed':0},'patchedFiles':paths,'searchIndexingIsNotAuthorization':True,'remainingReleaseWarnings':['demo-admin-pin','booking-search-policy'],'productionReady':False,'dbWrites':0}
+          Path('DPRO_PHOTO_R23_STATIC_QA.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+          print('R23 '+str(len(checks))+' PASS 0 FAIL; four private pages, no backend changes')
+          PY_R23_PATCH
+      - name: Re-run original R22 whole-product source audit offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R23_REPLAY'
+          from pathlib import Path
+          import textwrap
+          p=Path('.github/workflows/dpro-photo-whole-product-acceptance-audit-r22.yml')
+          raw=p.read_text(encoding='utf-8')
+          start="          python - <<'PY_R22_AUDIT'\n"
+          end="\n          PY_R22_AUDIT"
+          if raw.count(start)!=1 or raw.count(end)!=1:raise SystemExit('R23 STOP R22 audited source missing')
+          code=textwrap.dedent(raw.split(start,1)[1].split(end,1)[0])
+          if len(code)<10000 or 'R22_PUBLIC_PROBE' not in code or 'ProductionReady' not in code:raise SystemExit('R23 STOP unexpected R22 audit code')
+          Path('_r23_r22_original_audit.py').write_text(code,encoding='utf-8')
+          PY_R23_REPLAY
+          R22_PUBLIC_PROBE=0 python _r23_r22_original_audit.py
+          rm -f _r23_r22_original_audit.py
+      - name: Verify six warnings reduce to two and files are scoped
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R23_VERIFY'
+          from pathlib import Path
+          import json,subprocess,re
+          r23=json.loads(Path('DPRO_PHOTO_R23_STATIC_QA.json').read_text())
+          r22=json.loads(Path('DPRO_PHOTO_R22_WHOLE_PRODUCT_GATE.json').read_text())
+          if r23['counts']['failed'] or r23['counts']['passed']<18:raise SystemExit('R23 STOP static check failure')
+          if r22['counts']['failed'] or r22['counts']['passed']<136:raise SystemExit('R23 STOP R22 replay check failure')
+          remaining={x['id'] for x in r22['warnings']}
+          expected={'demo-admin-pin','booking-search-policy'}
+          if remaining!=expected or r22['counts']['warnings']!=2:raise SystemExit('R23 STOP source warning reduction incomplete: '+str(remaining))
+          if r22['productionReady'] is not False or r22['dataMutations']!=0:raise SystemExit('R23 STOP false production approval')
+          changed=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          expectedChanged={'member.html','staff.html','owner.html','owner-ipad.html'}
+          if changed and changed!=expectedChanged:raise SystemExit('R23 STOP unexpected changed files '+str(changed))
+          if subprocess.run(['git','diff','--check']).returncode:raise SystemExit('R23 STOP whitespace issue')
+          result={'gate':'R23 FOUR PRIVATE SCREEN SEARCH INDEXING HARDENING','result':'PASS_WITH_TWO_EXPLICIT_WARNINGS','newlyProtected':sorted(expectedChanged),'priorSourceWarningCount':6,'currentSourceWarningCount':2,'sourceChecks':r22['counts'],'patchChecks':r23['counts'],'publicSiteVerification':'DEFERRED_UNTIL_PAGES_DEPLOYMENT','releaseApproval':False,'humanAcceptance':False,'productionReady':False,'dataWrites':0}
+          Path('DPRO_PHOTO_R23_SUMMARY.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+          print('R23 VERIFIED: R22 source audit '+str(r22['counts']['passed'])+' PASS; 0 FAIL; WARN 6 -> 2; private HTML only; production NOT approved.')
+          PY_R23_VERIFY
+      - name: Commit only four validated private screen files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF:-}" != 'refs/heads/main' ]]; then echo 'R23 STOP wrong branch' >&2; exit 1; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html staff.html owner.html owner-ipad.html
+          if git diff --cached --quiet; then
+            echo 'R23 already applied; source gate clean; no new commit.'
+          else
+            git commit -m 'DPRO PHOTO R23 noindex private member and management demo screens'
+            git push
+          fi
+      - name: Preserve R23 source-only release audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R23
+          path: |
+            DPRO_PHOTO_R23_STATIC_QA.json
+            DPRO_PHOTO_R22_WHOLE_PRODUCT_GATE.json
+            DPRO_PHOTO_R22_WHOLE_PRODUCT_SUMMARY.md
+            DPRO_PHOTO_R23_SUMMARY.json
+          if-no-files-found: warn
