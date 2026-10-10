@@ -1,0 +1,212 @@
+name: DPRO PHOTO Public Booking Privacy-Verified Live Readonly Gate R10B
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-public-booking-verified-contact-r10b.yml'
+permissions:
+  contents: read
+jobs:
+  booking-public-api-r10b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Checkout read-only
+        uses: actions/checkout@v4
+      - name: Test published booking API contracts without writes
+        shell: bash
+        run: |
+          node - <<'NODE'
+          "use strict";
+          const fs=require('node:fs'),vm=require('node:vm');
+          const checks=[],deferred=[],meta={};
+          function check(id,valid,detail=''){checks.push({id,result:valid?'PASS':'FAIL',detail});}
+          function defer(id,reason){deferred.push({id,reason});}
+          const read=(name)=>fs.existsSync(name)?fs.readFileSync(name,'utf8'):'';
+          const source={};
+          for(const name of ['index.html','config.js','photo-booking-calendar-v2.js','photo-booking-calendar-v2.css','member.html']){
+            source[name]=read(name);check('source/'+name,source[name].length>100);
+          }
+          check('source/R9-js-version',source['photo-booking-calendar-v2.js'].includes('DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010'));
+          check('source/R9-css-accessibility',source['photo-booking-calendar-v2.css'].includes('DPRO-PHOTO-CALENDAR-R9-ACCESSIBLE-NAV-CSS'));
+          check('source/R9-cache-consistency',source['index.html'].includes('photo-booking-calendar-v2.js?v=DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010'));
+          check('source/30-min-default',source['config.js'].includes('SLOT_MINUTES')&&source['config.js'].includes('30'));
+          check('source/demo-only',source['config.js'].includes('const STUDIO_CODE = "dpro_photo_demo"'));
+          check('source/calendar-v9-route',source['config.js'].includes('dpro-photo-product-ready-gateway-v9'));
+          check('source/member-R6-retained',source['member.html'].includes('DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010'));
+          for(const name of ['config.js','photo-booking-calendar-v2.js']){
+           try{new vm.Script(source[name],{filename:name});check('syntax/'+name,true)}
+           catch(e){check('syntax/'+name,false,String(e.message||e).slice(0,180))}
+          }
+          const root='https://cbknucemarcpbscirzyv.supabase.co/functions/v1';
+          const gateway=root+'/dpro-photo-product-ready-gateway-v3';
+          const calendar=root+'/dpro-photo-product-ready-gateway-v9';
+          function tokyoDay(){const a=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const t=Object.fromEntries(a.filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${t.year}-${t.month}-${t.day}`;}
+          function addDay(d,n){const date=new Date(d+'T00:00:00Z');date.setUTCDate(date.getUTCDate()+n);return date.toISOString().slice(0,10)}
+          function daysInclusive(a,b){return (Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000+1}
+          const envFlag=process.env.R10_SOURCE_PREFLIGHT==='1'&&process.env.GITHUB_ACTIONS!=='true';
+          let liveRequests=0;
+          async function get(path,params={}){
+           const u=new URL(path);
+           for(const [k,v] of Object.entries(params))if(v!==null&&v!==undefined)u.searchParams.set(k,String(v));
+           liveRequests++;
+           const response=await fetch(u.toString(),{method:'GET',redirect:'manual',headers:{Accept:'application/json',Origin:'https://dpromstk2000-lab.github.io'},signal:AbortSignal.timeout(18000)});
+           const text=await response.text();let data={};try{data=JSON.parse(text)}catch{}
+           return {status:response.status,data,cors:response.headers.get('access-control-allow-origin')||''};
+          }
+          async function getStage(id,url,params={}){
+           try{const r=await get(url,params);check('http/'+id,r.status===200&&r.data?.ok!==false,'HTTP '+r.status);check('cors/'+id,r.cors!=='*','CORS: '+(r.cors?'restricted':'none'));return r.status===200?r.data:null;}
+           catch(e){check('http/'+id,false,'Network: '+(e?.name||'unknown'));return null;}
+          }
+          // DPRO-PHOTO-R10B-VERIFIED-PUBLIC-CONTACT-20261010
+          // R10B: explicit allowlist is based on LIVE R10A inspection: studio.phone, studio.email only.
+          // No customer, member, booking or token values are captured in the report.
+          const publicStudioContactPaths=new Set(['studio.phone','studio.email']);
+          const protectedFieldNames=new Set(['customer_id','line_user_id','public_token','token_hash','email','phone','reservation_no','service_role_key','session_token','access_token','refresh_token','customer_name','customer_phone','customer_email']);
+          function privacyProblems(payload){
+           const issues=[];let seen=0;
+           function visit(value,path='',depth=0){
+            if(++seen>10000 || depth>25){issues.push('RESPONSE_TOO_COMPLEX');return;}
+            if(!value || typeof value!=='object')return;
+            if(Array.isArray(value)){for(const item of value)visit(item,path+'[]',depth+1);return;}
+            for(const [name,child] of Object.entries(value)){
+             const next=path?path+'.'+name:name;
+             if(protectedFieldNames.has(name.toLowerCase())&&!publicStudioContactPaths.has(next))issues.push(next.replace(/[^a-zA-Z0-9_.\[\]-]/g,'?').slice(0,110));
+             visit(child,next,depth+1);
+            }
+           }
+           visit(payload);
+           return [...new Set(issues)];
+          }
+          function privacyScan(id,payload){
+           const issues=privacyProblems(payload);
+           check('privacy/'+id,issues.length===0,issues.length?'Protected field paths exposed: '+issues.join(','):'No customer fields; only verified studio contact paths allowed');
+          }
+          // Regression fixtures for the privacy gate itself, not simulated live API results.
+          check('privacy-fixture/studio-contacts-allowed',privacyProblems({studio:{phone:'public-office',email:'public-office'}}).length===0);
+          check('privacy-fixture/customer-phone-blocked',privacyProblems({customer:{phone:'secret'}}).includes('customer.phone'));
+          check('privacy-fixture/array-email-blocked',privacyProblems({bookings:[{email:'secret'}]}).includes('bookings[].email'));
+          check('privacy-fixture/deeper-contact-blocked',privacyProblems({studio:{contact:{phone:'secret'}}}).includes('studio.contact.phone'));
+          check('privacy-fixture/line-id-blocked',privacyProblems({studio:{line_user_id:'secret'}}).includes('studio.line_user_id'));
+          check('privacy-fixture/token-blocked',privacyProblems({public_token:'secret'}).includes('public_token'));
+          check('privacy-fixture/case-variant-blocked',privacyProblems({studio:{Phone:'secret'}}).includes('studio.Phone'));
+          function dateSorted(days){return days.every((d,i)=>i===0||days[i-1].date<d.date)}
+          async function runLive(){
+           const [config,plans,options,brand]=await Promise.all([
+             getStage('public-config',gateway+'/api/public/config'),
+             getStage('public-plans',gateway+'/api/public/plans'),
+             getStage('public-reservation-options',gateway+'/api/public/reservation-options'),
+             getStage('public-booking-presentation',calendar+'/api/public/booking-presentation')
+           ]);
+           if(config){
+             const reportedTZ=config?.studio?.timezone||config?.timezone;
+             if(reportedTZ)check('config/timezone',reportedTZ==='Asia/Tokyo','Tokyo timezone expected');
+             else defer('config/timezone-omitted','Public config omits timezone; calendar summary separately verifies Asia/Tokyo');
+             if(config?.settings?.slot_minutes!==undefined)check('config/slot',Number(config.settings.slot_minutes)===30,'30 minute default expected');
+             else defer('config/slot-omitted','Public config omits slot_minutes; database checked independently and exact summary compared');
+             check('config/calendar-enabled',config?.settings?.feature_flags?.reservation_calendar_v2===true,'Calendar V2 must be enabled for demo');
+           }
+           if(options)check('options/array',Array.isArray(options.options));
+           if(brand)check('presentation/wrapper',brand.presentation!==undefined||brand.ok===true);
+           const candidates=Array.isArray(plans?.plans)?plans.plans.filter(p=>p&&p.id&&p.is_active!==false):[];
+           check('plans/active-count',candidates.length>=3,'Expect at least three public active demo plans; got '+candidates.length);
+           if(!candidates.length){defer('calendar/read-only-probes','Could not discover active plans from public API');return;}
+           const pick=[];
+           for(const code of ['753','FAMILY','IDPHOTO']){const p=candidates.find(x=>String(x.plan_code||'')===code);if(p&&!pick.some(y=>y.id===p.id))pick.push(p);}
+           for(const p of candidates){if(pick.length>=3)break;if(!pick.some(y=>y.id===p.id))pick.push(p);}
+           const from=addDay(tokyoDay(),1),to=addDay(from,7);
+           meta.sampledPlanCodes=pick.map(p=>String(p.plan_code||'unknown'));
+           meta.calendarRangeDays=daysInclusive(from,to);
+           const invalidPairs=[
+            ['too-long-range',{from,to:addDay(from,50),plan_id:pick[0].id}],
+            ['invalid-plan-id',{from,to,plan_id:'not-a-uuid'}],
+            ['invalid-staff-id',{from,to,plan_id:pick[0].id,staff_id:'not-a-uuid'}]
+           ];
+           const results=await Promise.all(pick.map(async (p)=>{
+             const code=String(p.plan_code||'unknown');
+             const [rule,summary]=await Promise.all([
+              getStage('start-rule/'+code,calendar+'/api/public/plan-start-rule',{plan_id:p.id}),
+              getStage('calendar-summary/'+code,calendar+'/api/public/calendar-summary',{from,to,plan_id:p.id})
+             ]);
+             if(rule){check('start-rule/plan-id/'+code,String(rule?.plan?.id||'')===String(p.id));check('start-rule/exists/'+code,typeof rule?.plan?.start_rule?.mode==='string');privacyScan('start-rule/'+code,rule);}
+             if(summary){
+              const days=summary.days;
+              check('calendar/rows/'+code,Array.isArray(days)&&days.length===daysInclusive(from,to),'Expected inclusive date rows');
+              if(Array.isArray(days)){
+               check('calendar/sorted/'+code,dateSorted(days));
+               check('calendar/first-and-last/'+code,days[0]?.date===from&&days.at(-1)?.date===to);
+               check('calendar/status-set/'+code,days.every(d=>['available','limited','full','closed','out_of_range'].includes(d.status)));
+               check('calendar/slots-consistency/'+code,days.every(d=>Number.isInteger(Number(d.available_slot_count))&&Number(d.available_slot_count)>=0&&(['full','closed','out_of_range'].includes(d.status)?Number(d.available_slot_count)===0:Number(d.available_slot_count)>0)));
+              }
+              if(rule?.plan?.start_rule&&Array.isArray(days)){
+               const sr=rule.plan.start_rule,actual=days.flatMap(x=>Array.isArray(x.available_times)?x.available_times:[]).map(x=>String(x).slice(0,5));
+               if(sr.mode==='fixed_times'&&Array.isArray(sr.fixed_times)){
+                const allowed=new Set(sr.fixed_times.map(x=>String(x).slice(0,5)));
+                check('calendar/fixed-starts/'+code,actual.every(x=>allowed.has(x)),'available starts checked='+actual.length);
+               }else if(sr.mode==='interval'){
+                const toMinute=t=>{const m=/^(\d{2}):(\d{2})/.exec(String(t||''));return m?Number(m[1])*60+Number(m[2]):null;};
+                const anchor=toMinute(sr.anchor_time||'00:00'),int=Number(sr.interval_minutes||30);
+                check('calendar/interval-starts/'+code,anchor!==null&&int>0&&actual.every(t=>{const m=toMinute(t);return m!==null&&(m-anchor+1440)%int===0;}),'available starts checked='+actual.length);
+               }
+              }
+              check('calendar/plan-scope/'+code,String(summary?.plan?.id||'')===String(p.id));
+              check('calendar/timezone/'+code,summary.studio_timezone==='Asia/Tokyo');
+              privacyScan('calendar/'+code,summary);
+             }
+             return {code,plan:p,rule,summary};
+           }));
+           // Real exact availability GETs; select dates the calendar itself reports as available.
+           const dates=results.map(r=>({code:r.code,plan:r.plan,day:r.summary?.days?.find(d=>['available','limited'].includes(d.status))?.date})).filter(r=>r.day).slice(0,2);
+           if(!dates.length)defer('availability/exact-positive','No selectable demo dates in the sampled 8-day window; cannot compare exact availability without creating bookings.');
+           else for(const r of dates){
+            const exact=await getStage('exact-availability/'+r.code,gateway+'/api/public/availability',{date:r.day,plan_id:r.plan.id});
+            if(exact){check('availability/response/'+r.code,typeof exact==='object'&&exact!==null);privacyScan('availability/'+r.code,exact);}
+           }
+           for(const [name,params] of invalidPairs){
+            try{const rr=await get(calendar+'/api/public/calendar-summary',params);check('reject/'+name,[400,404,422].includes(rr.status),'HTTP '+rr.status);}
+            catch(e){check('reject/'+name,false,'Network: '+(e?.name||'unknown'));}
+           }
+           // The API must never mark a date before Japan-local today as bookable.
+           try{const past=addDay(tokyoDay(),-2),today=tokyoDay();const r=await get(calendar+'/api/public/calendar-summary',{from:past,to:today,plan_id:pick[0].id});
+            check('past-read/http',r.status===200,'HTTP '+r.status);
+            if(r.status===200&&Array.isArray(r.data?.days)){
+             const old=r.data.days.filter(x=>x.date<today);
+             check('past-read/non-bookable',old.length>=2&&old.every(d=>d.status==='out_of_range'&&Number(d.available_slot_count)===0));
+            }
+           }catch(e){check('past-read/http',false,'Network: '+(e?.name||'unknown'));}
+          }
+          async function main(){
+           if(envFlag)defer('R10/real-API-tests','R10_SOURCE_PREFLIGHT=1: local JS/file test only, zero live GETs');
+           else await runLive();
+           defer('R10/live-booking-write','Creating or cancelling a real test booking is excluded to protect demo records.');
+           defer('R10/second-studio','Signed multi-studio positive and negative tests require separately configured studio B.');
+           defer('R10/contract-LINE','Real LIFF/LINE binding is deferred until customer contract.');
+           const failed=checks.filter(c=>c.result==='FAIL'),passed=checks.length-failed.length;
+           const report={product:'DPRO PHOTO',gate:'R10B PUBLIC BOOKING PRIVACY-VERIFIED READ-ONLY LIVE API CONTRACT',mode:envFlag?'LOCAL_SOURCE_PREFLIGHT_NOT_LIVE':'LIVE_PUBLIC_GET_INTEGRATION',dateUtc:new Date().toISOString(),sourceSha:process.env.GITHUB_SHA||null,productionReady:false,productionRelease:'BLOCKED_POSITIVE_AUTH_AND_CONTRACT',requests:{liveGET:liveRequests,POST:0,PUT:0,PATCH:0,DELETE:0},counts:{passed,failed:failed.length,deferred:deferred.length},metadata:meta,checks,deferred};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R10B.json',JSON.stringify(report,null,2)+'\n');
+           const summary=['# DPRO PHOTO R10B Public Booking Privacy-Verified Read-only Gate','',
+           `Status: ${failed.length?'FAIL':'PASS'}`,
+           `Mode: ${report.mode}`,
+           `Passed: ${passed}; Failed: ${failed.length}; Deferred: ${deferred.length}`,
+           `Actual GET requests: ${liveRequests}; mutating requests: 0`,
+           'All sampled tests are anonymous public GET only. No customer response bodies are logged or archived.',
+           'This is not proof of booking write success or real LINE authentication.','',
+           '## Failing checks',...(failed.length?failed.map(f=>'- '+f.id+': '+f.detail):['None']),'',
+           '## Deferred',...deferred.map(x=>'- '+x.id+': '+x.reason)].join('\n');
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R10B_SUMMARY.md',summary+'\n');
+           if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary+'\n');
+           console.log(summary);
+           if(failed.length)process.exitCode=1;
+          }
+          main().catch(e=>{console.error('R10 process error:',String(e?.message||e));process.exitCode=1});
+          NODE
+      - name: Archive public API QA results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R10B
+          path: |
+            DPRO_PHOTO_PRODUCT_GATE_R10B.json
+            DPRO_PHOTO_PRODUCT_GATE_R10B_SUMMARY.md
+          if-no-files-found: warn
