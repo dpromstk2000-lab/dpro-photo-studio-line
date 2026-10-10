@@ -1169,6 +1169,25 @@ function actionButtons(reservation) {
         return true;
       }
 
+      // DPRO-PHOTO-R19-MEMBER-MODAL-LIVE-RESERVATION-RECONCILE-20261010
+      // Reconcile only against the current identity's successful refresh result.
+      // Never erase identity-scoped drafts; only discard an obsolete visible editor.
+      function reconcileRequestModalAfterMemberRefresh() {
+        if (state.requestSubmitting || !state.modalReservation) return "unchanged";
+        const previous = state.modalReservation;
+        const fresh = state.reservations.find((item) => String(item?.id || "") === String(previous?.id || "")
+          && String(item?.reservation_no || "") === String(previous?.reservation_no || ""));
+        const noLongerEligible = !fresh
+          || (state.modalMode === "change" && !canRequestChange(fresh))
+          || (state.modalMode === "cancel" && !canRequestCancel(fresh));
+        if (noLongerEligible) {
+          discardRequestModalForIdentityChange();
+          return "closed";
+        }
+        state.modalReservation = fresh; // Use the fresh status when the member submits.
+        return "current";
+      }
+
       function reservationAuthPayload(reservation) {
         if (state.lookup.public_token && state.reservations.length === 1) {
           return { public_token: reservation.public_token || state.lookup.public_token };
@@ -1429,6 +1448,7 @@ function actionButtons(reservation) {
         }
         if (!lookup.line_user_id && !lookup.public_token) {
           if (isCurrent()) {
+            discardRequestModalForIdentityChange(); // R19: empty lookup cannot retain a visible request.
             els.memberArea.hidden = true;
             setAccessMode("entry");
           }
@@ -1449,6 +1469,7 @@ function actionButtons(reservation) {
           state.profile = profileResult;
           state.reservations = Array.isArray(reservationResult.reservations) ? reservationResult.reservations : [];
           state.loadedLookup = { ...lookup };
+          reconcileRequestModalAfterMemberRefresh();
           persistLookup();
           const url = new URL(location.href);
           const requestedReservation = url.searchParams.get("reservation_no");
@@ -1471,6 +1492,7 @@ function actionButtons(reservation) {
           state.reservations = [];
           state.selectedReservationId = "";
           state.loadedLookup = null;
+          discardRequestModalForIdentityChange(); // R19: keep drafts, close editor after current read failure.
           els.memberArea.hidden = true;
           setAccessMode("entry");
           showToast(errorMessage(error), "error");
