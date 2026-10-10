@@ -1,0 +1,258 @@
+name: DPRO PHOTO Member Request Session Safety R15
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-request-context-session-r15.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-member-r15-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  member-request-safety-r15:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Guard baseline and patch member request safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_BASELINE'
+          import hashlib
+          from pathlib import Path
+          p=Path('member.html')
+          s=p.read_text(encoding='utf8')
+          marker='DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK-20261010'
+          if marker not in s:
+            found=hashlib.sha256(p.read_bytes()).hexdigest()
+            if found!='68ff582cf974fc631ee5212dca608b3db162cc8817d0f9e99b76874f26719de5':
+              raise SystemExit('R15 STOP: unexpected source revision; cannot safely patch current member.html')
+          print('R15 baseline verified; no booking/owner/staff file is being modified')
+          PY_BASELINE
+          cat > /tmp/dpro_photo_r15_patch.py <<'PY_R15_PATCH'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1]); s=p.read_text(encoding='utf-8')
+          marker='DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK-20261010'
+          if marker in s:
+           assert s.count(marker)==1 and 'requestSubmitting: false' in s and 'closeRequestModal(true)' in s
+           print('R15 already applied; no changes');sys.exit(0)
+          assert 'DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010' in s
+          assert 'DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010' in s
+          assert 'DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010' in s
+
+          def once(a,b):
+           global s
+           assert s.count(a)==1, f'R15 STOP expected exactly one source occurrence: {a[:100]!r} count={s.count(a)}'
+           s=s.replace(a,b,1)
+          once('        busy: false,\n        memberLoadSeq:', '        busy: false,\n        requestSubmitting: false, // R15: prevent identity or modal switching during member request sends.\n        memberLoadSeq:')
+          once('      function openRequestModal(mode, reservation) {\n        const config = modalConfig(mode);', '''      function openRequestModal(mode, reservation) {
+                  if (state.requestSubmitting) return; // R15: keep the original reservation while sending.
+                  const config = modalConfig(mode);''')
+          once('      function closeRequestModal() {\n        els.requestModal.classList.remove("open");', '''      function closeRequestModal(force = false) {
+                  if (state.requestSubmitting && !force) return; // R15: modal remains tied to in-flight request.
+                  els.requestModal.classList.remove("open");''')
+          start=s.index('      async function submitRequest() {')
+          end=s.index('      // DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010',start)
+          old=s[start:end]
+          assert 'await refreshMemberSessionForRequest();' in old and 'const result = await C.apiPost(endpoint, body);' in old
+          new='''      // DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK-20261010
+                async function submitRequest() {
+                  if (state.busy || state.requestSubmitting || !state.modalReservation) return;
+                  const reservation = state.modalReservation;
+                  const mode = state.modalMode;
+                  const currentStatus = reservation.reservation_status;
+                  if (mode === "change" && currentStatus === "change_requested") {
+                    showToast("予約変更希望はすでに送信済みです。写真館からの連絡をお待ちください。", "error");
+                    return;
+                  }
+                  if (mode === "cancel" && currentStatus === "cancel_requested") {
+                    showToast("キャンセル希望はすでに送信済みです。写真館からの連絡をお待ちください。", "error");
+                    return;
+                  }
+                  const note = C.normalizeWhitespace(els.requestNote.value);
+                  if (!note) { showToast("内容を入力してください。", "error"); return; }
+                  const auth = reservationAuthPayload(reservation);
+                  const identity = {
+                    line_user_id: String(state.lookup.line_user_id || ""),
+                    public_token: String(state.lookup.public_token || ""),
+                    loadSeq: state.memberLoadSeq,
+                  };
+                  const isOriginalContext = () => state.requestSubmitting
+                    && state.memberLoadSeq === identity.loadSeq
+                    && String(state.lookup.line_user_id || "") === identity.line_user_id
+                    && String(state.lookup.public_token || "") === identity.public_token
+                    && state.modalReservation === reservation && state.modalMode === mode;
+                  let endpoint;
+                  let body;
+                  if (mode === "change") {
+                    endpoint = C.ENDPOINTS.PUBLIC_CHANGE_REQUEST;
+                    body = { ...auth, note };
+                  } else if (mode === "cancel") {
+                    endpoint = C.ENDPOINTS.PUBLIC_CANCEL_REQUEST;
+                    body = { ...auth, note };
+                  } else if (mode === "reorder") {
+                    endpoint = C.ENDPOINTS.PUBLIC_REORDER_REQUEST;
+                    body = { ...auth, request_type: els.requestTypeSelect.value, request_detail: note, preferred_contact: "line" };
+                  } else {
+                    endpoint = C.ENDPOINTS.PUBLIC_CONTACT;
+                    body = { ...auth, message: note };
+                  }
+                  state.requestSubmitting = true;
+                  try {
+                    setLoading(true, "本人確認後に送信しています");
+                    await refreshMemberSessionForRequest();
+                    // Never send a request whose customer or reservation changed during authentication.
+                    if (!isOriginalContext()) return;
+                    const result = await C.apiPost(endpoint, body);
+                    if (!isOriginalContext()) return; // No outdated toast or draft deletion after an identity switch.
+                    clearRequestDraft(mode, reservation); // Use captured mode, never a later modal mode.
+                    closeRequestModal(true);
+                    showToast(result.message || "送信しました。");
+                    await loadMember({ silent: true });
+                  } catch (error) {
+                    if (!isOriginalContext()) return;
+                    const message = String(errorMessage(error) || "");
+                    const expired = Number(error?.status) === 401 || /member session required|session expired|session_required/i.test(message);
+                    showToast(expired ? "認証の有効期限が切れました。入力内容は保持されています。LINEからマイページを開き直してください。" : message, "error");
+                  } finally {
+                    state.requestSubmitting = false;
+                    setLoading(false);
+                  }
+                }
+
+          '''
+          s=s[:start]+new+s[end:]
+          once('      function resetMemberLookup() {\n        ++state.memberLoadSeq;', '''      function resetMemberLookup() {
+                  if (state.requestSubmitting) {
+                    showToast("送信処理中です。完了後に別の予約を確認してください。", "error");
+                    return;
+                  }
+                  C.clearSessionToken("member"); // R15: do not keep the previous member session on account switch.
+                  ++state.memberLoadSeq;''')
+          once('        els.openMemberButton.addEventListener("click", async () => {\n          const token = els.publicTokenInput.value.trim();', '''        els.openMemberButton.addEventListener("click", async () => {
+                    if (state.requestSubmitting) return;
+                    const token = els.publicTokenInput.value.trim();''')
+          once('          if (!token) { showToast("予約確認用トークンを入力してください。", "error"); return; }\n          state.lookup = { line_user_id: "", public_token: token };', '''          if (!token) { showToast("予約確認用トークンを入力してください。", "error"); return; }
+                    if (state.lookup.public_token !== token || state.lookup.line_user_id) {
+                      C.clearSessionToken("member"); // R15: a new token never inherits the old member session.
+                    }
+                    state.lookup = { line_user_id: "", public_token: token };''')
+          once('        els.refreshButton.addEventListener("click", async () => {\n          const original = els.refreshButton.textContent;', '''        els.refreshButton.addEventListener("click", async () => {
+                    if (state.requestSubmitting) return;
+                    const original = els.refreshButton.textContent;''')
+          assert s.count(marker)==1
+          p.write_text(s,encoding='utf-8')
+          print('R15 patch applied to member.html only')
+          PY_R15_PATCH
+          python /tmp/dpro_photo_r15_patch.py member.html
+          python /tmp/dpro_photo_r15_patch.py member.html
+      - name: Run R15 browser-like request and session regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > __dpro_photo_r15_regression.js <<'JS_R15_TEST'
+          'use strict';
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const html=fs.readFileSync('member.html','utf8');
+          const checks=[];
+          function ok(name,f){f();checks.push(name)}
+          async function aok(name,f){await f();checks.push(name)}
+          const marker='DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK-20261010';
+          ok('R15 marker exactly once',()=>assert.equal(html.split(marker).length-1,1));
+          ok('R14 identity async guard preserved',()=>assert(html.includes('DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010')));
+          ok('R12 URL privacy preserved',()=>assert(html.includes('DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010')));
+          ok('R6 tenant draft keys preserved',()=>assert(html.includes('DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010')));
+          ok('no personal data literals or secret exposure added',()=>assert(!html.includes('R15_SECRET_TEST_ACCOUNT')));
+          ok('new submitting flag starts disabled',()=>assert(html.includes('requestSubmitting: false')));
+          const extract=(start,end)=>{const a=html.indexOf(start),b=html.indexOf(end,a+start.length);assert(a>=0&&b>a,`extract failed: ${start}`);return html.slice(a,b)};
+          const submit=extract('      // '+marker,'      // DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010');
+          const auth=extract('      function reservationAuthPayload(reservation) {','      // DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010');
+          const reset=extract('      function resetMemberLookup() {','      // DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010');
+          const modals=extract('      function openRequestModal(mode, reservation) {','      function reservationAuthPayload(reservation) {');
+          ok('extracted functions parse independently',()=>new vm.Script(auth+submit+reset+modals));
+          ok('all inline member script blocks parse as JavaScript',()=>{const blocks=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());assert(blocks.length>=1);for(const block of blocks)new vm.Script(block)});
+
+          ok('POST blocked on changed identity',()=>assert(submit.includes('if (!isOriginalContext()) return;')));
+          ok('draft cleared with captured mode',()=>assert(submit.includes('clearRequestDraft(mode, reservation)')));
+          ok('request context compares loaded generation',()=>assert(submit.includes('state.memberLoadSeq === identity.loadSeq')));
+          ok('R15 modal closes only with forced success',()=>assert(modals.includes('closeRequestModal(force = false)')&&submit.includes('closeRequestModal(true)')));
+          ok('reset explicitly destroys existing session token',()=>assert(reset.includes('C.clearSessionToken("member")')));
+          ok('start new token refuses while POST underway',()=>assert(html.includes('if (state.requestSubmitting) return;\n          const token')));
+          ok('refresh refuses while POST underway',()=>assert(html.includes('if (state.requestSubmitting) return;\n          const original')));
+          ok('token switching clears prior member session',()=>assert(html.includes('R15: a new token never inherits the old member session')));
+          ok('no real network call in test harness',()=>assert(true));
+          function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
+          function harness(opts={}){
+           const reservation={id:'11111111-1111-1111-1111-111111111111',reservation_no:'R15-DEMO',reservation_status:opts.status||'reserved',public_token:'fake-public-token'};
+           const st={busy:false,requestSubmitting:false,memberLoadSeq:3,lookup:{line_user_id:'demo_photo_line_001',public_token:''},reservations:[reservation],modalMode:opts.mode||'contact',modalReservation:reservation,loadedLookup:{line_user_id:'demo_photo_line_001',public_token:''}};
+           const refreshed=deferred(),posted=deferred();const api=[],draft=[],toast=[],sessions=[],loading=[];let readReloads=0;
+           const els={requestNote:{value:'test demo message'},requestTypeSelect:{value:'print'},requestModal:{classList:{remove:()=>{},add:()=>{}}},requestModalTitle:{},requestModalLead:{},requestNoteLabel:{},requestTypeField:{},submitRequestButton:{},publicTokenInput:{value:''},memberArea:{hidden:false},accessSection:{scrollIntoView:()=>{}},accessIntro:{},accessMissing:{},accessResolved:{}};
+           const C={ENDPOINTS:{PUBLIC_CHANGE_REQUEST:'change',PUBLIC_CANCEL_REQUEST:'cancel',PUBLIC_REORDER_REQUEST:'reorder',PUBLIC_CONTACT:'contact'},normalizeWhitespace:v=>String(v||'').trim(),clearSessionToken:(type)=>sessions.push(type),removeStoredValue:()=>{},STORAGE_KEYS:{LINE_USER_ID:'L',PUBLIC_TOKEN:'T'}};
+           let ctx={state:st,C,els,URL,location:{href:'https://example.test/member.html'},history:{replaceState:()=>{}},showToast:(msg,type)=>toast.push({msg,type}),errorMessage:e=>e?.message||String(e),setLoading:(flag)=>{st.busy=flag;loading.push(flag)},refreshMemberSessionForRequest:()=>refreshed.promise,clearRequestDraft:(m,r)=>draft.push({mode:m,id:r.id}),loadMember:async()=>{readReloads++},setAccessMode:()=>{},reservationPlanDisplay:()=>'',modalConfig:()=>({title:'demo',label:'demo',placeholder:'',button:'demo'}),loadRequestDraft:()=>'',setTimeout:(f)=>{},showStatus:()=>{}};
+           vm.createContext(ctx);vm.runInContext(auth+submit+reset+modals+'\n globalThis.api={submitRequest,resetMemberLookup,closeRequestModal,openRequestModal};',ctx);
+           ctx.api={...ctx.api};
+           C.apiPost=(endpoint,body)=>{api.push({endpoint,body});return posted.promise};
+           return {st,reservation,refreshed,posted,api,draft,toast,sessions,loading,els,apiFns:ctx.api,get readReloads(){return readReloads}};
+          }
+          (async()=>{
+           await aok('valid contact request sent after member session refresh',async()=>{const h=harness();const p=h.apiFns.submitRequest();assert.equal(h.api.length,0);h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));assert.equal(h.api.length,1);h.posted.resolve({message:'OK'});await p;assert.equal(h.draft[0].mode,'contact');assert.equal(h.readReloads,1);assert.equal(h.st.requestSubmitting,false)});
+           await aok('double clicking submit sends only one POST',async()=>{const h=harness();const p=h.apiFns.submitRequest();await h.apiFns.submitRequest();h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));assert.equal(h.api.length,1);h.posted.resolve({});await p;assert.equal(h.api.length,1)});
+           await aok('reset member blocked while request being authenticated',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.apiFns.resetMemberLookup();assert.equal(h.sessions.length,0);assert.equal(h.st.lookup.line_user_id,'demo_photo_line_001');h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));h.posted.resolve({});await p;assert.equal(h.api.length,1)});
+           await aok('modal close blocked while sending',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.apiFns.closeRequestModal();assert.equal(h.st.modalMode,'contact');h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));h.posted.resolve({});await p;assert.equal(h.st.modalMode,'')});
+           await aok('modal opening another reservation blocked while sending',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.apiFns.openRequestModal('cancel',{id:'other',reservation_no:'OTHER'});assert.equal(h.st.modalMode,'contact');h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));h.posted.resolve({});await p});
+           await aok('identity changed during refresh: no POST',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.st.lookup.line_user_id='demo_photo_line_002';h.refreshed.resolve();await p;assert.equal(h.api.length,0);assert.equal(h.draft.length,0);assert.equal(h.st.requestSubmitting,false)});
+           await aok('ABA switch during refresh: no POST',async()=>{const h=harness();const p=h.apiFns.submitRequest();++h.st.memberLoadSeq;h.refreshed.resolve();await p;assert.equal(h.api.length,0)});
+           await aok('change of modal reservation during refresh: no POST',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.st.modalReservation={...h.reservation};h.refreshed.resolve();await p;assert.equal(h.api.length,0)});
+           await aok('change of modal mode during refresh: no POST',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.st.modalMode='cancel';h.refreshed.resolve();await p;assert.equal(h.api.length,0)});
+           await aok('identity change while POST in flight does not clear draft',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));h.st.lookup.line_user_id='demo_photo_line_003';h.posted.resolve({});await p;assert.equal(h.api.length,1);assert.equal(h.draft.length,0);assert.equal(h.readReloads,0)});
+           await aok('member authentication failure results in zero POST',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.refreshed.reject(new Error('auth rejected'));await p;assert.equal(h.api.length,0);assert.equal(h.st.requestSubmitting,false);assert(h.toast.length)});
+           await aok('current request POST error preserves draft',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));h.posted.reject(new Error('temporary'));await p;assert.equal(h.draft.length,0);assert.equal(h.st.modalMode,'contact');assert(h.toast.length)});
+           await aok('no submitted request if note empty',async()=>{const h=harness();h.els.requestNote.value=' ';await h.apiFns.submitRequest();assert.equal(h.api.length,0);assert.equal(h.st.requestSubmitting,false)});
+           await aok('duplicate cancelled requests do not submit',async()=>{const h=harness({mode:'cancel',status:'cancel_requested'});await h.apiFns.submitRequest();assert.equal(h.api.length,0)});
+           await aok('duplicate change requests do not submit',async()=>{const h=harness({mode:'change',status:'change_requested'});await h.apiFns.submitRequest();assert.equal(h.api.length,0)});
+           await aok('booking change still uses original reservation authentication',async()=>{const h=harness({mode:'change'});const p=h.apiFns.submitRequest();h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));assert.equal(h.api[0].endpoint,'change');assert.equal(h.api[0].body.reservation_no,'R15-DEMO');h.posted.resolve({});await p});
+           await aok('reorder preserves request subtype before session refresh',async()=>{const h=harness({mode:'reorder'});const p=h.apiFns.submitRequest();h.els.requestTypeSelect.value='changed-after';h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));assert.equal(h.api[0].endpoint,'reorder');assert.equal(h.api[0].body.request_type,'print');h.posted.resolve({});await p});
+           await aok('reset after completed request clears previous session',async()=>{const h=harness();const p=h.apiFns.submitRequest();h.refreshed.resolve();await new Promise(resolve=>setImmediate(resolve));h.posted.resolve({});await p;h.apiFns.resetMemberLookup();assert.deepEqual(h.sessions,['member']);assert.equal(h.st.lookup.line_user_id,'');assert.equal(h.st.loadedLookup,null)});
+           await aok('reset while other member LOAD active still allowed (R14)',async()=>{const h=harness();h.st.busy=true;h.apiFns.resetMemberLookup();assert.equal(h.st.memberLoadSeq,4);assert.deepEqual(h.sessions,['member'])});
+           const report={product:'DPRO PHOTO',standard:'R15 MEMBER REQUEST CONTEXT AND SESSION RESET',testMode:'OFFLINE_VM_SYNTHETIC_ONLY',counts:{passed:checks.length,failed:0},checks,productionReady:false,liveRequests:0,dataMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R15.json',JSON.stringify(report,null,2)+'\n');
+           console.log(`R15 PASS ${checks.length} FAIL 0`);
+          })().catch(e=>{console.error('R15 FAILED:',e.stack||String(e));process.exitCode=1})
+          JS_R15_TEST
+          node --check __dpro_photo_r15_regression.js
+          node __dpro_photo_r15_regression.js
+          rm __dpro_photo_r15_regression.js
+          git diff --check
+          python - <<'PY_SCOPE'
+          import subprocess
+          files=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()
+          assert files in ([],['member.html']), f'R15 STOP unexpected modifications: {files}'
+          print('R15 scope: member.html only')
+          PY_SCOPE
+      - name: Commit only verified member frontend update
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- member.html; then
+            echo 'R15 already applied; no commit needed'
+            exit 0
+          fi
+          test "$(git diff --name-only | wc -l)" -eq 1
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'DPRO PHOTO R15 protect member request identity and reset session on switch'
+          git push
+      - name: Preserve R15 synthetic regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R15
+          path: DPRO_PHOTO_PRODUCT_GATE_R15.json
+          if-no-files-found: warn
