@@ -1,0 +1,144 @@
+name: DPRO PHOTO Plan Start Rule Async Isolation R13
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-plan-start-rule-race-guard-r13.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-r13-plan-rule-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  plan-start-rule-r13:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Patch guarded plan-start-rule request scope (index only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R13_PATCH'
+          from pathlib import Path
+          import json,base64
+          p=Path('index.html')
+          s=p.read_text(encoding='utf8')
+          spec=json.loads(base64.b64decode('ewogICJtYXJrZXIiOiAiRFBSTy1QSE9UTy1SMTMtUExBTi1TVEFSVC1SVUxFLUxBVEVTVC1SRVFVRVNULVNDT1BFLTIwMjYxMDEwIiwKICAicmVwbGFjZW1lbnRzIjogWwogICAgewogICAgICAibmFtZSI6ICJzdGF0ZSIsCiAgICAgICJvbGQiOiAiICAgICAgcGxhblN0YXJ0UnVsZVBsYW5JZDogXCJcIixcbiAgICAgIHBsYW5TdGFydFJ1bGVQcm9taXNlOiBudWxsLFxuICAgICAgbWVtYmVyOiBudWxsLCIsCiAgICAgICJuZXciOiAiICAgICAgcGxhblN0YXJ0UnVsZVBsYW5JZDogXCJcIixcbiAgICAgIHBsYW5TdGFydFJ1bGVQcm9taXNlOiBudWxsLFxuICAgICAgcGxhblN0YXJ0UnVsZVByb21pc2VQbGFuSWQ6IFwiXCIsIC8vIFIxMzogYSBwZW5kaW5nIHN0YXJ0IHJ1bGUgYmVsb25ncyB0byBleGFjdGx5IG9uZSBwbGFuLlxuICAgICAgcGxhblN0YXJ0UnVsZVJlcXVlc3RTZXE6IDAsIC8vIFIxMzogcmVqZWN0IHN0YWxlIEEtPkItPkEgcmVzdWx0cy5cbiAgICAgIG1lbWJlcjogbnVsbCwiCiAgICB9LAogICAgewogICAgICAibmFtZSI6ICJydWxlIiwKICAgICAgIm9sZCI6ICIgICAgYXN5bmMgZnVuY3Rpb24gZW5zdXJlUGxhblN0YXJ0UnVsZSgpIHtcbiAgICAgIGNvbnN0IHBsYW5JZCA9IHN0YXRlLnNlbGVjdGVkUGxhbj8uaWQgfHwgXCJcIjtcbiAgICAgIGlmICghcGxhbklkKSB7XG4gICAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGUgPSBkZWZhdWx0UGxhblN0YXJ0UnVsZSgpO1xuICAgICAgICBzdGF0ZS5wbGFuU3RhcnRSdWxlUGxhbklkID0gXCJcIjtcbiAgICAgICAgcmV0dXJuIHN0YXRlLnBsYW5TdGFydFJ1bGU7XG4gICAgICB9XG4gICAgICBpZiAoc3RhdGUucGxhblN0YXJ0UnVsZVBsYW5JZCA9PT0gcGxhbklkKSByZXR1cm4gc3RhdGUucGxhblN0YXJ0UnVsZTtcbiAgICAgIGlmIChzdGF0ZS5wbGFuU3RhcnRSdWxlUHJvbWlzZSkgcmV0dXJuIHN0YXRlLnBsYW5TdGFydFJ1bGVQcm9taXNlO1xuXG4gICAgICBjb25zdCB0YXNrID0gKGFzeW5jICgpID0+IHtcbiAgICAgICAgY29uc3QgdXJsID0gbmV3IFVSTChgJHtDLkNBTEVOREFSX0FQSV9CQVNFX1VSTH0vYXBpL3B1YmxpYy9wbGFuLXN0YXJ0LXJ1bGVgKTtcbiAgICAgICAgdXJsLnNlYXJjaFBhcmFtcy5zZXQoXCJwbGFuX2lkXCIsIHBsYW5JZCk7XG4gICAgICAgIGNvbnN0IHJlc3BvbnNlID0gYXdhaXQgZmV0Y2godXJsLnRvU3RyaW5nKCksIHsgaGVhZGVyczogeyBBY2NlcHQ6IFwiYXBwbGljYXRpb24vanNvblwiIH0sIGNhY2hlOiBcIm5vLXN0b3JlXCIgfSk7XG4gICAgICAgIGNvbnN0IHBheWxvYWQgPSBhd2FpdCByZXNwb25zZS5qc29uKCkuY2F0Y2goKCkgPT4gbnVsbCk7XG4gICAgICAgIGlmICghcmVzcG9uc2Uub2sgfHwgcGF5bG9hZD8ub2sgPT09IGZhbHNlIHx8ICFwYXlsb2FkPy5wbGFuPy5zdGFydF9ydWxlKSB7XG4gICAgICAgICAgdGhyb3cgbmV3IEVycm9yKHBheWxvYWQ/LmVycm9yIHx8IFwi5LqI57SE6ZaL5aeL5pmC6ZaT44Gu6Kit5a6a44KS56K66KqN44Gn44GN44G+44Gb44KT44Gn44GX44Gf44CCXCIpO1xuICAgICAgICB9XG4gICAgICAgIGlmIChzdGF0ZS5zZWxlY3RlZFBsYW4/LmlkID09PSBwbGFuSWQpIHtcbiAgICAgICAgICBzdGF0ZS5wbGFuU3RhcnRSdWxlID0gbm9ybWFsaXplUGxhblN0YXJ0UnVsZShwYXlsb2FkLnBsYW4uc3RhcnRfcnVsZSk7XG4gICAgICAgICAgc3RhdGUucGxhblN0YXJ0UnVsZVBsYW5JZCA9IHBsYW5JZDtcbiAgICAgICAgfVxuICAgICAgICByZXR1cm4gc3RhdGUucGxhblN0YXJ0UnVsZTtcbiAgICAgIH0pKCk7XG5cbiAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGVQcm9taXNlID0gdGFzaztcbiAgICAgIHRyeSB7XG4gICAgICAgIHJldHVybiBhd2FpdCB0YXNrO1xuICAgICAgfSBmaW5hbGx5IHtcbiAgICAgICAgaWYgKHN0YXRlLnBsYW5TdGFydFJ1bGVQcm9taXNlID09PSB0YXNrKSBzdGF0ZS5wbGFuU3RhcnRSdWxlUHJvbWlzZSA9IG51bGw7XG4gICAgICB9XG4gICAgfVxuIiwKICAgICAgIm5ldyI6ICIgICAgLy8gRFBSTy1QSE9UTy1SMTMtUExBTi1TVEFSVC1SVUxFLUxBVEVTVC1SRVFVRVNULVNDT1BFLTIwMjYxMDEwXG4gICAgYXN5bmMgZnVuY3Rpb24gZW5zdXJlUGxhblN0YXJ0UnVsZSgpIHtcbiAgICAgIGNvbnN0IHBsYW5JZCA9IHN0YXRlLnNlbGVjdGVkUGxhbj8uaWQgfHwgXCJcIjtcbiAgICAgIGlmICghcGxhbklkKSB7XG4gICAgICAgICsrc3RhdGUucGxhblN0YXJ0UnVsZVJlcXVlc3RTZXE7XG4gICAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGUgPSBkZWZhdWx0UGxhblN0YXJ0UnVsZSgpO1xuICAgICAgICBzdGF0ZS5wbGFuU3RhcnRSdWxlUGxhbklkID0gXCJcIjtcbiAgICAgICAgc3RhdGUucGxhblN0YXJ0UnVsZVByb21pc2UgPSBudWxsO1xuICAgICAgICBzdGF0ZS5wbGFuU3RhcnRSdWxlUHJvbWlzZVBsYW5JZCA9IFwiXCI7XG4gICAgICAgIHJldHVybiBzdGF0ZS5wbGFuU3RhcnRSdWxlO1xuICAgICAgfVxuICAgICAgaWYgKHN0YXRlLnBsYW5TdGFydFJ1bGVQbGFuSWQgPT09IHBsYW5JZCkgcmV0dXJuIHN0YXRlLnBsYW5TdGFydFJ1bGU7XG4gICAgICBpZiAoc3RhdGUucGxhblN0YXJ0UnVsZVByb21pc2UgJiYgc3RhdGUucGxhblN0YXJ0UnVsZVByb21pc2VQbGFuSWQgPT09IHBsYW5JZCkge1xuICAgICAgICByZXR1cm4gc3RhdGUucGxhblN0YXJ0UnVsZVByb21pc2U7XG4gICAgICB9XG5cbiAgICAgIGNvbnN0IHNlcSA9ICsrc3RhdGUucGxhblN0YXJ0UnVsZVJlcXVlc3RTZXE7XG4gICAgICBjb25zdCB0YXNrID0gKGFzeW5jICgpID0+IHtcbiAgICAgICAgY29uc3QgdXJsID0gbmV3IFVSTChgJHtDLkNBTEVOREFSX0FQSV9CQVNFX1VSTH0vYXBpL3B1YmxpYy9wbGFuLXN0YXJ0LXJ1bGVgKTtcbiAgICAgICAgdXJsLnNlYXJjaFBhcmFtcy5zZXQoXCJwbGFuX2lkXCIsIHBsYW5JZCk7XG4gICAgICAgIGNvbnN0IHJlc3BvbnNlID0gYXdhaXQgZmV0Y2godXJsLnRvU3RyaW5nKCksIHsgaGVhZGVyczogeyBBY2NlcHQ6IFwiYXBwbGljYXRpb24vanNvblwiIH0sIGNhY2hlOiBcIm5vLXN0b3JlXCIgfSk7XG4gICAgICAgIGNvbnN0IHBheWxvYWQgPSBhd2FpdCByZXNwb25zZS5qc29uKCkuY2F0Y2goKCkgPT4gbnVsbCk7XG4gICAgICAgIC8vIEEgd3JvbmctcGxhbiByZXBseSBtdXN0IG5ldmVyIHNpbGVudGx5IG92ZXJ3cml0ZSB0aGUgc2VsZWN0ZWQgcnVsZS5cbiAgICAgICAgaWYgKCFyZXNwb25zZS5vayB8fCBwYXlsb2FkPy5vayA9PT0gZmFsc2UgfHwgIXBheWxvYWQ/LnBsYW4/LnN0YXJ0X3J1bGVcbiAgICAgICAgICAgIHx8IFN0cmluZyhwYXlsb2FkLnBsYW4uaWQgfHwgXCJcIikgIT09IHBsYW5JZCkge1xuICAgICAgICAgIHRocm93IG5ldyBFcnJvcihwYXlsb2FkPy5lcnJvciB8fCBcIuS6iOe0hOmWi+Wni+aZgumWk+OBruioreWumuOCkueiuuiqjeOBp+OBjeOBvuOBm+OCk+OBp+OBl+OBn+OAglwiKTtcbiAgICAgICAgfVxuICAgICAgICBjb25zdCBydWxlID0gbm9ybWFsaXplUGxhblN0YXJ0UnVsZShwYXlsb2FkLnBsYW4uc3RhcnRfcnVsZSk7XG4gICAgICAgIGlmIChzZXEgPT09IHN0YXRlLnBsYW5TdGFydFJ1bGVSZXF1ZXN0U2VxICYmIHN0YXRlLnNlbGVjdGVkUGxhbj8uaWQgPT09IHBsYW5JZCkge1xuICAgICAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGUgPSBydWxlO1xuICAgICAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGVQbGFuSWQgPSBwbGFuSWQ7XG4gICAgICAgIH1cbiAgICAgICAgcmV0dXJuIHJ1bGU7XG4gICAgICB9KSgpO1xuXG4gICAgICBzdGF0ZS5wbGFuU3RhcnRSdWxlUHJvbWlzZSA9IHRhc2s7XG4gICAgICBzdGF0ZS5wbGFuU3RhcnRSdWxlUHJvbWlzZVBsYW5JZCA9IHBsYW5JZDtcbiAgICAgIHRyeSB7XG4gICAgICAgIHJldHVybiBhd2FpdCB0YXNrO1xuICAgICAgfSBmaW5hbGx5IHtcbiAgICAgICAgaWYgKHN0YXRlLnBsYW5TdGFydFJ1bGVQcm9taXNlID09PSB0YXNrKSB7XG4gICAgICAgICAgc3RhdGUucGxhblN0YXJ0UnVsZVByb21pc2UgPSBudWxsO1xuICAgICAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGVQcm9taXNlUGxhbklkID0gXCJcIjtcbiAgICAgICAgfVxuICAgICAgfVxuICAgIH1cbiIKICAgIH0sCiAgICB7CiAgICAgICJuYW1lIjogInNlbGVjdCIsCiAgICAgICJvbGQiOiAiICAgICAgICBzdGF0ZS5wbGFuU3RhcnRSdWxlID0gZGVmYXVsdFBsYW5TdGFydFJ1bGUoKTtcbiAgICAgICAgc3RhdGUucGxhblN0YXJ0UnVsZVBsYW5JZCA9IFwiXCI7XG4gICAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGVQcm9taXNlID0gbnVsbDtcbiAgICAgICAgZWxzLnJlc2VydmF0aW9uRGF0ZS52YWx1ZSA9IFwiXCI7IiwKICAgICAgIm5ldyI6ICIgICAgICAgICsrc3RhdGUucGxhblN0YXJ0UnVsZVJlcXVlc3RTZXE7IC8vIFIxMzogaW52YWxpZGF0ZSByZXF1ZXN0cyBmcm9tIGVhcmxpZXIgcGxhbiBzZWxlY3Rpb25zLlxuICAgICAgICBzdGF0ZS5wbGFuU3RhcnRSdWxlID0gZGVmYXVsdFBsYW5TdGFydFJ1bGUoKTtcbiAgICAgICAgc3RhdGUucGxhblN0YXJ0UnVsZVBsYW5JZCA9IFwiXCI7XG4gICAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGVQcm9taXNlID0gbnVsbDtcbiAgICAgICAgc3RhdGUucGxhblN0YXJ0UnVsZVByb21pc2VQbGFuSWQgPSBcIlwiO1xuICAgICAgICBlbHMucmVzZXJ2YXRpb25EYXRlLnZhbHVlID0gXCJcIjsiCiAgICB9LAogICAgewogICAgICAibmFtZSI6ICJyZXNldCIsCiAgICAgICJvbGQiOiAiICAgIGZ1bmN0aW9uIHJlc2V0Rm9ybUZvck5ld1Jlc2VydmF0aW9uKCkge1xuICAgICAgKytzdGF0ZS5hdmFpbGFiaWxpdHlSZXF1ZXN0U2VxOyAvLyBPbGQgcmVzcG9uc2VzIG11c3Qgbm90IHJlcG9wdWxhdGUgYSBmcmVzaCBib29raW5nLlxuICAgICAgc3RhdGUuc2VsZWN0ZWRQbGFuID0gbnVsbDsiLAogICAgICAibmV3IjogIiAgICBmdW5jdGlvbiByZXNldEZvcm1Gb3JOZXdSZXNlcnZhdGlvbigpIHtcbiAgICAgICsrc3RhdGUuYXZhaWxhYmlsaXR5UmVxdWVzdFNlcTsgLy8gT2xkIHJlc3BvbnNlcyBtdXN0IG5vdCByZXBvcHVsYXRlIGEgZnJlc2ggYm9va2luZy5cbiAgICAgICsrc3RhdGUucGxhblN0YXJ0UnVsZVJlcXVlc3RTZXE7IC8vIFIxMzogb2xkIHJ1bGUgcmVzcG9uc2VzIG11c3Qgbm90IHJlcG9wdWxhdGUgYSBmcmVzaCBib29raW5nLlxuICAgICAgc3RhdGUucGxhblN0YXJ0UnVsZSA9IGRlZmF1bHRQbGFuU3RhcnRSdWxlKCk7XG4gICAgICBzdGF0ZS5wbGFuU3RhcnRSdWxlUGxhbklkID0gXCJcIjtcbiAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGVQcm9taXNlID0gbnVsbDtcbiAgICAgIHN0YXRlLnBsYW5TdGFydFJ1bGVQcm9taXNlUGxhbklkID0gXCJcIjtcbiAgICAgIHN0YXRlLnNlbGVjdGVkUGxhbiA9IG51bGw7IgogICAgfQogIF0KfQo=').decode('utf8'))
+          marker=spec['marker']
+          if marker in s:
+              assert s.count(marker)==1, 'R13 STOP: duplicate marker'
+              for item in spec['replacements']:
+                  assert s.count(item['new'])==1, 'R13 STOP: partial or inconsistent patch '+item['name']
+              print('R13 existing patch recognized (idempotent)')
+          else:
+              for item in spec['replacements']:
+                  count=s.count(item['old'])
+                  assert count==1, 'R13 STOP: incompatible live source '+item['name']+' matches='+str(count)
+                  s=s.replace(item['old'],item['new'],1)
+              assert s.count(marker)==1
+              p.write_text(s,encoding='utf8')
+              print('R13 start-rule async guards installed')
+          assert 'DPRO-PHOTO-R11-EXACT-AVAILABILITY-LATEST-REQUEST-GUARD-20261010' in s
+          assert 'DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010' in s
+          PY_R13_PATCH
+      - name: Run async race regression and JS syntax checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE_R13_TEST'
+          'use strict';
+          const fs=require('node:fs'),assert=require('node:assert/strict'),vm=require('node:vm');
+          const html=fs.readFileSync('index.html','utf8');
+          const checks=[];
+          function ok(name,fn){fn();checks.push({name,pass:true});}
+          async function aok(name,fn){await fn();checks.push({name,pass:true});}
+          const marker='DPRO-PHOTO-R13-PLAN-START-RULE-LATEST-REQUEST-SCOPE-20261010';
+          const start=html.indexOf('    async function ensurePlanStartRule() {');
+          const end=html.indexOf('    function selectPlan(planId)',start);
+          const extracted=html.slice(start,end);
+          ok('R13 single patch marker',()=>assert.equal(html.split(marker).length-1,1));
+          ok('R11 exact availability latest guard preserved',()=>assert(html.includes('DPRO-PHOTO-R11-EXACT-AVAILABILITY-LATEST-REQUEST-GUARD-20261010')));
+          ok('R9 calendar version preserved',()=>assert(html.includes('DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010')));
+          ok('R13 rule scope state',()=>assert(html.includes('planStartRulePromisePlanId: ""')&&html.includes('planStartRuleRequestSeq: 0')));
+          ok('R13 plan change invalidates in flight',()=>{const s=html.slice(html.indexOf('    function selectPlan('),html.indexOf('    function mergedOptions('));assert(s.includes('++state.planStartRuleRequestSeq'));assert(s.includes('state.planStartRulePromisePlanId = ""'));});
+          ok('R13 reset invalidates in flight',()=>{const s=html.slice(html.indexOf('    function resetFormForNewReservation('),html.indexOf('    function demoFill()'));assert(s.includes('++state.planStartRuleRequestSeq'));assert(s.includes('state.planStartRulePromise = null'));});
+          ok('R13 response id verified',()=>assert(extracted.includes('String(payload.plan.id || "") !== planId')));
+          ok('R13 result discarded when stale',()=>assert(extracted.includes('seq === state.planStartRuleRequestSeq')));
+          ok('R13 result plan id rechecked',()=>assert(extracted.includes('state.selectedPlan?.id === planId')));
+          ok('R13 pending promise linked to plan id',()=>assert(extracted.includes('state.planStartRulePromisePlanId === planId')));
+          ok('R13 expected exact source boundaries',()=>assert(start>0&&end>start));
+          const scripts=[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)].filter(x=>x[2].trim()&&!/application\/json/i.test(x[1]));
+          ok('all inline javascript syntax',()=>{assert(scripts.length>0);for(const [i,m] of scripts.entries())new vm.Script(m[2],{filename:`index-inline-${i}.js`});});
+          ok('R13 extracted function syntax',()=>new vm.Script(extracted));
+          function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
+          function rule(mode,interval=30){return {mode,interval_minutes:interval,anchor_time:'00:00',fixed_times:[]};}
+          function harness(id='A'){
+           const state={selectedPlan:id?{id}:null,planStartRule:rule('interval'),planStartRulePlanId:'',planStartRulePromise:null,planStartRulePromisePlanId:'',planStartRuleRequestSeq:0};
+           const calls=[];
+           const context={state,URL,console,C:{CALENDAR_API_BASE_URL:'https://example.invalid/functions/v1/dpro-photo-product-ready-gateway-v9'},
+             defaultPlanStartRule:()=>rule('interval'),
+             normalizePlanStartRule:x=>({...x}),
+             fetch:(url)=>{const d=deferred();calls.push({url:String(url),d});return d.promise;},
+           };
+           vm.runInNewContext(extracted+'\n globalThis.r13StartRule=ensurePlanStartRule;',context);
+           const tick=()=>new Promise(r=>setImmediate(r));
+           const done=(i,id_,r=rule('interval'))=>calls[i].d.resolve({ok:true,json:async()=>({ok:true,plan:{id:id_,start_rule:r}})});
+           const bad=(i,id_)=>calls[i].d.resolve({ok:true,json:async()=>({ok:false,plan:{id:id_,start_rule:rule('interval')}})});
+           const invalidate=(id_)=>{state.selectedPlan=id_?{id:id_}:null;++state.planStartRuleRequestSeq;state.planStartRule=rule('interval');state.planStartRulePlanId='';state.planStartRulePromise=null;state.planStartRulePromisePlanId='';};
+           return {state,calls,tick,done,bad,invalidate,run:()=>context.r13StartRule()};
+          }
+          (async()=>{
+           await aok('empty selection requires no HTTP GET',async()=>{const h=harness(null);await h.run();assert.equal(h.calls.length,0);assert.equal(h.state.planStartRulePlanId,'');});
+           await aok('empty selection invalidates old seq',async()=>{const h=harness(null);await h.run();assert.equal(h.state.planStartRuleRequestSeq,1);});
+           await aok('same plan concurrent lookup is one GET',async()=>{const h=harness();const p=h.run(),q=h.run();assert.equal(h.calls.length,1);h.done(0,'A');await Promise.all([p,q]);});
+           await aok('cached rule skips extra GET',async()=>{const h=harness();const p=h.run();h.done(0,'A',rule('fixed_times'));await p;await h.run();assert.equal(h.calls.length,1);});
+           await aok('matching result cached in correct plan',async()=>{const h=harness();const p=h.run();h.done(0,'A',rule('fixed_times'));await p;assert.equal(h.state.planStartRule.mode,'fixed_times');assert.equal(h.state.planStartRulePlanId,'A');});
+           await aok('pending association cleared on finish',async()=>{const h=harness();const p=h.run();assert.equal(h.state.planStartRulePromisePlanId,'A');h.done(0,'A');await p;assert.equal(h.state.planStartRulePromisePlanId,'');assert.equal(h.state.planStartRulePromise,null);});
+           await aok('request identifies selected plan',async()=>{const h=harness('A');const p=h.run();assert(new URL(h.calls[0].url).searchParams.get('plan_id')==='A');h.done(0,'A');await p;});
+           await aok('wrong plan response must fail closed',async()=>{const h=harness('A');const p=h.run();h.done(0,'B');await assert.rejects(p,/予約開始時間/);assert.equal(h.state.planStartRulePlanId,'');});
+           await aok('wrong plan response can be retried',async()=>{const h=harness('A');const p=h.run();h.done(0,'B');await assert.rejects(p);const retry=h.run();h.done(1,'A');await retry;assert.equal(h.state.planStartRulePlanId,'A');});
+           await aok('failed public rule response rejected',async()=>{const h=harness('A');const p=h.run();h.bad(0,'A');await assert.rejects(p);assert.equal(h.state.planStartRulePlanId,'');});
+           await aok('failed network request can be retried',async()=>{const h=harness();const p=h.run();h.calls[0].d.reject(new Error('network'));await assert.rejects(p,/network/);const retry=h.run();h.done(1,'A');await retry;assert.equal(h.state.planStartRulePlanId,'A');});
+           await aok('older A success cannot overwrite newer B',async()=>{const h=harness('A');const a=h.run();h.invalidate('B');const b=h.run();h.done(1,'B',rule('fixed_times'));await b;h.done(0,'A',rule('interval',60));await a;assert.equal(h.state.planStartRulePlanId,'B');assert.equal(h.state.planStartRule.mode,'fixed_times');});
+           await aok('older A failure cannot clear current B pending',async()=>{const h=harness('A');const a=h.run();h.invalidate('B');const b=h.run();h.calls[0].d.reject(new Error('old timeout'));await assert.rejects(a,/timeout/);assert.equal(h.state.planStartRulePromisePlanId,'B');h.done(1,'B');await b;assert.equal(h.state.planStartRulePlanId,'B');});
+           await aok('A->B->A oldest A cannot overwrite newest A',async()=>{const h=harness('A');const a1=h.run();h.invalidate('B');const b=h.run();h.invalidate('A');const a2=h.run();h.done(2,'A',rule('fixed_times'));await a2;h.done(0,'A',rule('interval',60));await a1;h.done(1,'B');await b;assert.equal(h.state.planStartRule.mode,'fixed_times');assert.equal(h.state.planStartRulePlanId,'A');});
+           await aok('A->B->A newest A survives oldest A finishing first',async()=>{const h=harness('A');const a1=h.run();h.invalidate('B');const b=h.run();h.invalidate('A');const a2=h.run();h.done(0,'A',rule('interval',120));await a1;assert.equal(h.state.planStartRulePlanId,'');h.done(2,'A',rule('fixed_times'));await a2;h.done(1,'B');await b;assert.equal(h.state.planStartRule.mode,'fixed_times');});
+           await aok('reset invalidates pending rule response',async()=>{const h=harness('A');const a=h.run();h.invalidate(null);h.done(0,'A',rule('fixed_times'));await a;assert.equal(h.state.planStartRulePlanId,'');});
+           await aok('stale old promise cannot clear new pending',async()=>{const h=harness('A');const a=h.run();h.invalidate('B');const b=h.run();h.done(0,'A');await a;assert.equal(h.state.planStartRulePromisePlanId,'B');h.done(1,'B');await b;});
+           await aok('after returning to plan B old A response never assigned',async()=>{const h=harness('A');const a=h.run();h.invalidate('B');const b=h.run();h.done(0,'A',rule('fixed_times'));await a;assert.equal(h.state.planStartRulePlanId,'');h.done(1,'B');await b;assert.equal(h.state.planStartRulePlanId,'B');});
+           await aok('active plan stores normalized response',async()=>{const h=harness('B');const b=h.run();h.done(0,'B',rule('interval',120));await b;assert.equal(h.state.planStartRule.interval_minutes,120);});
+           const report={product:'DPRO PHOTO',standard:'R13 PLAN START RULE IN-FLIGHT REQUEST ISOLATION',mode:'OFFLINE_BROWSER_VM',checks,counts:{passed:checks.length,failed:0},productionReady:false,liveRequests:0,dbMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R13.json',JSON.stringify(report,null,2)+'\n');
+           console.log(`DPRO PHOTO R13 ${checks.length} PASS 0 FAIL`);
+          })().catch(err=>{console.error('R13 TEST FAILED',err.stack||String(err));process.exitCode=1;});
+          NODE_R13_TEST
+          git diff --check
+          if [ -n "$(git diff --name-only -- . ':!index.html')" ]; then
+            echo 'R13 STOP: unexpected changed files' >&2
+            exit 1
+          fi
+      - name: Commit verified booking frontend change
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- index.html; then
+            echo 'R13 already applied; no commit needed.'
+            exit 0
+          fi
+          test "$(git diff --name-only | wc -l)" -eq 1
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- index.html
+          git commit -m 'DPRO PHOTO R13 isolate plan start rule requests by selected plan and sequence'
+          git push
+      - name: Preserve R13 browser VM regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R13
+          path: DPRO_PHOTO_PRODUCT_GATE_R13.json
+          if-no-files-found: warn
