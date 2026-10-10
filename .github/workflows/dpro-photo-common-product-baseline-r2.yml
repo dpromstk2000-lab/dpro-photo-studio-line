@@ -1,0 +1,177 @@
+name: DPRO PHOTO Common Product Baseline R2
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-common-product-baseline-r2.yml'
+      - '*.html'
+      - '*.js'
+      - '*.css'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  product-gate-r2:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (read-only)
+        uses: actions/checkout@v4
+      - name: Validate R2 common product (no network or database writes)
+        shell: bash
+        run: |
+          node - <<'NODE'
+          'use strict';
+          // DPRO PHOTO Common Product Baseline R2. Read-only GitHub Actions source QA.
+          // This process MUST NOT call any network API or alter production data.
+          const fs = require('fs');
+          const vm = require('vm');
+          const path = require('path');
+          
+          const baseline = [
+            'index.html', 'owner.html', 'member.html', 'staff.html',
+            'owner-ipad.html', 'system-check.html', 'config.js'
+          ];
+          const checks = [];
+          const pending = [];
+          function test(id, ok, detail = '') {
+            checks.push({id, result: ok ? 'PASS' : 'FAIL', detail});
+          }
+          function defer(id, note, category = 'CONTRACT_STAGE') {
+            pending.push({id, status: 'DEFERRED', category, note});
+          }
+          const source = {};
+          for (const file of baseline) {
+            const exists = fs.existsSync(file) && fs.statSync(file).isFile();
+            test('required/' + file, exists);
+            source[file] = exists ? fs.readFileSync(file, 'utf8') : '';
+          }
+          for (const file of baseline) {
+            if (!source[file]) continue;
+            try {
+              if (file.endsWith('.js')) {
+                new vm.Script(source[file], {filename: file});
+              } else {
+                let scriptCount = 0;
+                for (const match of source[file].matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+                  const attrs = match[1] || '';
+                  const script = match[2] || '';
+                  if (!script.trim()) continue;
+                  if (/\btype\s*=\s*["'](?:application\/json|importmap)["']/i.test(attrs)) continue;
+                  new vm.Script(script, {filename: file + '#inline-' + (++scriptCount)});
+                }
+                if (!scriptCount) throw new Error('No inline JavaScript was found');
+              }
+              test('syntax/' + file, true);
+            } catch (error) {
+              test('syntax/' + file, false, String(error.message || error));
+            }
+          }
+          // Additional .js scripts loaded by the pages are checked independently.
+          const allPublic = fs.readdirSync('.').filter(name => /\.(?:html|js|css)$/.test(name) && fs.statSync(name).isFile()).sort();
+          const otherJs = allPublic.filter(name => name.endsWith('.js') && name !== 'config.js');
+          for (const file of otherJs) {
+            try { new vm.Script(fs.readFileSync(file, 'utf8'), {filename: file}); test('javascript/' + file, true); }
+            catch (error) { test('javascript/' + file, false, String(error.message || error)); }
+          }
+          const cfg = source['config.js'];
+          const mem = source['member.html'];
+          const owner = source['owner.html'];
+          const staff = source['staff.html'];
+          const page = source['index.html'];
+          const system = source['system-check.html'];
+          const is = (file, ...parts) => parts.every(part => file.includes(part));
+          test('demo/studio-explicit', is(cfg, 'const STUDIO_CODE = "dpro_photo_demo"'));
+          test('demo/gateway-v3', is(cfg, 'dpro-photo-product-ready-gateway-v3'));
+          test('config/tokyo-timezone', is(cfg, 'const DEFAULT_TIMEZONE = "Asia/Tokyo"'));
+          test('booking/30-minute-default', /const SLOT_MINUTES\s*=\s*30\s*;/.test(cfg));
+          test('auth/member-session-api', is(cfg, 'async function openMemberSession(', 'line_id_token'));
+          test('auth/production-line-token-path', is(mem, 'C.openMemberSession({ line_id_token: idToken })'));
+          test('auth/demo-separated', is(mem, 'C.isDemoMode()', 'C.openMemberSession({ line_user_id: id })'));
+          test('auth/refresh-before-request', is(mem, 'async function refreshMemberSessionForRequest()', 'await refreshMemberSessionForRequest();'));
+          test('draft/save-and-retrieve', is(mem, 'function saveRequestDraft(', 'function loadRequestDraft(', 'requestNote.addEventListener'));
+          test('member/r2-draft-fix-preserved', is(mem, 'DPRO-PHOTO-MEMBER-AUTH-DRAFT-TABS-R2-20261010'));
+          test('member/tab-stacking-guard', /\.tabs-wrap\s*\{[\s\S]{0,210}?position:\s*static/.test(mem));
+          test('owner/booking-and-task', is(owner, 'タスク', '予約'));
+          test('staff/identity-screen', is(staff, 'staff', 'adminCodeInput'));
+          test('system-check/demo-prepare-known', is(system, 'demo_prepare'));
+          test('booking/public-page', is(page, 'selectedSlot', 'planStartRule'));
+          let badRef = [];
+          for (const file of baseline.filter(x => x.endsWith('.html'))) {
+            for (const match of source[file].matchAll(/<(?:script|link)\b[^>]*?\b(?:src|href)=["']([^"']+)["']/gi)) {
+              const raw = match[1].split(/[?#]/)[0];
+              if (!raw || /^(?:https?:|\/\/|data:|#|\/)/i.test(raw) || raw.startsWith('../')) continue;
+              const relative = raw.replace(/^\.\//, '');
+              const local = path.normalize(relative);
+              if (!fs.existsSync(local)) badRef.push({page: file, target: local});
+            }
+          }
+          test('assets/local-scripts-and-styles', badRef.length === 0, badRef.length ? JSON.stringify(badRef.slice(0, 20)) : '');
+          const allSource = allPublic.map(x => fs.readFileSync(x, 'utf8')).join('\n');
+          const secretPattern = /sb_secret_[A-Za-z0-9_-]{20,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]{35,}\.[A-Za-z0-9_-]{15,}/;
+          test('secrets/no-detectable-private-credentials', !secretPattern.test(allSource));
+          
+          // The following are explicitly NOT certified by static source checks.
+          defer('customer/line-liff', 'Contract-specific Official LINE Account, LIFF configuration, and live token verification');
+          defer('customer/workspace', 'Customer-isolated Supabase workspace or verified tenant access boundaries');
+          defer('customer/gateway', 'Customer-specific backend configuration, secret separation, owner and staff auth');
+          defer('customer/live-device', 'Real mobile LINE identity, session expiry, recovery and cancel/reschedule tests');
+          defer('customer/branding', 'Studio domain, brand, and customer domain settings');
+          defer('customer/operations', 'Owner activation, staff permissions, booking and inquiry handoff QA');
+          defer('security/public-tables', '2026-10-10 audit: photo_waitlist and photo_reservation_reminders have RLS off, no policies and anon SELECT/INSERT/UPDATE/DELETE privileges. Verify and remediate without breaking existing routes.', 'SECURITY_BLOCKER');
+          defer('security/demo-code', 'Demo admin code is present in public client and v3 adapter: demonstrate backend production rejection and eliminate reliance on demo code before shipping.', 'SECURITY_BLOCKER');
+          defer('security/studio-boundaries', 'Database row ownership, session-to-studio binding, security definer RPC grants and API gateway tenant checks need live adversarial tests.', 'SECURITY_BLOCKER');
+          defer('qa/browser-accessibility', 'Browser-based multi-device QA, screen reader navigation, actual async reservation flows and network failures.', 'QA_BLOCKER');
+          defer('integrations/google-consent', 'Google OAuth verification and connector permission review are not certified by this workflow.', 'QA_BLOCKER');
+          defer('ci/legacy-workflow', 'Older linkage standard workflow has an independent invalid-YAML/no-job failure; review separately.', 'MAINTENANCE');
+          const failed = checks.filter(x => x.result === 'FAIL');
+          const passed = checks.filter(x => x.result === 'PASS');
+          const result = {
+            standard: 'DPRO PHOTO COMMON PRODUCT BASELINE R2',
+            scope: 'READ_ONLY_STATIC_REPOSITORY_QA',
+            checkedAtUtc: new Date().toISOString(),
+            gitSha: process.env.GITHUB_SHA || null,
+            staticGate: failed.length ? 'FAIL' : 'PASS',
+            securityRelease: 'BLOCKED_REVIEW',
+            productionReady: false,
+            demoDataMutated: false,
+            counts: {passed: passed.length, failed: failed.length, deferred: pending.length},
+            checkedFiles: baseline,
+            additionalJavascriptFileCount: otherJs.length,
+            passed,
+            failed,
+            deferred: pending,
+            note: 'Static QA success is NOT a production security certification. No Supabase or external API requests are made.'
+          };
+          fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R2.json', JSON.stringify(result, null, 2) + '\n');
+          const summary = [
+            '## DPRO PHOTO Common Product Baseline R2',
+            '',
+            `**Read-only static gate:** ${result.staticGate}`,
+            '**Production security / release:** BLOCKED_REVIEW (not ready)',
+            '',
+            `**Passed:** ${passed.length} | **Failed:** ${failed.length} | **Deferred:** ${pending.length}`,
+            '',
+            '### Static failures',
+            ...(failed.length ? failed.map(x => `- ${x.id}: ${x.detail}`) : ['- None']),
+            '',
+            '### Required security and human review',
+            ...pending.map(x => `- [${x.category}] ${x.id}: ${x.note}`),
+            '',
+            'No deployment, external network calls, database changes, demo reset or LINE modifications performed.'
+          ].join('\n');
+          fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R2_SUMMARY.md', summary + '\n');
+          if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
+          console.log(summary);
+          if (failed.length) process.exitCode = 1;
+          NODE
+      - name: Archive R2 gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R2
+          path: |
+            DPRO_PHOTO_PRODUCT_GATE_R2.json
+            DPRO_PHOTO_PRODUCT_GATE_R2_SUMMARY.md
+          if-no-files-found: warn
