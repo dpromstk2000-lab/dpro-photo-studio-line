@@ -1163,20 +1163,38 @@ function actionButtons(reservation) {
         throw new Error("予約確認情報が不足しています。マイページを開き直してください。");
       }
 
+      // DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010
+      // Browser draft isolation only, not a server-side authorization mechanism.
+      // Old v2 drafts are left untouched; auto-migrating ambiguous v2 keys could
+      // display another member's text when reservation numbers coincide.
       function requestDraftKey(mode, reservation) {
-        return "dpro_photo_member_request_v2:" + String(reservation?.reservation_no || "") + ":" + String(mode || "");
+        const studio = String(C.APP?.studioCode || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 70);
+        const reservationId = String(reservation?.id || "").trim().toLowerCase();
+        const kind = String(mode || "").trim();
+        const line = String(state.lookup.line_user_id || "").trim();
+        const token = String(state.lookup.public_token || "").trim();
+        const identity = line ? "line:" + line : token ? "token:" + token : "";
+        if (!studio || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(reservationId)
+            || !["change", "cancel", "contact", "reorder"].includes(kind) || !identity) return "";
+        // Never put a bearer token or LINE user ID in a readable storage key.
+        let hash = 0xcbf29ce484222325n;
+        for (let i = 0; i < identity.length; i++) {
+          hash = ((hash ^ BigInt(identity.charCodeAt(i))) * 0x100000001b3n) & 0xffffffffffffffffn;
+        }
+        return "dpro_photo_member_request_v3:" + studio + ":" + reservationId + ":"
+          + hash.toString(16).padStart(16, "0") + ":" + kind;
       }
       function loadRequestDraft(mode, reservation) {
-        try { return sessionStorage.getItem(requestDraftKey(mode, reservation)) || ""; }
+        try { const key = requestDraftKey(mode, reservation); return key ? (sessionStorage.getItem(key) || "") : ""; }
         catch { return ""; }
       }
       function saveRequestDraft(mode, reservation, text) {
         if (!reservation || !mode) return;
-        try { sessionStorage.setItem(requestDraftKey(mode, reservation), text); }
+        try { const key = requestDraftKey(mode, reservation); if (key) sessionStorage.setItem(key, text); }
         catch {}
       }
       function clearRequestDraft(mode, reservation) {
-        try { sessionStorage.removeItem(requestDraftKey(mode, reservation)); }
+        try { const key = requestDraftKey(mode, reservation); if (key) sessionStorage.removeItem(key); }
         catch {}
       }
       async function refreshMemberSessionForRequest() {
