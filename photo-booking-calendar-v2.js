@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "DPRO-PHOTO-CALENDAR-R8-STABLE-ASYNCHRONOUS-STATE-20261010";
+  const VERSION = "DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010";
   const FALLBACK_API_BASE = "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v8";
   const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG || null;
   if (!C) return;
@@ -140,8 +140,20 @@
     })[status] || { mark: "—", label: "確認中", cls: "out" };
   }
 
+  // R9: reject stale date statuses beyond native booking limits.
+  function inDateWindow(date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) return false;
+    const { min, max } = limits();
+    return (!min || date >= min) && (!max || date <= max);
+  }
+
   function canSelect(day) {
-    return day && (day.status === "available" || day.status === "limited");
+    return day && inDateWindow(day.date)
+      && (day.status === "available" || day.status === "limited");
+  }
+
+  function displayStatus(day) {
+    return inDateWindow(day?.date) ? day.status : "out_of_range";
   }
 
   function currentMonthKey() {
@@ -203,6 +215,45 @@
     ).join("");
   }
 
+  // R9: disable navigation when its visible period lies outside booking limits.
+  function navigationTarget(direction) {
+    if (direction !== 1 && direction !== -1) return "";
+    const current = clampAnchor(state.anchor);
+    let target = "";
+    if (state.view === "month") target = monthShift(current, direction);
+    else if (state.view === "week") target = addDays(current, direction * 7);
+    else if (state.view === "day") target = addDays(current, direction);
+    else target = addDays(current, direction * 28);
+    const { min, max } = limits();
+    if (state.view === "month") {
+      if ((min && target.slice(0, 7) < min.slice(0, 7))
+        || (max && target.slice(0, 7) > max.slice(0, 7))) return "";
+    } else if (state.view === "week") {
+      const first = startOfWeek(target);
+      if ((min && addDays(first, 6) < min) || (max && first > max)) return "";
+    } else if (state.view === "list") {
+      if ((min && addDays(target, 27) < min) || (max && target > max)) return "";
+    } else if (!inDateWindow(target)) return "";
+    return clampAnchor(target);
+  }
+
+  function updateNavButtons() {
+    for (const [id, direction] of [["dproCalendarPrev", -1], ["dproCalendarNext", 1]]) {
+      const button = $(id);
+      if (!button) continue;
+      button.disabled = !navigationTarget(direction);
+      button.setAttribute("aria-disabled", String(button.disabled));
+      button.title = button.disabled ? "予約受付期間外のため移動できません" : "";
+    }
+    const today = $("dproCalendarToday");
+    if (today) {
+      const now = C.todayYmd?.() || new Date().toLocaleDateString("en-CA", {timeZone:"Asia/Tokyo"});
+      today.disabled = !inDateWindow(now);
+      today.setAttribute("aria-disabled", String(today.disabled));
+      today.title = today.disabled ? "今日は予約受付期間外です" : "";
+    }
+  }
+
   function renderLoading() {
     const body = $("dproCalendarBody");
     if (body) body.innerHTML = `<div class="dpro-cal-empty"><span class="dpro-cal-spinner"></span>空き状況を確認しています</div>`;
@@ -220,7 +271,7 @@
   }
 
   function dayInner(day, compact = false) {
-    const meta = statusMeta(day.status);
+    const meta = statusMeta(displayStatus(day));
     const d = dateObj(day.date);
     const selected = nativeDate()?.value === day.date;
     const monthOutside = state.view === "month" && day.date.slice(0, 7) !== currentMonthKey();
@@ -254,7 +305,7 @@
 
   function renderWeek() {
     $("dproCalendarBody").innerHTML = `<div class="dpro-cal-week-grid">${state.days.map((day) => {
-      const meta = statusMeta(day.status);
+      const meta = statusMeta(displayStatus(day));
       return `<article class="dpro-cal-row is-${meta.cls}">
         <div class="dpro-cal-row-date"><strong>${esc(formatDay(day.date))}</strong>${day.event?.title ? `<span>${esc(day.event.title)}</span>` : ""}</div>
         <div class="dpro-cal-row-state"><b>${meta.mark}</b><span>${meta.label}</span>${day.available_slot_count ? `<small>${day.available_slot_count}枠</small>` : ""}</div>
@@ -266,7 +317,7 @@
   function renderDay() {
     const day = state.days[0];
     if (!day) return;
-    const meta = statusMeta(day.status);
+    const meta = statusMeta(displayStatus(day));
     $("dproCalendarBody").innerHTML = `<div class="dpro-cal-focus is-${meta.cls}">
       <div class="dpro-cal-focus-mark">${meta.mark}</div>
       <div>
@@ -282,7 +333,7 @@
 
   function renderList() {
     $("dproCalendarBody").innerHTML = `<div class="dpro-cal-list">${state.days.map((day) => {
-      const meta = statusMeta(day.status);
+      const meta = statusMeta(displayStatus(day));
       return `<button type="button" class="dpro-cal-list-item is-${meta.cls}" data-calendar-date="${esc(day.date)}" ${canSelect(day) ? "" : "disabled"}>
         <span class="dpro-cal-list-date">${esc(formatDay(day.date))}</span>
         <span class="dpro-cal-list-status"><b>${meta.mark}</b>${meta.label}</span>
@@ -296,6 +347,7 @@
     const caption = $("dproCalendarCaption");
     if (caption) caption.textContent = captionText();
     renderViewButtons();
+    updateNavButtons();
     if (state.view === "month") renderMonth();
     else if (state.view === "week") renderWeek();
     else if (state.view === "day") renderDay();
@@ -331,6 +383,7 @@
     const seq = ++state.requestSeq;
     if (state.abort) state.abort.abort();
     state.abort = new AbortController();
+    updateNavButtons();
     renderLoading();
 
     try {
@@ -366,16 +419,16 @@
   }
 
   function move(direction) {
-    if (state.view === "month") state.anchor = monthShift(clampAnchor(state.anchor), direction);
-    else if (state.view === "week") state.anchor = addDays(clampAnchor(state.anchor), direction * 7);
-    else if (state.view === "day") state.anchor = addDays(clampAnchor(state.anchor), direction);
-    else state.anchor = addDays(clampAnchor(state.anchor), direction * 28);
-    state.anchor = clampAnchor(state.anchor);
+    const target = navigationTarget(direction);
+    if (!target) return;
+    state.anchor = target;
     refresh();
   }
 
   function goToday() {
-    state.anchor = clampAnchor(C.todayYmd?.() || new Date().toISOString().slice(0, 10));
+    const today = C.todayYmd?.() || new Date().toLocaleDateString("en-CA", {timeZone:"Asia/Tokyo"});
+    if (!inDateWindow(today)) return;
+    state.anchor = today;
     refresh();
   }
 

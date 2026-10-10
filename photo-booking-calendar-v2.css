@@ -285,3 +285,10 @@
   .dpro-cal-status b { font-size: 15px; }
   .dpro-cal-first { font-size: 10px; }
 }
+
+/* DPRO-PHOTO-CALENDAR-R9-ACCESSIBLE-NAV-CSS */
+.dpro-cal-nav button:disabled { cursor: not-allowed; opacity: .54; background: #f1f4f3; color: #586b67; }
+.dpro-cal-nav button:focus-visible,
+.dpro-cal-day:focus-visible,
+.dpro-cal-view:focus-visible,
+.dpro-cal-list-item:focus-visible { outline: 3px solid #006b87; outline-offset: 2px; }
