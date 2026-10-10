@@ -506,7 +506,7 @@
           <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_001" type="button">佐藤 美咲｜撮影前</button>
           <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_002" type="button">田中 太郎｜セレクト</button>
           <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_003" type="button">山本 花｜納品・再注文</button>
-          <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_999" type="button">テスト顧客｜変更確認</button>
+          <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_999" type="button" disabled title="LINE再紐付け検証済みのため旧IDからは切替できません">テスト顧客｜再紐付け済（切替不可）</button>
         </div>
       </div>
     </section>
@@ -1299,16 +1299,43 @@ function actionButtons(reservation) {
         }
       }
 
+      /* DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH-V1-20261010
+         Do not reuse another customer's authenticated session in the sales demo. */
       async function useDemoPerson(lineUserId) {
-        state.lookup = { line_user_id: lineUserId, public_token: "" };
-        C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, lineUserId);
-        C.removeStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN);
-        const url = new URL(location.href);
-        url.searchParams.set("demo", "1");
-        url.searchParams.set("line_user_id", lineUserId);
-        url.searchParams.delete("public_token");
-        history.replaceState(null, "", url);
-        await loadMember();
+        if (!C.isDemoMode() || state.busy) return;
+        const id = String(lineUserId || "").trim();
+        const allowed = ["demo_photo_line_001", "demo_photo_line_002", "demo_photo_line_003"];
+        if (!allowed.includes(id)) {
+          showToast("このデモ顧客は現在切り替えできません。", "error");
+          return;
+        }
+        try {
+          setLoading(true, "デモ顧客を切り替えています");
+          C.clearSessionToken("member");
+          await C.openMemberSession({ line_user_id: id });
+          state.lookup = { line_user_id: id, public_token: "" };
+          state.customer = null;
+          state.profile = null;
+          state.reservations = [];
+          state.selectedReservationId = "";
+          C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, id);
+          C.removeStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN);
+          const url = new URL(location.href);
+          url.searchParams.set("demo", "1");
+          url.searchParams.set("line_user_id", id);
+          url.searchParams.delete("public_token");
+          url.searchParams.delete("reservation_no");
+          url.searchParams.set("section", "reservations");
+          history.replaceState(null, "", url);
+          await loadMember({ silent: true });
+        } catch (error) {
+          C.clearSessionToken("member");
+          els.memberArea.hidden = true;
+          setAccessMode("entry");
+          showToast(errorMessage(error), "error");
+        } finally {
+          setLoading(false);
+        }
       }
 
       function bindStaticEvents() {
@@ -1341,6 +1368,18 @@ function actionButtons(reservation) {
         els.demoSwitcher.classList.toggle("show", C.isDemoMode());
         els.footerText.textContent = `${C.STUDIO_NAME}｜${C.APP.subtitle ? "撮影予約・写真セレクト・納品案内" : "お客様マイページ"}`;
         state.lookup = getInitialLookup();
+        // A different demo URL must not inherit a previous member's session.
+        if (C.isDemoMode() && state.lookup.line_user_id) {
+          try {
+            C.clearSessionToken("member");
+            await C.openMemberSession({ line_user_id: state.lookup.line_user_id });
+          } catch (error) {
+            els.memberArea.hidden = true;
+            setAccessMode("entry");
+            showToast(errorMessage(error), "error");
+            return;
+          }
+        }
         await loadMember();
       }
 
