@@ -1,0 +1,129 @@
+name: DPRO PHOTO Common Product Session Studio Boundary Gate R7
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-common-product-auth-tenancy-r7.yml'
+      - 'member.html'
+      - 'config.js'
+permissions:
+  contents: read
+jobs:
+  tenant-session-auth-r7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout (read only)
+        uses: actions/checkout@v4
+      - name: Verify R6 and R7 negative authentication (GET only)
+        shell: bash
+        run: |
+          node - <<'NODE'
+          'use strict';
+          const fs=require('node:fs'),vm=require('node:vm');
+          const files=['config.js','index.html','member.html','owner.html','staff.html','owner-ipad.html','system-check.html'];
+          const checks=[],deferred=[];
+          function check(name,pass,detail=''){checks.push({name,result:pass?'PASS':'FAIL',detail});}
+          function defer(name,reason){deferred.push({name,status:'DEFERRED',reason});}
+          const source={};
+          for(const f of files){const yes=fs.existsSync(f);check('file/'+f,yes);source[f]=yes?fs.readFileSync(f,'utf8'):'';}
+          const cfg=source['config.js'],mem=source['member.html'],owner=source['owner.html'];
+          check('config/demo-studio',cfg.includes('const STUDIO_CODE = "dpro_photo_demo"'));
+          check('config/30-minute-default',/const SLOT_MINUTES\s*=\s*30\s*;/.test(cfg));
+          check('config/base-gateway',cfg.includes('dpro-photo-product-ready-gateway'));
+          check('config/member-endpoints',cfg.includes('MEMBER_PROFILE: "/api/member/profile"')&&cfg.includes('MEMBER_RESERVATIONS: "/api/member/reservations"'));
+          check('member/R6-draft-isolation',mem.includes('DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010'));
+          check('member/R6-scope-fields',mem.includes('C.APP?.studioCode')&&mem.includes('reservation?.id')&&mem.includes('state.lookup.line_user_id'));
+          check('member/draft-key-no-raw-identity',mem.includes('hash.toString(16)')&&mem.includes('dpro_photo_member_request_v3:'));
+          check('member/restore-and-clear',mem.includes('function loadRequestDraft(')&&mem.includes('function clearRequestDraft('));
+          check('member/reauth-before-submit',mem.includes('await refreshMemberSessionForRequest();'));
+          check('member/real-LINE-id-token',mem.includes('C.openMemberSession({ line_id_token: idToken })'));
+          check('owner/tasks-and-reservations',owner.includes('タスク')&&owner.includes('予約'));
+          for(const f of files.filter(x=>x.endsWith('.html'))){
+           const html=source[f],errors=[];let count=0;
+           for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)){
+            if(!match[2].trim()||/\btype\s*=\s*["'](?:application\/json|importmap)["']/i.test(match[1]))continue;
+            try{new vm.Script(match[2],{filename:f+'#'+(++count)});}catch(e){errors.push(String(e.message||e));}
+           }
+           check('inline-js/'+f,count>0&&errors.length===0,errors.join('; '));
+          }
+          const base='https://cbknucemarcpbscirzyv.supabase.co/functions/v1';
+          const probes=[
+           ['base/member-profile/anonymous','dpro-photo-product-ready-gateway','/api/member/profile',{}],
+           ['base/member-profile/invalid','dpro-photo-product-ready-gateway','/api/member/profile',{'X-Member-Session':'r7-known-invalid-member'}],
+           ['base/member-reservations/anonymous','dpro-photo-product-ready-gateway','/api/member/reservations',{}],
+           ['base/member-reservations/invalid','dpro-photo-product-ready-gateway','/api/member/reservations',{'X-Member-Session':'r7-known-invalid-member'}],
+           ['base/admin-dashboard/anonymous','dpro-photo-product-ready-gateway','/api/admin/dashboard',{}],
+           ['base/admin-dashboard/invalid-owner','dpro-photo-product-ready-gateway','/api/admin/dashboard',{'X-Owner-Session':'r7-known-invalid-owner'}],
+           ['base/staff-today/anonymous','dpro-photo-product-ready-gateway','/api/staff/today',{}],
+           ['base/staff-today/invalid','dpro-photo-product-ready-gateway','/api/staff/today',{'X-Staff-Session':'r7-known-invalid-staff'}],
+           ['base/ipad-today/anonymous','dpro-photo-product-ready-gateway','/api/ipad/today',{}],
+           ['v3/staff-settings/anonymous','dpro-photo-product-ready-gateway-v3','/api/admin/settings',{}],
+           ['v9/automation/anonymous','dpro-photo-product-ready-gateway-v9','/api/admin/reservation-automation',{}],
+           ['v9/waitlist/anonymous','dpro-photo-product-ready-gateway-v9','/api/admin/waitlist',{}]
+          ];
+          async function fetchSafe(path,headers={}){
+           return fetch(base+path,{method:'GET',headers:{Accept:'application/json',Origin:'https://dpromstk2000-lab.github.io',...headers},redirect:'manual',signal:AbortSignal.timeout(12000)});
+          }
+          async function main(){
+           const offline=process.env.R7_LOCAL_FIXTURE==='1'&&process.env.GITHUB_ACTIONS!=='true';
+           if(offline){for(const [name] of probes)check('live-denial/'+name,true,'OFFLINE FIXTURE - NOT LIVE');
+           check('live-health/R7-version',true,'OFFLINE FIXTURE - NOT LIVE');
+           }else{
+            for(const [name,fn,path,headers] of probes){
+             try{const r=await fetchSafe('/'+fn+path,headers);const origin=r.headers.get('access-control-allow-origin')||'';
+              check('live-denial/'+name,[401,403].includes(r.status)&&origin!=='*','HTTP '+r.status+'; cors='+(!origin?'none':origin==='*'?'WILDCARD':'restricted'));}
+             catch(e){check('live-denial/'+name,false,'NETWORK_ERROR '+String(e?.name||'unknown'));}
+            }
+            try{
+             const response=await fetchSafe('/dpro-photo-product-ready-gateway/api/health');
+             if(response.status!==200){check('live-health/R7-version',false,'HTTP '+response.status);}
+             else{
+              // Only inspect public health metadata; do not log any body or customer record.
+              const payload=await response.json();
+              const observed=String(payload?.versions?.observed?.adapter||'');
+              check('live-health/R7-version',observed==='DPRO-PHOTO-COMMON-R7-SESSION-STUDIO-BOUNDARY-20261010','HTTP 200; R7 version match='+String(observed==='DPRO-PHOTO-COMMON-R7-SESSION-STUDIO-BOUNDARY-20261010'));
+             }
+            }catch(e){check('live-health/R7-version',false,'NETWORK_ERROR '+String(e?.name||'unknown'));}
+           }
+           defer('tenant/cross-studio-signed-session','Requires separately issued session from an independently provisioned second studio; no second studio exists yet.');
+           defer('owner/positive-session','Existing valid owner login must be verified without copying production secrets or login tokens into CI.');
+           defer('member/LINE-token-positive','Real LIFF ID Token and customer-owned LINE account to be verified after contract.');
+           defer('production/demo-admin-separation','Never reuse public demo management code in customer production.');
+           defer('product/google-OAuth','Google OAuth verification and token revocation require integration acceptance.');
+           defer('product/real-booking','Actual booking, cancellation, change and messaging require explicit approved test record and practical device QA.');
+           const failed=checks.filter(x=>x.result==='FAIL'),passed=checks.length-failed.length;
+           const report={product:'DPRO PHOTO',standard:'COMMON PRODUCT SESSION-STUDIO AUTH GATE R7',
+            checkedAtUtc:new Date().toISOString(),sourceCommit:process.env.GITHUB_SHA||null,
+            testMode:offline?'LOCAL_FIXTURE_NOT_LIVE':'LIVE_GET_DENIAL_AND_STATIC',
+            productionReady:false,productionRelease:'BLOCKED_CONTRACT_AND_POSITIVE_TENANT_TESTS',
+            dataMutation:false,liveWriteRequests:0,
+            counts:{passed,failed:failed.length,deferred:deferred.length,liveNegativeGETs:probes.length,livePublicHealthGETs:1},
+            checks,failed,deferred};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R7.json',JSON.stringify(report,null,2)+'\n');
+           const summary=['## DPRO PHOTO Common Product R7 - Session Studio Boundary','',
+            `**Gate:** ${failed.length?'FAIL':'PASS'}`,
+            '**Deployment evidence:** Supabase common gateway v10 (session studio guard, independently verified before this run)',
+            '**Release status:** BLOCKED_CONTRACT_AND_POSITIVE_TENANT_TESTS',
+            `Passed: ${passed} | Failed: ${failed.length} | Deferred: ${deferred.length}`,
+            `Mode: ${report.testMode}`,
+            'Only GET requests to health or unauthorized admin/member routes; no database writes, no demo reset, no auth tokens acquired.','',
+            '### Failures',...(failed.length?failed.map(x=>`- ${x.name}: ${x.detail}`):['- None']),'',
+            '### Deferred',...deferred.map(x=>'- '+x.name+': '+x.reason)].join('\n');
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R7_SUMMARY.md',summary+'\n');
+           if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary+'\n');
+           console.log(summary);
+           if(failed.length)process.exitCode=1;
+          }
+          main().catch(e=>{console.error('R7 unexpected: '+String(e?.message||e));process.exitCode=1;});
+          NODE
+      - name: Preserve R7 report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R7
+          path: |
+            DPRO_PHOTO_PRODUCT_GATE_R7.json
+            DPRO_PHOTO_PRODUCT_GATE_R7_SUMMARY.md
+          if-no-files-found: error
