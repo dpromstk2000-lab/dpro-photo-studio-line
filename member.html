@@ -1306,22 +1306,38 @@ function actionButtons(reservation) {
         }
       }
 
+      // DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY-20261010
+      // Explicit links take precedence over older browser storage. Never combine two identities.
+      // Ambiguous links or storage fail closed instead of silently choosing another member.
       function getInitialLookup() {
-        const fromConfig = C.getMemberLookupFromUrl();
+        const blank = { line_user_id: "", public_token: "" };
         const url = new URL(location.href);
-        const lookup = {
-          line_user_id: String(fromConfig.line_user_id || "").trim(),
-          public_token: String(fromConfig.public_token || "").trim(),
-        };
-        if (C.isDemoMode() && !lookup.line_user_id && !lookup.public_token) lookup.line_user_id = "demo_photo_line_001";
-        if (url.searchParams.get("line_user_id")) lookup.line_user_id = url.searchParams.get("line_user_id").trim();
-        if (url.searchParams.get("public_token")) lookup.public_token = url.searchParams.get("public_token").trim();
-        return lookup;
+        const urlLine = String(url.searchParams.get("line_user_id") || "").trim();
+        const urlToken = String(url.searchParams.get("public_token") || "").trim();
+        if (urlLine && urlToken) return blank; // Conflicting credentials in a single link.
+        if (urlToken) return { line_user_id: "", public_token: urlToken };
+        if (urlLine) return { line_user_id: urlLine, public_token: "" };
+
+        const remembered = C.getMemberLookupFromUrl();
+        const storedLine = String(remembered.line_user_id || "").trim();
+        const storedToken = String(remembered.public_token || "").trim();
+        if (storedLine && storedToken) return blank; // Older mixed storage is not a valid identity.
+        if (storedToken) return { line_user_id: "", public_token: storedToken };
+        if (storedLine) return { line_user_id: storedLine, public_token: "" };
+        if (C.isDemoMode()) return { line_user_id: "demo_photo_line_001", public_token: "" };
+        return blank;
       }
 
       function persistLookup() {
-        if (state.lookup.line_user_id) C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, state.lookup.line_user_id);
-        if (state.lookup.public_token) C.setStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN, state.lookup.public_token);
+        const line = String(state.lookup.line_user_id || "").trim();
+        const token = String(state.lookup.public_token || "").trim();
+        if (line && !token) {
+          C.setStoredValue(C.STORAGE_KEYS.LINE_USER_ID, line);
+          C.removeStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN);
+        } else if (token && !line) {
+          C.setStoredValue(C.STORAGE_KEYS.PUBLIC_TOKEN, token);
+          C.removeStoredValue(C.STORAGE_KEYS.LINE_USER_ID);
+        }
       }
 
       function setAccessMode(mode) {
