@@ -1153,7 +1153,7 @@ function actionButtons(reservation) {
       }
 
       function closeRequestModal(force = false) {
-        if (state.requestSubmitting && !force) return; // R15: modal remains tied to in-flight request.
+        if (state.requestSubmitting && force !== true) return; // R20: only explicit true may bypass the send lock.
         els.requestModal.classList.remove("open");
         state.modalMode = "";
         state.modalReservation = null;
@@ -1581,7 +1581,9 @@ function actionButtons(reservation) {
         });
         $$('.tab').forEach((tab) => tab.addEventListener("click", () => setSection(tab.dataset.section, true)));
         $$('.demo-person').forEach((button) => button.addEventListener("click", () => useDemoPerson(button.dataset.lineId)));
-        $$('[data-close-modal]').forEach((button) => button.addEventListener("click", closeRequestModal));
+        // DPRO-PHOTO-R20-MEMBER-REQUEST-CLOSE-EVENT-SAFETY-20261010
+        // A DOM click event must never become the truthy `force` argument.
+        $$('[data-close-modal]').forEach((button) => button.addEventListener("click", () => closeRequestModal()));
         els.requestModal.addEventListener("click", (event) => { if (event.target === els.requestModal) closeRequestModal(); });
         els.submitRequestButton.addEventListener("click", submitRequest);
         els.requestNote.addEventListener("input", () => saveRequestDraft(state.modalMode, state.modalReservation, els.requestNote.value));
