@@ -1,0 +1,497 @@
+name: DPRO PHOTO Member Request In-flight Editor Safety R21
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-member-editor-inflight-lock-r21.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-r21-member-editor-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  r21-member-editor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout existing common product source
+        uses: actions/checkout@v4
+      - name: Apply exact-baseline guarded request editor change
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY_R21_PATCH'
+          from pathlib import Path
+          import hashlib
+          p=Path('member.html')
+          assert p.is_file(),'R21 STOP member.html missing'
+          s=p.read_text('utf8')
+          sha=hashlib.sha256(s.encode('utf8')).hexdigest()
+          before='f5b2a51665f9057582ec110d5c61da400062a0c12b2333e63ea0636391589599'
+          after='1c0c0adf468149171fba7294a50861e18809ea961281a535d59d398f6bb544f6'
+          marker='DPRO-PHOTO-R21-MEMBER-REQUEST-EDITOR-INFLIGHT-LOCK-20261010'
+          pairs=[('        state.requestSubmitting = true;\n        try {\n          setLoading(true, "本人確認後に送信しています");', '        state.requestSubmitting = true;\n        // DPRO-PHOTO-R21-MEMBER-REQUEST-EDITOR-INFLIGHT-LOCK-20261010\n        // Prevent in-flight edits whose new draft could otherwise be discarded on POST success.\n        els.requestNote.readOnly = true;\n        if (els.requestTypeSelect) els.requestTypeSelect.disabled = true;\n        if (els.submitRequestButton) els.submitRequestButton.disabled = true;\n        try {\n          setLoading(true, "本人確認後に送信しています");'), ('        } finally {\n          state.requestSubmitting = false;\n          setLoading(false);\n        }\n      }\n\n      // DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD', '        } finally {\n          state.requestSubmitting = false;\n          els.requestNote.readOnly = false;\n          if (els.requestTypeSelect) els.requestTypeSelect.disabled = false;\n          if (els.submitRequestButton) els.submitRequestButton.disabled = false;\n          setLoading(false);\n        }\n      }\n\n      // DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD'), ('        els.requestNote.addEventListener("input", () => saveRequestDraft(state.modalMode, state.modalReservation, els.requestNote.value));', '        els.requestNote.addEventListener("input", () => {\n          if (!state.requestSubmitting) saveRequestDraft(state.modalMode, state.modalReservation, els.requestNote.value);\n        });')]
+          if sha==after:
+           assert s.count(marker)==1,'R21 STOP malformed already applied source'
+           print('R21 idempotent: already installed')
+          else:
+           assert sha==before,'R21 STOP source drift: do not modify unexpected source'
+           for a,b in pairs:
+            assert s.count(a)==1,'R21 STOP expected unique source block not found'
+            s=s.replace(a,b)
+           assert s.count(marker)==1 and hashlib.sha256(s.encode('utf8')).hexdigest()==after,'R21 STOP output checksum mismatch'
+           p.write_text(s,encoding='utf8')
+           print('R21 request note editor locked for the duration of in-flight sends')
+          PY_R21_PATCH
+      - name: R17 truthful refresh regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE_R17'
+          'use strict';
+          const fs=require('fs'),assert=require('node:assert/strict'),vm=require('vm');
+          const html=fs.readFileSync('member.html','utf8');
+          const checks=[];
+          const ok=(name,fn)=>{fn();checks.push(name)};
+          const aok=async(name,fn)=>{await fn();checks.push(name)};
+          function deferred(){let resolve,reject;const promise=new Promise((res,rej)=>{resolve=res;reject=rej});return {promise,resolve,reject,settled:false}}
+          const marker='DPRO-PHOTO-R17-MEMBER-REFRESH-TRUTHFUL-STATUS-20261010';
+          const loadBegin=html.indexOf('      async function loadMember(options = {}) {');
+          const loadEnd=html.indexOf('      /* DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH',loadBegin);
+          const refreshBegin=html.indexOf('        // '+marker);
+          const refreshEnd=html.indexOf("        $$('.tab').forEach",refreshBegin);
+          assert(loadBegin>0&&loadEnd>loadBegin&&refreshBegin>0&&refreshEnd>refreshBegin,'R17 unexpected source boundaries');
+          const loadCode=html.slice(loadBegin,loadEnd),refreshCode=html.slice(refreshBegin,refreshEnd);
+          function harness(kind='line',id='demo_photo_line_001'){
+           const state={lookup:kind==='line'?{line_user_id:id,public_token:''}:{line_user_id:'',public_token:id},customer:null,profile:null,reservations:[],selectedReservationId:'',memberLoadSeq:0,loadedLookup:null,refreshFeedbackSeq:0,requestSubmitting:false};
+           const calls=[],effects=[],timers=[],handlers={};
+           const refreshButton={textContent:'更新',disabled:false,addEventListener(_evt,fn){handlers.refresh=fn}};
+           const els={memberArea:{hidden:true},refreshButton};
+           const location={href:'https://dpromstk2000-lab.github.io/dpro-photo-studio-line/member.html?demo=1&section=reservations'};
+           const context={state,els,location,URL,
+            C:{ENDPOINTS:{MEMBER_RESERVATIONS:'/api/member/reservations',MEMBER_PROFILE:'/api/member/profile'},apiGet(path,query){let d=deferred();calls.push({path,query,d});return d.promise}},
+            discardRequestModalForIdentityChange(){effects.push('dialog-reconciled')},reconcileRequestModalAfterMemberRefresh(){effects.push('reservation-reconciled')},
+            setLoading(b){effects.push(b?'loading-on':'loading-off')},setAccessMode(x){effects.push('access-'+x)},persistLookup(){effects.push('persist')},renderAll(){effects.push('render')},setSection(){effects.push('section')},scrubMemberQueryFromAddressBar(){effects.push('scrub')},showToast(t){effects.push('toast')},errorMessage:e=>e?.message||'unknown',setTimeout(fn){timers.push(fn)},console};
+           vm.createContext(context);vm.runInContext(loadCode+'\nglobalThis.loadMemberTest=loadMember;',context);vm.runInContext(refreshCode,context);
+           function pending(which=id){return calls.filter(x=>Object.values(x.query).includes(which)&&!x.d.settled)}
+           function finish(which,label){let arr=pending(which);assert.equal(arr.length,kind==='token'||String(which).startsWith('token')?1:2,'expected pending API requests');for(let x of arr){x.d.settled=true;x.d.resolve(x.path.includes('/profile')?{customer:{customer_name:'profile-'+label}}:{customer:{customer_name:label},reservations:[{id:'reservation-'+label,reservation_no:label}]})}}
+           function fail(which,message='network-error'){let arr=pending(which);assert(arr.length>0);for(let x of arr){x.d.settled=true;x.d.reject(new Error(message));}}
+           function tick(){const xs=timers.splice(0);for(const f of xs)f()}
+           return {state,calls,effects,timers,els,load:context.loadMemberTest,refresh:()=>handlers.refresh(),finish,fail,tick};
+          }
+          const swap=(h,id)=>{h.state.lookup={line_user_id:id,public_token:''}};
+          (async()=>{
+           ok('R17 marker exactly once',()=>assert.equal(html.split(marker).length-1,1));
+           for(const [n,m] of [['R6','DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6'],['R12','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD-20261010'],['R14','DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010'],['R15','DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK-20261010'],['R16','DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY-20261010']])ok('preserve '+n+' guard',()=>assert(html.includes(m)));
+           ok('R12 no-referrer policy',()=>assert(html.includes('<meta name="referrer" content="no-referrer"')));
+           ok('refresh sequence state field',()=>assert(html.includes('refreshFeedbackSeq: 0')));
+           ok('load current success return',()=>assert(loadCode.includes('return "success"')));
+           ok('load failure return',()=>assert(loadCode.includes('return "failure"')));
+           ok('load missing return',()=>assert(loadCode.includes('return "missing"')));
+           ok('load stale guard returns stale',()=>assert.equal(loadCode.split('return "stale"').length-1,2));
+           ok('only successful load scrubs URL',()=>assert(loadCode.indexOf('scrubMemberQueryFromAddressBar();')<loadCode.indexOf('return "success"')));
+           ok('R17 button guarded against duplicate clicks',()=>assert(refreshCode.includes('els.refreshButton.disabled) return')));
+           ok('R17 context lock preserved in refresh',()=>assert(refreshCode.includes('state.requestSubmitting')));
+           ok('R17 status strings visible',()=>assert(refreshCode.includes('"更新しました"')&&refreshCode.includes('"再試行"')&&refreshCode.includes('"更新"')));
+           ok('R17 feedback timer scoped',()=>assert(refreshCode.includes('seq === state.refreshFeedbackSeq')));
+           ok('inline script source syntax valid',()=>{for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))if(m[1].trim())new vm.Script(m[1]);});
+           await aok('LINE current success returns success',async()=>{let h=harness(),p=h.load();h.finish('demo_photo_line_001','A');assert.equal(await p,'success');assert.equal(h.state.customer.customer_name,'A');});
+           await aok('token success skips profile and returns success',async()=>{let h=harness('token','token-01'),p=h.load();assert.equal(h.calls.length,1);h.finish('token-01','T');assert.equal(await p,'success');});
+           await aok('network failure returns failure',async()=>{let h=harness(),p=h.load();h.fail('demo_photo_line_001');assert.equal(await p,'failure');});
+           await aok('missing lookup returns missing without GET',async()=>{let h=harness();h.state.lookup={line_user_id:'',public_token:''};assert.equal(await h.load(),'missing');assert.equal(h.calls.length,0);});
+           await aok('stale completed GET returns stale',async()=>{let h=harness(),p=h.load();swap(h,'demo_photo_line_002');let q=h.load();h.finish('demo_photo_line_002','B');assert.equal(await q,'success');h.finish('demo_photo_line_001','A');assert.equal(await p,'stale');assert.equal(h.state.customer.customer_name,'B');});
+           await aok('stale failed GET returns stale',async()=>{let h=harness(),p=h.load();swap(h,'demo_photo_line_002');let q=h.load();h.finish('demo_photo_line_002','B');await q;h.fail('demo_photo_line_001');assert.equal(await p,'stale');});
+           await aok('A to B to A only latest success',async()=>{let h=harness(),a=h.load();swap(h,'demo_photo_line_002');let b=h.load();swap(h,'demo_photo_line_001');let c=h.load();const newest=h.calls.slice(-2);for(let x of newest){x.d.settled=true;x.d.resolve(x.path.includes('/profile')?{customer:{}}:{customer:{customer_name:'newA'},reservations:[]})}assert.equal(await c,'success');h.finish('demo_photo_line_002','B');assert.equal(await b,'stale');const oldest=h.calls.slice(0,2);for(let x of oldest){x.d.settled=true;x.d.resolve(x.path.includes('/profile')?{customer:{}}:{customer:{customer_name:'oldA'},reservations:[]})}assert.equal(await a,'stale');assert.equal(h.state.customer.customer_name,'newA');});
+           await aok('success persists then renders then scrubs',async()=>{let h=harness(),p=h.load();h.finish('demo_photo_line_001','A');await p;let e=h.effects;assert(e.indexOf('persist')<e.indexOf('render')&&e.indexOf('render')<e.indexOf('scrub'));});
+           await aok('failed response never scrubs',async()=>{let h=harness(),p=h.load();h.fail('demo_photo_line_001');await p;assert(!h.effects.includes('scrub'));});
+           await aok('silent refresh never activates blocking loader',async()=>{let h=harness(),p=h.load({silent:true});h.finish('demo_photo_line_001','A');await p;assert(!h.effects.includes('loading-on'));});
+           await aok('non-silent refresh activates and releases loader',async()=>{let h=harness(),p=h.load();h.finish('demo_photo_line_001','A');await p;assert(h.effects.includes('loading-on')&&h.effects.includes('loading-off'));});
+           await aok('button stays disabled until success resolves',async()=>{let h=harness(),p=h.refresh();assert(h.els.refreshButton.disabled);assert.equal(h.els.refreshButton.textContent,'更新中…');h.finish('demo_photo_line_001','A');await p;assert(!h.els.refreshButton.disabled);});
+           await aok('button displays success only when read success',async()=>{let h=harness(),p=h.refresh();h.finish('demo_photo_line_001','A');await p;assert.equal(h.els.refreshButton.textContent,'更新しました');});
+           await aok('button displays retry after rejected read',async()=>{let h=harness(),p=h.refresh();h.fail('demo_photo_line_001');await p;assert.equal(h.els.refreshButton.textContent,'再試行');});
+           await aok('successful feedback returns to update after timeout',async()=>{let h=harness(),p=h.refresh();h.finish('demo_photo_line_001','A');await p;h.tick();assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('failure feedback returns to update after timeout',async()=>{let h=harness(),p=h.refresh();h.fail('demo_photo_line_001');await p;h.tick();assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('stale refresh does not claim success',async()=>{let h=harness(),p=h.refresh();swap(h,'demo_photo_line_002');h.finish('demo_photo_line_001','A');await p;assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('missing lookup does not claim success',async()=>{let h=harness();h.state.lookup={line_user_id:'',public_token:''};await h.refresh();assert.equal(h.els.refreshButton.textContent,'更新');});
+           await aok('double click does not start second fetch',async()=>{let h=harness(),p=h.refresh();await h.refresh();assert.equal(h.calls.length,2);h.finish('demo_photo_line_001','A');await p;});
+           await aok('request submission prevents refresh',async()=>{let h=harness();h.state.requestSubmitting=true;await h.refresh();assert.equal(h.calls.length,0);});
+           await aok('old success timer cannot overwrite later in-progress refresh',async()=>{let h=harness(),p=h.refresh();h.finish('demo_photo_line_001','A');await p;assert.equal(h.timers.length,1);let q=h.refresh();assert(h.els.refreshButton.disabled);h.tick();assert.equal(h.els.refreshButton.textContent,'更新中…');h.finish('demo_photo_line_001','B');await q;assert.equal(h.els.refreshButton.textContent,'更新しました');});
+           await aok('retry succeeds after earlier error',async()=>{let h=harness(),p=h.refresh();h.fail('demo_photo_line_001');await p;assert.equal(h.els.refreshButton.textContent,'再試行');let q=h.refresh();h.finish('demo_photo_line_001','fixed');await q;assert.equal(h.state.customer.customer_name,'fixed');assert.equal(h.els.refreshButton.textContent,'更新しました');});
+           ok('no user credentials embedded in check names',()=>assert(checks.every(x=>!x.includes('demo_photo_line')&&!x.includes('token-01'))));
+           const report={product:'DPRO PHOTO',standard:'R17 MEMBER READ RESULT AND REFRESH FEEDBACK',mode:'OFFLINE_BROWSER_VM',counts:{passed:checks.length,failed:0},checks,productionReady:false,liveRequests:0,dbMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R17.json',JSON.stringify(report,null,2)+'\n');
+           console.log(`DPRO PHOTO R17 ${checks.length} PASS 0 FAIL`);
+          })().catch(e=>{console.error('R17 REGRESSION FAILURE',e?.stack||String(e));process.exitCode=1});
+          NODE_R17
+      - name: R18 modal context regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE_R18'
+          'use strict';
+          const fs=require('node:fs'),assert=require('node:assert/strict'),vm=require('node:vm');
+          const source=fs.readFileSync('member.html','utf8'),passed=[];
+          const ok=(name,fn)=>{fn();passed.push(name)};
+          const aok=async(name,fn)=>{await fn();passed.push(name)};
+          const part=(a,b)=>{const start=source.indexOf(a),end=source.indexOf(b,start+a.length);assert(start>=0&&end>start,'R18 expected code block not found: '+a);return source.slice(start,end)};
+          const modal=part('      function closeRequestModal(force = false) {','      function reservationAuthPayload(');
+          const submit=part('      async function submitRequest() {','      // DPRO-PHOTO-R12-');
+          const reset=part('      function resetMemberLookup() {','      // DPRO-PHOTO-R14-');
+          const token=part('        els.openMemberButton.addEventListener("click", async () => {','        els.anotherReservationButton.addEventListener(');
+          const demo=part('      async function useDemoPerson(lineUserId) {','      function bindStaticEvents() {');
+          const load=part('      async function loadMember(options = {}) {','      /* DPRO-PHOTO-MEMBER-DEMO-SESSION');
+          function env(opts={}){
+           const reserve={id:'11111111-1111-4111-8111-111111111111',reservation_no:'PUBLIC-1',public_token:'token-a',reservation_status:'confirmed'};
+           const state={lookup:{line_user_id:'line-a',public_token:''},loadedLookup:{line_user_id:'line-a',public_token:''},reservations:[reserve],modalReservation:reserve,modalMode:'contact',requestSubmitting:false,busy:false,memberLoadSeq:2,customer:{customer_name:'A'},profile:{},selectedReservationId:reserve.id,refreshFeedbackSeq:0, ...opts};
+           const modalClasses=new Set(['open']),actions=[],stored=[],handlers={};
+           const node=()=>({value:'typed-private-draft',textContent:'',hidden:false,style:{},classList:{contains:(k)=>modalClasses.has(k),add:k=>modalClasses.add(k),remove:k=>modalClasses.delete(k)}});
+           const els={requestModal:node(),requestNote:node(),publicTokenInput:{value:'token-b'},memberArea:{hidden:false},accessSection:{scrollIntoView:()=>actions.push('scroll')},openMemberButton:{addEventListener:(event,fn)=>handlers.open=fn}};
+           const C={normalizeWhitespace:x=>String(x).trim(),ENDPOINTS:{PUBLIC_CHANGE_REQUEST:'change',PUBLIC_CANCEL_REQUEST:'cancel',PUBLIC_REORDER_REQUEST:'reorder',PUBLIC_CONTACT:'contact'},STORAGE_KEYS:{LINE_USER_ID:'l',PUBLIC_TOKEN:'p'},clearSessionToken:()=>actions.push('clearSession'),removeStoredValue:x=>stored.push(x),apiPost:async()=>{actions.push('post');return {message:'sent'};}};
+           const context={state,els,C,location:{href:'https://example.org/member.html?public_token=secret'},URL,history:{replaceState:()=>actions.push('history')},setLoading:x=>actions.push(x?'loading-on':'loading-off'),setAccessMode:x=>actions.push('access-'+x),closeRequestModal:null,refreshMemberSessionForRequest:async()=>actions.push('auth'),reservationAuthPayload:r=>({public_token:r.public_token}),clearRequestDraft:()=>actions.push('clearDraft'),loadMember:async()=>actions.push('reload'),showToast:msg=>actions.push('toast'),errorMessage:e=>e?.message||'',setFieldError(){},setTimeout(){},console};
+           context.els.requestModal.classList.contains=k=>modalClasses.has(k);
+           vm.createContext(context);
+           vm.runInContext(modal+'\n'+submit+'\n'+reset+'\n globalThis.test={close:closeRequestModal,discard:discardRequestModalForIdentityChange,submit:submitRequest,reset:resetMemberLookup};',context);
+           return {state,els,modalClasses,actions,stored,reserve,context,handlers};
+          }
+          (async()=>{
+           ok('R18 marker once',()=>assert.equal(source.split('DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION-20261010').length-1,1));
+           for(const [label,mark] of [['R6','DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6'],['R12','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD'],['R14','DPRO-PHOTO-R14-MEMBER-LOADING'],['R15','DPRO-PHOTO-R15-MEMBER-REQUEST'],['R16','DPRO-PHOTO-R16-EXCLUSIVE'],['R17','DPRO-PHOTO-R17-MEMBER-REFRESH']]) ok('earlier '+label+' marker retained',()=>assert(source.includes(mark)));
+           ok('referrer policy preserved',()=>assert(source.includes('content="no-referrer"')));
+           ok('request helper is after existing modal close',()=>assert(modal.indexOf('function discardRequestModalForIdentityChange')>modal.indexOf('function closeRequestModal')));
+           ok('helper never clears draft storage',()=>assert(!modal.includes('clearRequestDraft(')&&!modal.includes('sessionStorage.')));
+           ok('helper preserves in-flight writes',()=>assert(modal.includes('if (state.requestSubmitting) return false;')));
+           ok('reset modal before identity erase',()=>assert(reset.indexOf('discardRequestModalForIdentityChange')<reset.indexOf('state.lookup =')));
+           ok('reset still clears session token',()=>assert(reset.includes('C.clearSessionToken("member")')));
+           ok('reset still invalidates unfinished reads',()=>assert(reset.includes('++state.memberLoadSeq')));
+           ok('demo switch closes old modal',()=>assert(demo.includes('discardRequestModalForIdentityChange()')));
+           ok('demo switch keeps R14 invalidation',()=>assert(demo.includes('++state.memberLoadSeq')));
+           ok('token switch closes only when identity different',()=>assert(token.indexOf('if (state.lookup.public_token !== token')<token.indexOf('discardRequestModalForIdentityChange()')));
+           ok('member async identity switch closes old modal',()=>assert(load.includes('discardRequestModalForIdentityChange()')));
+           ok('member stale result remains guarded',()=>assert(load.includes('if (!isCurrent()) return "stale"')));
+           ok('request uses current reservation membership',()=>assert(submit.includes('state.reservations.find')));
+           ok('request uses latest loaded lookup',()=>assert(submit.includes('state.loadedLookup')));
+           ok('request validates both identity components',()=>assert(submit.includes('currentLoaded.line_user_id')&&submit.includes('currentLoaded.public_token')));
+           ok('request does not POST before context check',()=>assert(submit.indexOf('if (!currentReservation ||')<submit.indexOf('const auth =')));
+           ok('request rejects old reservation number',()=>assert(submit.includes('item.reservation_no')));
+           ok('request status checks current record',()=>assert(submit.includes('const currentStatus = currentReservation.reservation_status')));
+           ok('request retains R15 after-auth guard',()=>assert(submit.includes('if (!isOriginalContext()) return;')));
+           ok('request retains R15 same-captured-mode cleanup',()=>assert(submit.includes('clearRequestDraft(mode, reservation)')));
+           ok('embedded scripts pass JS parse',()=>{for(const m of source.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) if(m[1].trim())new vm.Script(m[1]);});
+           await aok('discard closes old modal on identity change',async()=>{let h=env();assert.equal(h.context.test.discard(),true);assert(!h.modalClasses.has('open'));assert.equal(h.state.modalReservation,null);});
+           await aok('discard empties visible note',async()=>{let h=env();h.context.test.discard();assert.equal(h.els.requestNote.value,'');});
+           await aok('discard preserves old draft',async()=>{let h=env();h.context.test.discard();assert(!h.actions.includes('clearDraft'));});
+           await aok('discard blocked during send',async()=>{let h=env({requestSubmitting:true});assert.equal(h.context.test.discard(),false);assert(h.modalClasses.has('open'));assert.equal(h.els.requestNote.value,'typed-private-draft');});
+           await aok('normal reset closes old dialog',async()=>{let h=env();h.context.test.reset();assert(!h.modalClasses.has('open'));assert.equal(h.state.lookup.line_user_id,'');assert(h.actions.includes('clearSession'));});
+           await aok('reset does not erase stored draft',async()=>{let h=env();h.context.test.reset();assert(!h.actions.includes('clearDraft'));});
+           await aok('reset leaves no visible profile',async()=>{let h=env();h.context.test.reset();assert.equal(h.state.reservations.length,0);assert(h.els.memberArea.hidden);});
+           await aok('reset refuses while POST in flight',async()=>{let h=env({requestSubmitting:true});h.context.test.reset();assert(h.modalClasses.has('open'));assert.equal(h.state.lookup.line_user_id,'line-a');});
+           await aok('old reservation no longer loaded => no POST',async()=>{let h=env({reservations:[]});await h.context.test.submit();assert(!h.actions.includes('post'));assert(!h.modalClasses.has('open'));});
+           await aok('old id with new reservation number => no POST',async()=>{let h=env();h.state.reservations=[{...h.reserve,reservation_no:'NEW-1'}];await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('loaded member identity mismatch => no POST',async()=>{let h=env({loadedLookup:{line_user_id:'line-b',public_token:''}});await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('missing loaded member => no POST',async()=>{let h=env({loadedLookup:null});await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('token identity mismatch => no POST',async()=>{let h=env({lookup:{line_user_id:'',public_token:'token-a'},loadedLookup:{line_user_id:'',public_token:'token-b'}});await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('valid loaded member contact posts only once',async()=>{let h=env();await h.context.test.submit();assert.equal(h.actions.filter(x=>x==='post').length,1);});
+           await aok('valid send still clears draft after success',async()=>{let h=env();await h.context.test.submit();assert(h.actions.indexOf('post')<h.actions.indexOf('clearDraft'));});
+           await aok('valid send still refetches member',async()=>{let h=env();await h.context.test.submit();assert(h.actions.includes('reload'));});
+           await aok('valid send closes modal after success',async()=>{let h=env();await h.context.test.submit();assert(!h.modalClasses.has('open'));});
+           await aok('loaded new status blocks duplicate change',async()=>{let h=env({modalMode:'change'});h.state.reservations=[{...h.reserve,reservation_status:'change_requested'}];await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('loaded new status blocks duplicate cancel',async()=>{let h=env({modalMode:'cancel'});h.state.reservations=[{...h.reserve,reservation_status:'cancel_requested'}];await h.context.test.submit();assert(!h.actions.includes('post'));});
+           await aok('submission lock prevents new POST',async()=>{let h=env({requestSubmitting:true});await h.context.test.submit();assert(!h.actions.includes('post'));});
+           ok('no real tokens in test report names',()=>assert(passed.every(v=>!v.includes('token-a')&&!v.includes('line-a'))));
+           const report={product:'DPRO PHOTO',gate:'R18 MEMBER REQUEST MODAL CONTEXT ISOLATION',mode:'OFFLINE_BROWSER_VM_SYNTHETIC',counts:{passed:passed.length,failed:0},checks:passed,productionReady:false,realApiRequests:0,reservationMutations:0,customerMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R18.json',JSON.stringify(report,null,2)+'\n');console.log(`DPRO PHOTO R18 ${passed.length} PASS 0 FAIL`);
+          })().catch(e=>{console.error('R18 REGRESSION FAILURE:',String(e?.stack||e));process.exitCode=1;});
+          NODE_R18
+      - name: R19 current reservation regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE_R19'
+          'use strict';
+          const fs=require('node:fs'), assert=require('node:assert/strict'), vm=require('node:vm');
+          const file=process.env.R19_HTML||'member.html';
+          const html=fs.readFileSync(file,'utf8');
+          const marker='DPRO-PHOTO-R19-MEMBER-MODAL-LIVE-RESERVATION-RECONCILE-20261010';
+          const checks=[];
+          function ok(label,cb){cb();checks.push(label);}
+          function chunk(start,end){const i=html.indexOf(start),j=html.indexOf(end,i+start.length);assert(i!==-1&&j>i,'Missing code boundary '+start);return html.slice(i,j);}
+          const inline=[...html.matchAll(/<script\s*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
+          ok('inline application JS syntax',()=>{assert(inline.length>=1);for(const script of inline)new vm.Script(script)});
+          ok('R19 marker exactly once',()=>assert.equal(html.split(marker).length-1,1));
+          for(const m of ['DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD','DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION','DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK','DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY','DPRO-PHOTO-R17-MEMBER-REFRESH-TRUTHFUL-STATUS','DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION']){
+           ok('retains '+m,()=>assert(html.includes(m)));
+          }
+          ok('R19 called on successful currently scoped member load',()=>assert(html.includes('state.loadedLookup = { ...lookup };\n          reconcileRequestModalAfterMemberRefresh();\n          persistLookup();')));
+          ok('R19 closes request editor on failed current read',()=>assert(html.includes('discardRequestModalForIdentityChange(); // R19: keep drafts, close editor after current read failure.')));
+          ok('R19 closes editor for missing identity',()=>assert(html.includes('discardRequestModalForIdentityChange(); // R19: empty lookup cannot retain a visible request.')));
+          ok('R19 does not modify existing draft storage logic',()=>assert(html.includes('sessionStorage.setItem(key, text)')&&html.includes('sessionStorage.getItem(key)')));
+          ok('R19 request submission still requires loaded lookup',()=>assert(html.includes('const currentLoaded = state.loadedLookup;')&&html.includes('const currentReservation = state.reservations.find')));
+          ok('R19 tests current reservation id and reference',()=>assert(html.includes('String(item?.reservation_no || "") === String(previous?.reservation_no || "")')));
+          ok('R19 checks change/cancel status eligibility',()=>assert(html.includes('!canRequestChange(fresh)')&&html.includes('!canRequestCancel(fresh)')));
+          ok('R19 does not POST in patch',()=>assert(!chunk('// '+marker,'function reservationAuthPayload(').includes('apiPost(')));
+          const funcs=chunk('      function closeRequestModal(force = false) {','      function reservationAuthPayload(reservation) {');
+          const loading=chunk('      // DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION-20261010','      /* DPRO-PHOTO-MEMBER-DEMO-SESSION-REFRESH-V1');
+          const row=(status='reserved',suffix='')=>({id:'11111111-1111-4111-8111-111111111111',reservation_no:'R-0001',reservation_status:status,start_at:'2090-10-25T10:00:00+09:00',...suffix});
+          function createHarness(options={}){
+           const counters={closed:0,persist:0,render:0,toast:0,loading:0};
+           const state={lookup:{line_user_id:'demo_photo_line_001',public_token:''},memberLoadSeq:0,requestSubmitting:false,modalMode:'',modalReservation:null,reservations:[],loadedLookup:{line_user_id:'demo_photo_line_001',public_token:''},selectedReservationId:'',profile:null,customer:null};
+           const els={requestModal:{classList:{remove:(s)=>{assert.equal(s,'open');counters.closed++}}},requestNote:{value:'keep draft'},memberArea:{hidden:false}};
+           const pending=[];let api=options.api||(()=>({customer:{customer_name:'Synthetic'},reservations:[row()]}));
+           const ctx={state,els,URL,location:{href:'https://example.test/member.html?demo=1'},
+            C:{ENDPOINTS:{MEMBER_RESERVATIONS:'list',MEMBER_PROFILE:'profile'},apiGet:(endpoint,q)=>{
+             if(endpoint==='profile')return Promise.resolve({found:true,customer:null,subjects:[]});
+             return api(endpoint,q);
+            }},
+            canRequestChange:f=>['reserved','confirmed'].includes(f.reservation_status),
+            canRequestCancel:f=>['reserved','confirmed','change_requested'].includes(f.reservation_status),
+            setAccessMode:()=>{},setLoading:()=>{counters.loading++;},persistLookup:()=>{counters.persist++},renderAll:()=>{counters.render++},setSection:()=>{},scrubMemberQueryFromAddressBar:()=>{},showToast:()=>{counters.toast++},errorMessage:e=>e.message,
+            console,Promise,
+           };
+           vm.createContext(ctx);
+           vm.runInContext(funcs+'\n'+loading+'\n globalThis.r19_reconcile=reconcileRequestModalAfterMemberRefresh; globalThis.r19_load=loadMember;',ctx);
+           return {ctx,state,els,counters,setApi:f=>api=f,run:()=>ctx.r19_reconcile(),load:(o)=>ctx.r19_load(o),pending};
+          }
+          function scenario(name,setup,assertFn){const h=createHarness();setup(h);const r=h.run();assertFn(h,r);checks.push(name);}
+          scenario('no dialog: no change',h=>{},(h,r)=>{assert.equal(r,'unchanged');assert.equal(h.counters.closed,0)});
+          scenario('sending: dialog cannot be replaced',h=>{h.state.requestSubmitting=true;h.state.modalReservation=row();},(h,r)=>{assert.equal(r,'unchanged');assert.equal(h.counters.closed,0)});
+          scenario('same matching reservation keeps modal',h=>{h.state.modalMode='contact';h.state.modalReservation=row();h.state.reservations=[row()];},(h,r)=>{assert.equal(r,'current');assert.equal(h.counters.closed,0);assert.equal(h.els.requestNote.value,'keep draft')});
+          scenario('same reservation uses refreshed object',h=>{h.state.modalMode='contact';h.state.modalReservation=row();h.state.reservations=[{...row(),post_status:'delivery'}];},(h,r)=>{assert.equal(r,'current');assert.strictEqual(h.state.modalReservation,h.state.reservations[0]);});
+          scenario('change still allowed when reserved',h=>{h.state.modalMode='change';h.state.modalReservation=row();h.state.reservations=[row('reserved')];},(h,r)=>assert.equal(r,'current'));
+          scenario('change still allowed when confirmed',h=>{h.state.modalMode='change';h.state.modalReservation=row();h.state.reservations=[row('confirmed')];},(h,r)=>assert.equal(r,'current'));
+          scenario('cancel allowed when reserved',h=>{h.state.modalMode='cancel';h.state.modalReservation=row();h.state.reservations=[row('reserved')];},(h,r)=>assert.equal(r,'current'));
+          scenario('cancel allowed when change requested',h=>{h.state.modalMode='cancel';h.state.modalReservation=row();h.state.reservations=[row('change_requested')];},(h,r)=>assert.equal(r,'current'));
+          scenario('contact allowed with cancelled reservation still present',h=>{h.state.modalMode='contact';h.state.modalReservation=row();h.state.reservations=[row('cancelled')];},(h,r)=>assert.equal(r,'current'));
+          scenario('reorder does not assume status restrictions',h=>{h.state.modalMode='reorder';h.state.modalReservation=row();h.state.reservations=[row('completed')];},(h,r)=>assert.equal(r,'current'));
+          scenario('missing reservation closes modal',h=>{h.state.modalMode='contact';h.state.modalReservation=row();h.state.reservations=[];},(h,r)=>{assert.equal(r,'closed');assert.equal(h.counters.closed,1);assert.equal(h.els.requestNote.value,'')});
+          scenario('same id but different reservation number closes modal',h=>{h.state.modalMode='contact';h.state.modalReservation=row();h.state.reservations=[{...row(),reservation_no:'R-9999'}];},(h,r)=>assert.equal(r,'closed'));
+          scenario('same reservation number but different id closes modal',h=>{h.state.modalMode='contact';h.state.modalReservation=row();h.state.reservations=[{...row(),id:'22222222-2222-4222-8222-222222222222'}];},(h,r)=>assert.equal(r,'closed'));
+          scenario('change requested already closes change editor',h=>{h.state.modalMode='change';h.state.modalReservation=row();h.state.reservations=[row('change_requested')];},(h,r)=>assert.equal(r,'closed'));
+          scenario('cancel requested already closes cancel editor',h=>{h.state.modalMode='cancel';h.state.modalReservation=row();h.state.reservations=[row('cancel_requested')];},(h,r)=>assert.equal(r,'closed'));
+          scenario('canceled booking closes change editor',h=>{h.state.modalMode='change';h.state.modalReservation=row();h.state.reservations=[row('cancelled')];},(h,r)=>assert.equal(r,'closed'));
+          scenario('canceled booking closes cancel editor',h=>{h.state.modalMode='cancel';h.state.modalReservation=row();h.state.reservations=[row('cancelled')];},(h,r)=>assert.equal(r,'closed'));
+          scenario('all closed dialogs clear visible textarea',h=>{h.state.modalMode='cancel';h.state.modalReservation=row();h.state.reservations=[];h.els.requestNote.value='unsent private note';},(h,r)=>{assert.equal(h.els.requestNote.value,'');assert.equal(h.state.modalReservation,null);assert.equal(h.state.modalMode,'')});
+          scenario('no closing writes session draft storage',h=>{h.state.modalMode='contact';h.state.modalReservation=row();h.state.reservations=[];},(h,r)=>assert.equal(h.counters.closed,1));
+          (async()=>{
+           const h=createHarness();h.state.modalReservation=row();h.state.modalMode='contact';h.setApi(()=>Promise.resolve({customer:{},reservations:[]}));
+           ok('setup a modal before read',()=>assert(h.state.modalReservation));
+           const r=await h.load({silent:true});ok('fresh successful lookup returns success',()=>assert.equal(r,'success'));
+           ok('fresh lookup removes missing reservation modal',()=>{assert.equal(h.state.modalReservation,null);assert.equal(h.counters.closed,1)});
+           ok('fresh lookup retains empty safe reservation list',()=>assert.equal(h.state.reservations.length,0));
+           ok('fresh lookup renders once only',()=>assert.equal(h.counters.render,1));
+           const h2=createHarness();h2.state.modalMode='contact';h2.state.modalReservation=row();h2.setApi(()=>Promise.reject(new Error('Synthetic API offline')));
+           const err=await h2.load({silent:true});ok('failure returns failure',()=>assert.equal(err,'failure'));
+           ok('current failure closes outdated modal',()=>assert.equal(h2.state.modalReservation,null));
+           ok('failure clears current loaded identity',()=>assert.equal(h2.state.loadedLookup,null));
+           ok('failure does not clear request draft',()=>assert.equal(h2.counters.closed,1));
+           const h3=createHarness();h3.state.lookup={line_user_id:'',public_token:''};h3.state.modalMode='contact';h3.state.modalReservation=row();
+           const no=await h3.load({silent:true});ok('missing identity returns missing',()=>assert.equal(no,'missing'));
+           ok('missing identity closes modal',()=>assert.equal(h3.state.modalReservation,null));
+           const h4=createHarness();h4.state.modalMode='change';h4.state.modalReservation=row();h4.setApi(()=>Promise.resolve({customer:{},reservations:[row('change_requested')]}));
+           const newRead=await h4.load({silent:true});ok('refreshed status response success',()=>assert.equal(newRead,'success'));
+           ok('status-change closes former change editor',()=>assert.equal(h4.state.modalReservation,null));
+           const h5=createHarness();h5.state.modalMode='contact';h5.state.modalReservation=row();h5.setApi(()=>Promise.resolve({customer:{},reservations:[{...row(),post_status:'selected'}]}));
+           const same=await h5.load({silent:true});ok('same reservation still returns success',()=>assert.equal(same,'success'));
+           ok('same reservation keeps note unchanged',()=>assert.equal(h5.els.requestNote.value,'keep draft'));
+           ok('same reservation points at fresh object',()=>assert.equal(h5.state.modalReservation.post_status,'selected'));
+           const h6=createHarness();h6.state.modalMode='contact';h6.state.modalReservation=row();let finish;
+           h6.setApi(()=>new Promise(resolve=>{finish=resolve}));const old=h6.load({silent:true});
+           const cur=h6.state.memberLoadSeq;h6.state.memberLoadSeq++;
+           finish({customer:{},reservations:[]});const stale=await old;
+           ok('stale response discarded',()=>assert.equal(stale,'stale'));
+           ok('stale response never closes active modal',()=>assert.equal(h6.counters.closed,0));
+           ok('stale response does not render',()=>assert.equal(h6.counters.render,0));
+           const report={product:'DPRO PHOTO',gate:'R19 MODAL VS LIVE RESERVATIONS ON REFRESH',mode:'OFFLINE_SYNTHETIC_VM',checks,counts:{passed:checks.length,failed:0},productionReady:false,actualApiGET:0,bookingWrites:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R19.json',JSON.stringify(report,null,2)+'\n');
+           console.log(`DPRO PHOTO R19 ${checks.length} PASS 0 FAIL`);
+          })().catch(e=>{console.error('R19 TEST FAILURE',e.stack||String(e));process.exitCode=1});
+          NODE_R19
+      - name: R20 close event lock regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE_R20'
+          "use strict";
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const html=fs.readFileSync('member.html','utf8'),checks=[];
+          const check=(name,fn)=>{fn();checks.push(name)};
+          const start=html.indexOf('      function closeRequestModal(force = false) {');
+          const end=html.indexOf('      // DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION-',start);
+          const handlerStart=html.indexOf("        $$('[data-close-modal]').forEach(");
+          const handlerEnd=html.indexOf('\n',handlerStart);
+          assert(start>0&&end>start&&handlerStart>0&&handlerEnd>handlerStart);
+          const closeCode=html.slice(start,end),registerCode=html.slice(handlerStart,handlerEnd);
+          function makeEnv(sending=false){
+           const classes=new Set(['open']),events=[],btns=[0,1,2].map(i=>({addEventListener(type,fn){events.push({i,type,fn})}}));
+           const els={requestModal:{classList:{remove:x=>classes.delete(x)}},requestNote:{value:'draft remains'}};
+           const state={requestSubmitting:sending,modalMode:'contact',modalReservation:{id:'reservation-safe'}};
+           const context={state,els, $$:(selector)=>{assert.equal(selector,'[data-close-modal]');return btns}, console};
+           vm.createContext(context);
+           vm.runInContext(closeCode+'\n'+registerCode+'\nglobalThis.closeTest=closeRequestModal;',context);
+           return {state,els,classes,events,close:context.closeTest};
+          }
+          (async()=>{
+           check('R20 marker exactly one',()=>assert.equal(html.split('DPRO-PHOTO-R20-MEMBER-REQUEST-CLOSE-EVENT-SAFETY-20261010').length-1,1));
+           check('R20 explicit boolean true only',()=>assert(closeCode.includes('force !== true')));
+           check('R20 event handler closure',()=>assert(registerCode.includes('"click", () => closeRequestModal()')));
+           check('R20 no bare function reference',()=>assert(!registerCode.includes('"click", closeRequestModal)')));
+           check('R20 normal modal close existing',()=>assert(closeCode.includes('state.modalReservation = null')));
+           check('R20 normal modal mode reset',()=>assert(closeCode.includes('state.modalMode = ""')));
+           check('R20 old draft preservation',()=>assert(!closeCode.includes('clearRequestDraft')&&!closeCode.includes('sessionStorage')));
+           for(const [version,m] of [['R6','DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6'],['R12','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD'],['R14','DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION'],['R15','DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK'],['R16','DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY'],['R17','DPRO-PHOTO-R17-MEMBER-REFRESH'],['R18','DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION'],['R19','DPRO-PHOTO-R19-MEMBER-MODAL-LIVE-RESERVATION-RECONCILE']])
+             check('earlier guard '+version,()=>assert(html.includes(m)));
+           check('referrer policy preserved',()=>assert(html.includes('content="no-referrer"')));
+           check('R15 submit lock preserved',()=>assert(html.includes('if (state.busy || state.requestSubmitting || !state.modalReservation) return;')));
+           check('R18 identity helper still forces close',()=>assert(html.includes('closeRequestModal(true);')));
+           check('R19 reconciliation preserved',()=>assert(html.includes('reconcileRequestModalAfterMemberRefresh();')));
+           check('only permitted forced close callsites',()=>{
+            const hits=(html.match(/closeRequestModal\(true\)/g)||[]).length;
+            assert.equal(hits,2);
+           });
+           check('three close buttons registered',()=>assert.equal(makeEnv().events.length,3));
+           check('all callbacks click type',()=>assert(makeEnv().events.every(x=>x.type==='click')));
+           for(const i of [0,1,2]) check('button '+i+' cannot close while submitting',()=>{const h=makeEnv(true);h.events[i].fn({type:'click',force:true});assert(h.classes.has('open'));assert(h.state.modalReservation);assert.equal(h.els.requestNote.value,'draft remains')});
+           check('direct event object rejected by close function',()=>{let h=makeEnv(true);h.close({type:'click'});assert(h.classes.has('open'))});
+           check('direct truthy string force rejected',()=>{let h=makeEnv(true);h.close('true');assert(h.classes.has('open'))});
+           check('explicit forced close remains for R18 identity change',()=>{let h=makeEnv(true);h.close(true);assert(!h.classes.has('open'));assert.equal(h.state.modalReservation,null)});
+           for(const i of [0,1,2]) check('button '+i+' closes while idle',()=>{const h=makeEnv(false);h.events[i].fn({type:'click',force:true});assert(!h.classes.has('open'));assert.equal(h.state.modalMode,'');assert.equal(h.state.modalReservation,null)});
+           check('keyboard Escape existing safe adapter',()=>assert(html.includes('if (event.key === "Escape") closeRequestModal();')));
+           check('backdrop existing safe adapter',()=>assert(html.includes('if (event.target === els.requestModal) closeRequestModal();')));
+           check('member request submit still has context safety',()=>assert(html.includes('if (!isOriginalContext()) return;')));
+           check('member draft still identity scoped',()=>assert(html.includes('dpro_photo_member_request_v3:')));
+           check('all inline script syntax',()=>{for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))if(m[1].trim())new vm.Script(m[1])});
+           const report={product:'DPRO PHOTO',standard:'R20 REQUEST DIALOG CLICK EVENT FORCE LOCK',mode:'OFFLINE_BROWSER_VM',counts:{passed:checks.length,failed:0},checks,productionReady:false,apiRequests:0,customerMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R20.json',JSON.stringify(report,null,2)+'\n');
+           console.log('DPRO PHOTO R20 '+checks.length+' PASS 0 FAIL');
+          })().catch(e=>{console.error('R20 gate failure',e.stack||String(e));process.exitCode=1});
+          NODE_R20
+      - name: R21 editor lock synthetic browser regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE_R21'
+          "use strict";
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const html=fs.readFileSync('member.html','utf8'),checks=[];
+          const ok=(name,fn)=>{fn();checks.push(name)};
+          const aok=async(name,fn)=>{await fn();checks.push(name)};
+          function extract(a,b){const i=html.indexOf(a),j=html.indexOf(b,i+a.length);assert(i>=0&&j>i,'missing code source '+a);return html.slice(i,j)}
+          const submit=extract('      async function submitRequest() {','      // DPRO-PHOTO-R12-');
+          const input=extract('        els.requestNote.addEventListener("input",','        document.addEventListener("keydown",');
+          const deffer=()=>{let resolve,reject;const promise=new Promise((ok,no)=>{resolve=ok;reject=no});return {promise,resolve,reject}};
+          function fixture(opts={}) {
+           const row={id:'11111111-1111-4111-8111-111111111111',reservation_no:'R21-SYNTHETIC',reservation_status:'confirmed',public_token:'FAKE_SYNTHETIC'};
+           const auth=deffer(),post=deffer(),actions=[],events={};
+           const state={lookup:{line_user_id:'synthetic-a',public_token:''},loadedLookup:{line_user_id:'synthetic-a',public_token:''},reservations:[row],modalReservation:row,modalMode:'contact',requestSubmitting:false,busy:false,memberLoadSeq:2,...opts};
+           const note={value:'保護する入力途中の文章',readOnly:false,addEventListener:(t,fn)=>{events[t]=fn}};
+           const sel={value:'prints',disabled:false};
+           const submitButton={disabled:false};
+           const els={requestNote:note,requestTypeSelect:sel,submitRequestButton:submitButton};
+           const C={normalizeWhitespace:x=>String(x).trim(),ENDPOINTS:{PUBLIC_CHANGE_REQUEST:'change',PUBLIC_CANCEL_REQUEST:'cancel',PUBLIC_REORDER_REQUEST:'reorder',PUBLIC_CONTACT:'contact'},apiPost:async()=>{actions.push('POST');return post.promise}};
+           const context={state,els,C,refreshMemberSessionForRequest:async()=>{actions.push('AUTH');return auth.promise},reservationAuthPayload:()=>({reservation_no:row.reservation_no}),setLoading:shown=>{state.busy=shown;actions.push(shown?'loading+':'loading-')},showToast:x=>actions.push('TOAST'),clearRequestDraft:()=>actions.push('CLEAR_DRAFT'),closeRequestModal:()=>actions.push('CLOSE'),discardRequestModalForIdentityChange:()=>actions.push('DISCARD'),loadMember:async()=>actions.push('RELOAD'),errorMessage:e=>e?.message||String(e),saveRequestDraft:()=>actions.push('SAVE_DRAFT'),console};
+           vm.createContext(context);vm.runInContext(submit+'\n'+input+'\nglobalThis.r21_submit=submitRequest;',context);
+           return {row,state,note,sel,submitButton,events,actions,auth,post,send:()=>context.r21_submit()};
+          }
+          (async()=>{
+           ok('R21 marker appears exactly once',()=>assert.equal(html.split('DPRO-PHOTO-R21-MEMBER-REQUEST-EDITOR-INFLIGHT-LOCK-20261010').length-1,1));
+           ok('R20 close click safety retained',()=>assert(html.includes('DPRO-PHOTO-R20-MEMBER-REQUEST-CLOSE-EVENT-SAFETY')));
+           ok('R19 status reconciliation retained',()=>assert(html.includes('DPRO-PHOTO-R19-MEMBER-MODAL-LIVE-RESERVATION-RECONCILE')));
+           ok('R18 identity dialog safety retained',()=>assert(html.includes('DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION')));
+           ok('R17 truthful refresh retained',()=>assert(html.includes('DPRO-PHOTO-R17-MEMBER-REFRESH')));
+           ok('R16 exclusive lookup retained',()=>assert(html.includes('DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK')));
+           ok('R15 request identity lock retained',()=>assert(html.includes('DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK')));
+           ok('R14 async identity retained',()=>assert(html.includes('DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY')));
+           ok('R12 URL scrub retained',()=>assert(html.includes('DPRO-PHOTO-R12-MEMBER-URL-PRIVACY')));
+           ok('R6 scoped draft retained',()=>assert(html.includes('DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6')));
+           ok('no URL credential exposure added',()=>assert(html.includes('content="no-referrer"')));
+           ok('auth context recheck remains before POST',()=>assert(submit.indexOf('if (!isOriginalContext()) return;')<submit.indexOf('const result = await C.apiPost')));
+           ok('input guard prevents storage write while submitting',()=>assert(input.includes('if (!state.requestSubmitting) saveRequestDraft(')));
+           ok('no deliberate backend calls added by UI lock',()=>assert(!submit.includes('fetch(')));
+           ok('locks note before auth',()=>assert(submit.indexOf('els.requestNote.readOnly = true')<submit.indexOf('await refreshMemberSessionForRequest()')));
+           ok('unlocks note in finally',()=>assert(submit.indexOf('els.requestNote.readOnly = false')>submit.indexOf('} finally {')));
+           ok('lock select supports absent select fixture',()=>assert(submit.includes('if (els.requestTypeSelect) els.requestTypeSelect.disabled = true')));
+           ok('unlock select in finally',()=>assert(submit.includes('if (els.requestTypeSelect) els.requestTypeSelect.disabled = false')));
+           ok('lock submit while post pending',()=>assert(submit.includes('if (els.submitRequestButton) els.submitRequestButton.disabled = true')));
+           ok('unlock submit after post completion',()=>assert(submit.includes('if (els.submitRequestButton) els.submitRequestButton.disabled = false')));
+           ok('request note never erased by lock itself',()=>assert(!submit.includes('els.requestNote.value = ""')));
+           ok('R6 draft not purged in lock path',()=>assert(!submit.includes('sessionStorage.clear')));
+           ok('R20 close button callback stays safe',()=>assert(html.includes('"click", () => closeRequestModal()')));
+           ok('all inline script syntax valid',()=>{for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))if(m[1].trim())new vm.Script(m[1])});
+           const locked=h=>{assert.equal(h.state.requestSubmitting,true);assert.equal(h.note.readOnly,true);assert.equal(h.sel.disabled,true);assert.equal(h.submitButton.disabled,true)};
+           const unlocked=h=>{assert.equal(h.state.requestSubmitting,false);assert.equal(h.note.readOnly,false);assert.equal(h.sel.disabled,false);assert.equal(h.submitButton.disabled,false)};
+           await aok('before submit editor is editable',async()=>{const h=fixture();assert.equal(h.note.readOnly,false);assert.equal(h.sel.disabled,false);assert.equal(h.submitButton.disabled,false)});
+           await aok('form freezes before member authentication',async()=>{const h=fixture();const p=h.send();locked(h);h.auth.resolve();await Promise.resolve();h.post.resolve({message:'sent'});await p;unlocked(h)});
+           await aok('draft input handler rejects synthetic input during authentication',async()=>{const h=fixture();const p=h.send();h.events.input();assert(!h.actions.includes('SAVE_DRAFT'));h.auth.resolve();await Promise.resolve();h.post.resolve({});await p});
+           await aok('draft input handler accepts edits before sending',async()=>{const h=fixture();h.events.input();assert.equal(h.actions.filter(x=>x==='SAVE_DRAFT').length,1)});
+           await aok('draft input handler accepts edits after completed send',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();h.post.resolve({});await p;h.events.input();assert(h.actions.includes('SAVE_DRAFT'))});
+           await aok('note locked while POST in progress',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();locked(h);h.post.resolve({});await p});
+           await aok('successful submit sends once',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();h.post.resolve({});await p;assert.equal(h.actions.filter(x=>x==='POST').length,1)});
+           await aok('successful submit unlocks all editors',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();h.post.resolve({});await p;unlocked(h)});
+           await aok('successful submit clears only original draft after response',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();assert(!h.actions.includes('CLEAR_DRAFT'));h.post.resolve({});await p;assert(h.actions.indexOf('POST')<h.actions.indexOf('CLEAR_DRAFT'))});
+           await aok('successful submit preserves text until reply',async()=>{const h=fixture();const original=h.note.value;const p=h.send();locked(h);assert.equal(h.note.value,original);h.auth.resolve();await Promise.resolve();h.post.resolve({});await p});
+           await aok('success triggers UI reload after confirmation',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();h.post.resolve({});await p;assert(h.actions.includes('RELOAD'))});
+           await aok('auth rejection unlocks all form fields',async()=>{const h=fixture();const p=h.send();h.auth.reject(new Error('authorization failed'));await p;unlocked(h)});
+           await aok('auth rejection leaves unsent draft intact',async()=>{const h=fixture();const p=h.send();h.auth.reject(new Error('expired'));await p;assert.equal(h.note.value,'保護する入力途中の文章');assert(!h.actions.includes('CLEAR_DRAFT'))});
+           await aok('auth rejection must not POST',async()=>{const h=fixture();const p=h.send();h.auth.reject(new Error('expired'));await p;assert(!h.actions.includes('POST'))});
+           await aok('POST rejection unlocks all form fields',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();h.post.reject(new Error('network'));await p;unlocked(h)});
+           await aok('POST rejection preserves draft',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();h.post.reject(new Error('network'));await p;assert(!h.actions.includes('CLEAR_DRAFT'))});
+           await aok('POST rejection keeps modal open for retry',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();h.post.reject(new Error('network'));await p;assert(!h.actions.includes('CLOSE'))});
+           await aok('identity invalidation before POST results in no write',async()=>{const h=fixture();const p=h.send();h.state.memberLoadSeq++;h.auth.resolve();await p;unlocked(h);assert(!h.actions.includes('POST'))});
+           await aok('identity invalidation after POST does not clear draft',async()=>{const h=fixture();const p=h.send();h.auth.resolve();await Promise.resolve();h.state.memberLoadSeq++;h.post.resolve({});await p;unlocked(h);assert(!h.actions.includes('CLEAR_DRAFT'))});
+           await aok('duplicate submission prevented while waiting for auth',async()=>{const h=fixture();const a=h.send();await h.send();assert.equal(h.actions.filter(x=>x==='AUTH').length,1);h.auth.resolve();await Promise.resolve();h.post.resolve({});await a});
+           await aok('wrong loaded identity never locks editor',async()=>{const h=fixture({loadedLookup:{line_user_id:'different',public_token:''}});await h.send();unlocked(h);assert(!h.actions.includes('POST'))});
+           await aok('missing reservation does not lock editor',async()=>{const h=fixture({reservations:[]});await h.send();unlocked(h)});
+           await aok('already submitted change not sent',async()=>{const h=fixture({modalMode:'change',reservations:[{id:'11111111-1111-4111-8111-111111111111',reservation_no:'R21-SYNTHETIC',reservation_status:'change_requested'}]});await h.send();assert(!h.actions.includes('POST'));unlocked(h)});
+           await aok('reorder selection is captured before lock',async()=>{const h=fixture({modalMode:'reorder'});const p=h.send();locked(h);h.auth.resolve();await Promise.resolve();h.post.resolve({});await p;unlocked(h)});
+           ok('tests use only synthetic names',()=>assert(checks.every(x=>!x.includes('FAKE_SYNTHETIC'))));
+           const report={product:'DPRO PHOTO',gate:'R21 MEMBER REQUEST INFLIGHT EDITOR LOCK',mode:'OFFLINE_BROWSER_VM_SYNTHETIC',counts:{passed:checks.length,failed:0},checks,productionReady:false,liveApiGET:0,liveMutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R21.json',JSON.stringify(report,null,2)+'\n');
+           console.log('DPRO PHOTO R21 '+checks.length+' PASS 0 FAIL');
+          })().catch(e=>{console.error('R21 TEST FAILED',e.stack||String(e));process.exitCode=1});
+          NODE_R21
+      - name: Validate R17-R21 evidence and frontend only changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY_R21_VERIFY'
+          import json,subprocess
+          from pathlib import Path
+          wanted={'R17':41,'R18':49,'R19':55,'R20':36}
+          checked=0
+          for k,expected in wanted.items():
+           p=Path('DPRO_PHOTO_PRODUCT_GATE_'+k+'.json')
+           assert p.is_file(),f'R21 STOP missing {k} report'
+           r=json.loads(p.read_text('utf8'))
+           assert r['counts']['passed']==expected and r['counts']['failed']==0,f'R21 STOP {k} regression failure'
+           checked+=expected
+          r=json.loads(Path('DPRO_PHOTO_PRODUCT_GATE_R21.json').read_text('utf8'))
+          assert r['counts']['passed'] >= 45 and r['counts']['failed']==0
+          checked+=r['counts']['passed']
+          changed=subprocess.run(['git','diff','--name-only'],text=True,capture_output=True,check=True).stdout.strip().splitlines()
+          assert changed in [[],['member.html']],f'R21 STOP unexpected changed files {changed}'
+          print(f'R21 verified {checked} PASS / 0 FAIL; changed={changed}; no real API or DB mutations')
+          PY_R21_VERIFY
+      - name: Commit only verified member.html change
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- member.html; then echo 'R21 already applied; no commit'; exit 0; fi
+          test "$(git diff --name-only | wc -l)" -eq 1
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- member.html
+          git commit -m 'DPRO PHOTO R21 lock member request editor during pending send'
+          git push
+      - name: Archive R17-R21 synthetic QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R21
+          path: |
+            DPRO_PHOTO_PRODUCT_GATE_R17.json
+            DPRO_PHOTO_PRODUCT_GATE_R18.json
+            DPRO_PHOTO_PRODUCT_GATE_R19.json
+            DPRO_PHOTO_PRODUCT_GATE_R20.json
+            DPRO_PHOTO_PRODUCT_GATE_R21.json
+          if-no-files-found: warn
