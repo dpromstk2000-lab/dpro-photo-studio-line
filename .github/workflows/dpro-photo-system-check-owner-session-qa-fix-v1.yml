@@ -1,0 +1,79 @@
+name: DPRO PHOTO System Check Owner Session QA Fix V1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-system-check-owner-session-qa-fix-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dpro-photo-system-check-owner-session-qa-fix-v1
+  cancel-in-progress: false
+
+jobs:
+  patch-system-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Replace admin-code storage assumptions with owner session verification
+        shell: bash
+        run: |
+          python3 - <<'PYFIX'
+          from pathlib import Path
+          p=Path('system-check.html')
+          s=p.read_text(encoding='utf-8')
+          marker='DPRO-PHOTO-SYSTEM-CHECK-OWNER-SESSION-QA-FIX-V1-20261010'
+          if marker in s:
+              print('Already applied. No changes.')
+              raise SystemExit(0)
+          edits=[('      async function checkAdmin() {\n        const config = requireConfig();\n        const code = String(config.getAdminCode() || "").trim();\n        if (!code) return { state: "warn", detail: "管理コードが未設定です。上の認証欄から認証してください。", payload: { verified: false, reason: "ADMIN_CODE_REQUIRED" } };\n        const payload = await config.verifyAdminCode(code);\n        updateAuthState(true, "認証済み");\n        return { state: payload?.verified ? "ok" : "error", detail: payload?.verified ? "管理コード認証に成功しました。" : "管理コードを確認できませんでした。", payload };\n      }', '      /* DPRO-PHOTO-SYSTEM-CHECK-OWNER-SESSION-QA-FIX-V1-20261010 */\n      async function checkAdmin() {\n        const config = requireConfig();\n        if (!config.getSessionToken("owner")) return { state: "warn", detail: "管理者セッションがありません。上の認証欄から認証してください。", payload: { verified: false, reason: "OWNER_SESSION_REQUIRED" } };\n        const payload = await config.adminGet(config.ENDPOINTS.ADMIN_DASHBOARD);\n        if (!payload?.ok) throw new Error("管理セッションでダッシュボードAPIに接続できません。");\n        updateAuthState(true, "認証済み・管理セッション有効");\n        return { state: "ok", detail: "管理セッションによる認証と管理APIへの接続を確認しました。", payload: { verified: true, session_check: true } };\n      }'), ('if (!config.getAdminCode()) return { state: "warn", detail: "管理コード認証後に電話番号正規化を確認します。", payload: { skipped: true } };', 'if (!config.getSessionToken("owner")) return { state: "warn", detail: "管理者セッション認証後に電話番号正規化を確認します。", payload: { skipped: true } };'), ('if (!config.getAdminCode()) return { state: "warn", detail: "管理コード認証後に管理ダッシュボードを確認します。", payload: { skipped: true } };', 'if (!config.getSessionToken("owner")) return { state: "warn", detail: "管理者セッション認証後に管理ダッシュボードを確認します。", payload: { skipped: true } };'), ('updateAuthState(true, elements.persistCode.checked ? "認証済み・ブラウザ保存" : "認証済み・セッション保存");', 'updateAuthState(true, config.RUNTIME?.demoMode ? (elements.persistCode.checked ? "認証済み・デモ用ブラウザ保存" : "認証済み・デモ用セッション保存") : "認証済み・管理セッション有効");\n          if (!config.RUNTIME?.demoMode) elements.adminCode.value = "";'), ('if (code) updateAuthState(false, "保存済み・未検証");\n        else updateAuthState(false, "未確認");', 'if (code) updateAuthState(false, "デモ管理コード保存済み・未検証");\n        else if (config.getSessionToken("owner")) updateAuthState(false, "管理セッションあり・未検証");\n        else updateAuthState(false, "未確認");\n        elements.persistCode.disabled = !config.RUNTIME?.demoMode;\n        if (!config.RUNTIME?.demoMode) elements.persistCode.checked = false;'), ('通常はセッション中だけ保存します。「このブラウザに保存」を選んだ場合のみ、ブラウザを閉じた後も残ります。', '本番URLでは管理コード自体を保存せず、認証セッションだけを使用します。「このブラウザに保存」はデモURL専用です。'), ('          ? "デモURL：管理コードはセッションへ自動設定されています。"\n          : "通常URL：管理コードは自動設定されません。";', '          ? "デモURL：管理コードはセッションへ自動設定されています。"\n          : "本番URL：管理コードは保存せず、管理セッションで確認します。";')]
+          for n,(old,new) in enumerate(edits,1):
+              count=s.count(old)
+              if count!=1:
+                  raise SystemExit('QA STOP: unexpected system-check source anchor '+str(n)+' count='+str(count))
+              s=s.replace(old,new,1)
+          assert s.count(marker)==1
+          assert s.count('if (!config.getAdminCode())')==1  # Preserve demo-reset protection
+          assert 'config.getSessionToken("owner")' in s
+          p.write_text(s,encoding='utf-8')
+          print('Updated only system-check.html. config.js, API, database and live data unchanged.')
+          PYFIX
+      - name: Validate updated screen without running API mutations
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('system-check.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(x=>x[1]).filter(x=>x.trim());
+          if(!scripts.length)throw Error('No inline JavaScript');
+          scripts.forEach(js=>new Function(js));
+          for(const key of [
+            'DPRO-PHOTO-SYSTEM-CHECK-OWNER-SESSION-QA-FIX-V1-20261010',
+            'config.getSessionToken("owner")',
+            '認証済み・管理セッション有効',
+            'config.adminGet(config.ENDPOINTS.ADMIN_PHONE_NORMALIZE_CHECK)',
+            'config.adminGet(config.ENDPOINTS.ADMIN_DASHBOARD)',
+          ])if(!html.includes(key))throw Error('Missing '+key);
+          if((html.match(/if \(!config\.getAdminCode\(\)\)/g)||[]).length!==1)throw Error('Unexpected modification to demo reset guard');
+          console.log('PASS: inline JS syntax, owner session check, phone/dashboard, production password storage guard');
+          NODE
+          git diff --check
+      - name: Commit only system-check.html
+        shell: bash
+        run: |
+          if git diff --quiet -- system-check.html; then
+            echo 'Already applied; no commit necessary'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- system-check.html
+          git commit -m 'fix(photo): verify system-check using owner session without storing production code'
+          git push origin HEAD:main
