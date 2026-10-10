@@ -1,0 +1,181 @@
+name: DPRO PHOTO R10A Live Privacy Field Diagnostic and Guarded R10 Recovery
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-public-booking-privacy-review-r10a.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-r10a-privacy-review-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  r10a-privacy-diagnosis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout without writing customer data
+        uses: actions/checkout@v4
+      - name: Inspect only public API field paths (GET only)
+        shell: bash
+        run: |
+          node - <<'NODE'
+          // R10A: values are never printed or persisted. Public GET only.
+          'use strict';
+          const fs=require('node:fs');
+          const API='https://cbknucemarcpbscirzyv.supabase.co/functions/v1';
+          const gateways={primary:API+'/dpro-photo-product-ready-gateway-v3',calendar:API+'/dpro-photo-product-ready-gateway-v9'};
+          const targeted=['753','FAMILY'];
+          const protectedNames=new Set(['customer_id','line_user_id','public_token','token_hash','email','phone','reservation_no','service_role_key','session_token','access_token','refresh_token','customer_name','customer_phone','customer_email']);
+          const allowPublicContact=/^(?:studio|studio_contact|studio\.contact)\.(?:phone|email)$/;
+          function cleanKey(k){return /^[a-zA-Z_][a-zA-Z0-9_]{0,59}$/.test(k)?k:'[dynamic-key]';}
+          function auditPaths(input){
+           const all=[];let nodes=0;
+           const walk=(v,p='',depth=0)=>{
+            if(++nodes>10000||depth>20)throw Error('Response too complex for bounded privacy audit');
+            if(!v||typeof v!=='object')return;
+            if(Array.isArray(v)){for(const item of v.slice(0,200))walk(item,p+'[]',depth+1);return;}
+            for(const [k,child] of Object.entries(v)){
+             const segment=cleanKey(k),p2=p?p+'.'+segment:segment;
+             if(protectedNames.has(String(k).toLowerCase())) all.push(p2);
+             walk(child,p2,depth+1);
+            }
+           };
+           walk(input);
+           return [...new Set(all)].sort();
+          }
+          function classify(paths){
+           const safe=paths.filter(p=>allowPublicContact.test(p));
+           const unsafe=paths.filter(p=>!allowPublicContact.test(p));
+           return {safe,unsafe};
+          }
+          async function get(base,path,params){
+           const url=new URL(base+path);
+           for(const [key,val] of Object.entries(params||{}))url.searchParams.set(key,String(val));
+           const r=await fetch(url,{method:'GET',redirect:'manual',headers:{Accept:'application/json',Origin:'https://dpromstk2000-lab.github.io'},signal:AbortSignal.timeout(18000)});
+           if(r.status!==200)throw Error(`GET ${path} returned HTTP ${r.status}`);
+           const c=r.headers.get('access-control-allow-origin');if(c==='*')throw Error('Unsafe wildcard CORS');
+           let o;try{o=await r.json()}catch{throw Error('Response not valid JSON');}
+           if(!o||o.ok===false)throw Error(`GET ${path} returned invalid/error payload`);
+           return o;
+          }
+          function todayJP(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+          function addDay(s,n){const d=new Date(s+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
+          async function main(){
+           const report={standard:'DPRO PHOTO R10A PUBLIC API FIELD-PATH PRIVACY DIAGNOSTIC',mode:'LIVE_PUBLIC_GET_PATHS_ONLY',sourceSha:process.env.GITHUB_SHA||null,liveGETs:0,writeRequests:0,personalValuesLogged:false,personalValuesArchived:false,allowedPaths:[],suspiciousPaths:[],tests:[],repairApproved:false};
+           const check=(name,ok,detail)=>{report.tests.push({name,pass:Boolean(ok),detail:String(detail||'')});if(!ok)report.errorCount=(report.errorCount||0)+1;};
+           try{
+            const plans=await get(gateways.primary,'/api/public/plans');report.liveGETs++;
+            const rows=Array.isArray(plans.plans)?plans.plans:[];
+            const pick=targeted.map(code=>rows.find(p=>p.plan_code===code&&p.id&&p.is_active!==false));
+            check('active-photo-plans',pick.every(Boolean),'Required public demo plans available');
+            if(!pick.every(Boolean))throw Error('Public demo plans missing');
+            const from=addDay(todayJP(),1),to=addDay(from,7);
+            for(let i=0;i<pick.length;i++){
+             const p=pick[i],code=targeted[i];
+             const summary=await get(gateways.calendar,'/api/public/calendar-summary',{from,to,plan_id:p.id});report.liveGETs++;
+             const day=Array.isArray(summary.days)?summary.days.find(d=>['available','limited'].includes(d.status))?.date:'';
+             check('calendar/date-available/'+code,Boolean(day),'Calendar has at least one selectable day in sampled 8-day window');
+             if(!day)throw Error('No available day for '+code);
+             const exact=await get(gateways.primary,'/api/public/availability',{date:day,plan_id:p.id});report.liveGETs++;
+             const paths=auditPaths(exact),c=classify(paths);
+             report.allowedPaths.push(...c.safe);
+             report.suspiciousPaths.push(...c.unsafe);
+             check('privacy/public-field-classification/'+code,c.unsafe.length===0,'Safe contact field paths '+c.safe.length+'; suspicious field paths '+c.unsafe.length);
+            }
+            report.allowedPaths=[...new Set(report.allowedPaths)].sort();
+            report.suspiciousPaths=[...new Set(report.suspiciousPaths)].sort();
+            // Only repair R10 if the known false positive is proven in BOTH exact availability calls.
+            check('privacy/expected-public-studio-contact',report.allowedPaths.some(x=>/\.(phone|email)$/.test(x)),'At least one observed studio contact field; cannot suppress a privacy failure without evidence');
+            report.repairApproved=report.tests.every(t=>t.pass)&&report.suspiciousPaths.length===0;
+           }catch(e){check('live-diagnostic-completed',false,String(e.message||e).replace(/https?:\/\/\S+/g,'[url omitted]'));}
+           report.counts={passed:report.tests.filter(t=>t.pass).length,failed:report.tests.filter(t=>!t.pass).length};
+           fs.writeFileSync('DPRO_PHOTO_R10A_PRIVACY_DIAGNOSIS.json',JSON.stringify(report,null,2)+'\n');
+           const summary=[
+            '# DPRO PHOTO R10A — Privacy Field-Path Diagnosis',
+            `Result: ${report.repairApproved?'SAFE_STUDIO_CONTACT':'REQUIRES_SECURITY_REVIEW'}`,
+            `Live GET calls: ${report.liveGETs}; writes: 0`,
+            `Allowed studio public-contact paths: ${report.allowedPaths.join(', ')||'none'}`,
+            `Suspicious paths: ${report.suspiciousPaths.join(', ')||'none'}`,
+            `Tests: ${report.counts.passed} passed, ${report.counts.failed} failed`,
+            'No actual phone/email values, access tokens, customer records or response bodies stored.'];
+           fs.writeFileSync('DPRO_PHOTO_R10A_PRIVACY_SUMMARY.md',summary.join('\n')+'\n');
+           if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary.join('\n')+'\n');
+           console.log(summary.join('\n'));
+           if(!report.repairApproved)process.exitCode=1;
+          }
+          main().catch(e=>{console.error('Diagnostic error category only:',e?.name||'unknown');process.exitCode=1;});
+          NODE
+      - name: Apply verified R10 validator correction only when public studio contacts are proven
+        shell: bash
+        run: |
+          python - <<'PYFIX'
+          from pathlib import Path
+          import json,re,subprocess
+          report=json.loads(Path('DPRO_PHOTO_R10A_PRIVACY_DIAGNOSIS.json').read_text())
+          assert report['repairApproved'] and not report['suspiciousPaths'],'R10A STOP: suspicious public API fields'
+          allowed=report['allowedPaths']
+          assert allowed and all(re.fullmatch(r'(?:studio|studio_contact|studio\.contact)\.(?:phone|email)',p) for p in allowed),'R10A STOP: allowed paths not verified'
+          p=Path('.github/workflows/dpro-photo-public-booking-readonly-contract-r10.yml')
+          s=p.read_text(encoding='utf8')
+          old='''          function privacyScan(id,payload){
+                     const serialized=JSON.stringify(payload||{});
+                     const detected=[...serialized.matchAll(/"(customer_id|line_user_id|public_token|token_hash|email|phone|reservation_no|service_role_key)"\\s*:/gi)].map(x=>x[1]);
+                     check('privacy/'+id,detected.length===0,detected.length?'Internal key names exposed: '+[...new Set(detected)].join(','):'No sensitive reservation/customer key names');
+                    }
+          '''
+          marker='DPRO-PHOTO-R10A-PUBLIC-STUDIO-CONTACT-PRIVACY-CLASSIFIER-20261010'
+          if marker in s:
+           print('R10A: already applied, no commit')
+           raise SystemExit(0)
+          assert s.count(old)==1,'R10A STOP: expected exact R10 privacy scan did not match; safe no-edit abort'
+          allowed_json=json.dumps(allowed,separators=(',',':'))
+          new='''          // '''+marker+'''
+                    // Storefront phone/email is public; deny customer/LINE/bearer details at every nesting level.
+                    function privacyScan(id,payload){
+                     const allowedPublicContact=new Set('''+allowed_json+''');
+                     const protectedNames=new Set(['customer_id','line_user_id','public_token','token_hash','email','phone','reservation_no','service_role_key','session_token','access_token','refresh_token','customer_name','customer_phone','customer_email']);
+                     const suspicious=[];const visit=(v,path='',depth=0)=>{
+                      if(depth>20||!v||typeof v!=='object')return;
+                      if(Array.isArray(v)){for(const item of v)visit(item,path+'[]',depth+1);return;}
+                      for(const [key,child] of Object.entries(v)){
+                       const next=path?path+'.'+key:key;
+                       if(protectedNames.has(key.toLowerCase())&&!allowedPublicContact.has(next))suspicious.push(next.replace(/[^a-zA-Z0-9_.\\[\\]-]/g,'?').slice(0,110));
+                       visit(child,next,depth+1);
+                      }
+                     };
+                     visit(payload);
+                     check('privacy/'+id,suspicious.length===0,suspicious.length?'Protected field paths exposed: '+[...new Set(suspicious)].join(','):'No private fields; public studio contacts separately approved');
+                    }
+          '''
+          p.write_text(s.replace(old,new),encoding='utf8')
+          assert p.read_text(encoding='utf8').count(marker)==1
+          # Ensure no other files changed: staged changes are limited to the R10 workflow.
+          changed=subprocess.run(['git','diff','--name-only'],capture_output=True,text=True,check=True).stdout.strip().splitlines()
+          assert changed==[str(p)],f'R10A STOP: unexpected modified files: {changed}'
+          print('R10A amended existing R10 validator, allowing ONLY structurally verified public studio contact paths; no response data stored')
+          PYFIX
+      - name: Commit only corrected R10 read-only gate definition
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- .github/workflows/dpro-photo-public-booking-readonly-contract-r10.yml; then
+            echo "No R10 workflow change needed"; exit 0
+          fi
+          test "$(git diff --name-only | wc -l)" -eq 1
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- .github/workflows/dpro-photo-public-booking-readonly-contract-r10.yml
+          git commit -m 'DPRO PHOTO R10A distinguish public studio contact from customer PII'
+          git push
+      - name: Archive path-only privacy diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_R10A_PRIVACY_DIAGNOSIS
+          path: |
+            DPRO_PHOTO_R10A_PRIVACY_DIAGNOSIS.json
+            DPRO_PHOTO_R10A_PRIVACY_SUMMARY.md
+          if-no-files-found: warn
