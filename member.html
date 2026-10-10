@@ -637,6 +637,7 @@
         modalMode: "",
         modalReservation: null,
         busy: false,
+        requestSubmitting: false, // R15: prevent identity or modal switching during member request sends.
         memberLoadSeq: 0, // R14: previous member loads never overwrite a new identity.
         loadedLookup: null, // Only used in memory; no token or ID is written to test artifacts.
       };
@@ -1135,6 +1136,7 @@ function actionButtons(reservation) {
       }
 
       function openRequestModal(mode, reservation) {
+        if (state.requestSubmitting) return; // R15: keep the original reservation while sending.
         const config = modalConfig(mode);
         state.modalMode = mode;
         state.modalReservation = reservation;
@@ -1149,7 +1151,8 @@ function actionButtons(reservation) {
         setTimeout(() => els.requestNote.focus(), 80);
       }
 
-      function closeRequestModal() {
+      function closeRequestModal(force = false) {
+        if (state.requestSubmitting && !force) return; // R15: modal remains tied to in-flight request.
         els.requestModal.classList.remove("open");
         state.modalMode = "";
         state.modalReservation = null;
@@ -1219,49 +1222,67 @@ function actionButtons(reservation) {
         }
       }
 
+      // DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK-20261010
       async function submitRequest() {
-        if (state.busy || !state.modalReservation) return;
-        const currentStatus = state.modalReservation.reservation_status;
-        if (state.modalMode === "change" && currentStatus === "change_requested") {
+        if (state.busy || state.requestSubmitting || !state.modalReservation) return;
+        const reservation = state.modalReservation;
+        const mode = state.modalMode;
+        const currentStatus = reservation.reservation_status;
+        if (mode === "change" && currentStatus === "change_requested") {
           showToast("予約変更希望はすでに送信済みです。写真館からの連絡をお待ちください。", "error");
           return;
         }
-        if (state.modalMode === "cancel" && currentStatus === "cancel_requested") {
+        if (mode === "cancel" && currentStatus === "cancel_requested") {
           showToast("キャンセル希望はすでに送信済みです。写真館からの連絡をお待ちください。", "error");
           return;
         }
         const note = C.normalizeWhitespace(els.requestNote.value);
         if (!note) { showToast("内容を入力してください。", "error"); return; }
-        const reservation = state.modalReservation;
         const auth = reservationAuthPayload(reservation);
+        const identity = {
+          line_user_id: String(state.lookup.line_user_id || ""),
+          public_token: String(state.lookup.public_token || ""),
+          loadSeq: state.memberLoadSeq,
+        };
+        const isOriginalContext = () => state.requestSubmitting
+          && state.memberLoadSeq === identity.loadSeq
+          && String(state.lookup.line_user_id || "") === identity.line_user_id
+          && String(state.lookup.public_token || "") === identity.public_token
+          && state.modalReservation === reservation && state.modalMode === mode;
         let endpoint;
         let body;
-        if (state.modalMode === "change") {
+        if (mode === "change") {
           endpoint = C.ENDPOINTS.PUBLIC_CHANGE_REQUEST;
           body = { ...auth, note };
-        } else if (state.modalMode === "cancel") {
+        } else if (mode === "cancel") {
           endpoint = C.ENDPOINTS.PUBLIC_CANCEL_REQUEST;
           body = { ...auth, note };
-        } else if (state.modalMode === "reorder") {
+        } else if (mode === "reorder") {
           endpoint = C.ENDPOINTS.PUBLIC_REORDER_REQUEST;
           body = { ...auth, request_type: els.requestTypeSelect.value, request_detail: note, preferred_contact: "line" };
         } else {
           endpoint = C.ENDPOINTS.PUBLIC_CONTACT;
           body = { ...auth, message: note };
         }
+        state.requestSubmitting = true;
         try {
           setLoading(true, "本人確認後に送信しています");
           await refreshMemberSessionForRequest();
+          // Never send a request whose customer or reservation changed during authentication.
+          if (!isOriginalContext()) return;
           const result = await C.apiPost(endpoint, body);
-          clearRequestDraft(state.modalMode, reservation);
-          closeRequestModal();
+          if (!isOriginalContext()) return; // No outdated toast or draft deletion after an identity switch.
+          clearRequestDraft(mode, reservation); // Use captured mode, never a later modal mode.
+          closeRequestModal(true);
           showToast(result.message || "送信しました。");
           await loadMember({ silent: true });
         } catch (error) {
+          if (!isOriginalContext()) return;
           const message = String(errorMessage(error) || "");
           const expired = Number(error?.status) === 401 || /member session required|session expired|session_required/i.test(message);
           showToast(expired ? "認証の有効期限が切れました。入力内容は保持されています。LINEからマイページを開き直してください。" : message, "error");
         } finally {
+          state.requestSubmitting = false;
           setLoading(false);
         }
       }
@@ -1322,6 +1343,11 @@ function actionButtons(reservation) {
       }
 
       function resetMemberLookup() {
+        if (state.requestSubmitting) {
+          showToast("送信処理中です。完了後に別の予約を確認してください。", "error");
+          return;
+        }
+        C.clearSessionToken("member"); // R15: do not keep the previous member session on account switch.
         ++state.memberLoadSeq; // R14: discard every unfinished member response.
         state.loadedLookup = null;
         setLoading(false);
@@ -1458,13 +1484,18 @@ function actionButtons(reservation) {
 
       function bindStaticEvents() {
         els.openMemberButton.addEventListener("click", async () => {
+          if (state.requestSubmitting) return;
           const token = els.publicTokenInput.value.trim();
           if (!token) { showToast("予約確認用トークンを入力してください。", "error"); return; }
+          if (state.lookup.public_token !== token || state.lookup.line_user_id) {
+            C.clearSessionToken("member"); // R15: a new token never inherits the old member session.
+          }
           state.lookup = { line_user_id: "", public_token: token };
           await loadMember();
         });
         els.anotherReservationButton.addEventListener("click", resetMemberLookup);
         els.refreshButton.addEventListener("click", async () => {
+          if (state.requestSubmitting) return;
           const original = els.refreshButton.textContent;
           els.refreshButton.disabled = true;
           els.refreshButton.textContent = "更新中…";
