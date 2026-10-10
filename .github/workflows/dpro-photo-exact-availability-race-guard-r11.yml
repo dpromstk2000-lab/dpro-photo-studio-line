@@ -1,0 +1,137 @@
+name: DPRO PHOTO Exact Availability Stale Response Protection R11
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-exact-availability-race-guard-r11.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-booking-exact-r11-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify-and-patch-r11:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Apply latest-request guard to booking UI only
+        shell: bash
+        run: |
+          python - <<'PY_PATCH'
+          from pathlib import Path
+          import json
+          p=Path('index.html')
+          s=p.read_text(encoding='utf8')
+          marker='DPRO-PHOTO-R11-EXACT-AVAILABILITY-LATEST-REQUEST-GUARD-20261010'
+          if s.count(marker)>1:raise SystemExit('R11 STOP duplicated patch markers')
+          if marker not in s:
+            for old,new in json.loads('[["      availability: null,\\n      selectedSlot: null,", "      availability: null,\\n      availabilityRequestSeq: 0, // R11: only the latest exact-availability request may update the UI.\\n      selectedSlot: null,"], ["      if (changed) {\\n        state.selectedOptions.clear();", "      if (changed) {\\n        ++state.availabilityRequestSeq; // Cancel pending exact slot responses when plan changes.\\n        els.availabilityState.innerHTML = `<div class=\\"empty-box\\">撮影日を選択すると空き時間が表示されます。</div>`;\\n        state.selectedOptions.clear();"], ["    function resetFormForNewReservation() {\\n      state.selectedPlan = null;", "    function resetFormForNewReservation() {\\n      ++state.availabilityRequestSeq; // Old responses must not repopulate a fresh booking.\\n      state.selectedPlan = null;"], ["        state.selectedSlot = state.availability.slots.find((slot) => slot.start_at === button.dataset.slotTime) || null;", "        if (!Array.isArray(state.availability?.slots)) return; // R11: fail closed while new slots load.\\n        state.selectedSlot = state.availability.slots.find((slot) => slot.start_at === button.dataset.slotTime && slot.available) || null;"], ["    async function loadAvailability() {\\n      state.selectedDate = els.reservationDate.value;\\n      state.selectedSlot = null;\\n      if (!state.selectedPlan || !state.selectedDate) {\\n        els.availabilityState.innerHTML = `<div class=\\"empty-box\\">撮影日を選択すると空き時間が表示されます。</div>`;\\n        return;\\n      }\\n      const weekday = new Date(`${state.selectedDate}T12:00:00+09:00`).getDay();\\n      if (Array.isArray(state.selectedPlan.available_weekdays) && !state.selectedPlan.available_weekdays.includes(weekday)) {\\n        els.availabilityState.innerHTML = `<div class=\\"empty-box\\">このプランは選択した曜日に受付していません。別の日付を選択してください。</div>`;\\n        return;\\n      }\\n      els.availabilityState.innerHTML = `<div class=\\"loading-box\\"><span class=\\"spinner\\"></span>空き時間を確認しています</div>`;\\n      try {\\n        await ensurePlanStartRule();\\n        const query = { date: state.selectedDate, plan_id: state.selectedPlan.id };\\n        if (state.selectedStaffId) query.staff_id = state.selectedStaffId;\\n        state.availability = await C.apiGet(C.ENDPOINTS.PUBLIC_AVAILABILITY, query);\\n        renderAvailability();\\n      } catch (error) {\\n        state.availability = null;\\n        els.availabilityState.innerHTML = `<div class=\\"empty-box\\">${esc(error.message || \\"空き時間を取得できませんでした。\\")}</div>`;\\n      }\\n    }", "    // DPRO-PHOTO-R11-EXACT-AVAILABILITY-LATEST-REQUEST-GUARD-20261010\\n    async function loadAvailability() {\\n      const seq = ++state.availabilityRequestSeq;\\n      const date = els.reservationDate.value;\\n      const planId = state.selectedPlan?.id || \\"\\";\\n      const staffId = state.selectedStaffId;\\n      state.selectedDate = date;\\n      state.selectedSlot = null;\\n      state.availability = null; // Never allow a stale slot to be selected during loading.\\n      const isCurrent = () => seq === state.availabilityRequestSeq\\n        && state.selectedPlan?.id === planId\\n        && state.selectedStaffId === staffId\\n        && state.selectedDate === date\\n        && els.reservationDate.value === date;\\n      if (!planId || !date) {\\n        els.availabilityState.innerHTML = `<div class=\\"empty-box\\">撮影日を選択すると空き時間が表示されます。</div>`;\\n        return;\\n      }\\n      const weekday = new Date(`${date}T12:00:00+09:00`).getDay();\\n      if (Array.isArray(state.selectedPlan.available_weekdays) && !state.selectedPlan.available_weekdays.includes(weekday)) {\\n        els.availabilityState.innerHTML = `<div class=\\"empty-box\\">このプランは選択した曜日に受付していません。別の日付を選択してください。</div>`;\\n        return;\\n      }\\n      els.availabilityState.innerHTML = `<div class=\\"loading-box\\"><span class=\\"spinner\\"></span>空き時間を確認しています</div>`;\\n      try {\\n        await ensurePlanStartRule();\\n        if (!isCurrent()) return;\\n        const query = { date, plan_id: planId };\\n        if (staffId) query.staff_id = staffId;\\n        const availability = await C.apiGet(C.ENDPOINTS.PUBLIC_AVAILABILITY, query);\\n        if (!isCurrent()) return;\\n        state.availability = availability;\\n        renderAvailability();\\n      } catch (error) {\\n        if (!isCurrent()) return; // An obsolete error must not hide a newer result.\\n        state.availability = null;\\n        els.availabilityState.innerHTML = `<div class=\\"empty-box\\">${esc(error.message || \\"空き時間を取得できませんでした。\\")}</div>`;\\n      }\\n    }"]]'):
+              if s.count(old)!=1:raise SystemExit('R11 STOP expected unique original source block missing')
+              s=s.replace(old,new,1)
+            p.write_text(s,encoding='utf8')
+            print('R11 exact availability state guard installed')
+          else:print('R11 already applied: idempotent verification')
+          PY_PATCH
+      - name: Run 28 offline async regression and syntax checks
+        shell: bash
+        run: |
+          node - <<'NODE'
+          'use strict';
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const html=fs.readFileSync('index.html','utf8');
+          const checks=[];const ok=(label,fn)=>{fn();checks.push(label);};
+          const marker='DPRO-PHOTO-R11-EXACT-AVAILABILITY-LATEST-REQUEST-GUARD-20261010';
+          ok('R11 marker installed once',()=>assert.equal(html.split(marker).length-1,1));
+          ok('state request sequence exists',()=>assert.match(html,/availabilityRequestSeq:\s*0/));
+          ok('plan changes invalidate pending response',()=>assert.match(html,/if \(changed\) \{\s*\+\+state\.availabilityRequestSeq;/));
+          ok('new reservation resets pending response',()=>assert.match(html,/function resetFormForNewReservation\(\) \{\s*\+\+state\.availabilityRequestSeq;/));
+          ok('slot clicks require a current array',()=>assert.match(html,/if \(!Array\.isArray\(state\.availability\?\.slots\)\) return;/));
+          ok('slot clicks require available slot',()=>assert.match(html,/slot\.start_at === button\.dataset\.slotTime && slot\.available/));
+          ok('old booking flow preserved',()=>assert.match(html,/async function submitReservation\(\)/));
+          ok('R9 calendar remains loaded',()=>assert.match(html,/photo-booking-calendar-v2\.js\?v=DPRO-PHOTO-CALENDAR-R9/));
+          const start=html.indexOf('    async function loadAvailability() {');
+          const end=html.indexOf('    function slotEndTime(slot) {',start);
+          assert(start>=0&&end>start,'loadAvailability source extract failed');
+          const fn=html.slice(start,end).trim();
+          new vm.Script(fn);
+          function d(){let yes,no;const p=new Promise((a,b)=>{yes=a;no=b});return {p,resolve:yes,reject:no};}
+          async function tick(){await Promise.resolve();await Promise.resolve();await Promise.resolve();}
+          function harness({date='2026-10-21',plan='plan-A',staff='',ruleDeferred=false}={}){
+           const state={availabilityRequestSeq:0,selectedPlan:plan?{id:plan,available_weekdays:null}:null,selectedStaffId:staff,selectedDate:'',selectedSlot:{start_at:'old'},availability:{slots:[{start_at:'old',available:true}]}};
+           const el={reservationDate:{value:date},availabilityState:{innerHTML:'old UI'}};
+           const requests=[],ruleRequests=[],renders=[];
+           const C={ENDPOINTS:{PUBLIC_AVAILABILITY:'/api/public/availability'},apiGet:(path,params)=>{let item=d();requests.push({...item,path,params});return item.p;}};
+           const context={state,els:el,C,ensurePlanStartRule:()=>{if(!ruleDeferred)return Promise.resolve({});let item=d();ruleRequests.push(item);return item.p;},renderAvailability:()=>renders.push(state.availability),esc:(x)=>String(x).replace(/</g,'&lt;')};
+           vm.runInNewContext(fn+';this.run=loadAvailability;',context);
+           return {state,el,requests,ruleRequests,renders,run:context.run};
+          }
+          async function main(){
+           let h=harness(),x=h.run();
+           ok('old availability removed synchronously',()=>assert.equal(h.state.availability,null));
+           ok('selected slot cleared synchronously',()=>assert.equal(h.state.selectedSlot,null));
+           await tick();
+           ok('valid date starts GET',()=>assert.equal(h.requests.length,1));
+           ok('query binds intended date and plan',()=>{assert.equal(h.requests[0].params.date,'2026-10-21');assert.equal(h.requests[0].params.plan_id,'plan-A');});
+           h.requests[0].resolve({slots:[{start_at:'new',available:true}]});await x;
+           ok('current response renders',()=>{assert.equal(h.renders.length,1);assert.equal(h.state.availability.slots[0].start_at,'new');});
+           h=harness();let first=h.run();await tick();h.el.reservationDate.value='2026-10-22';let second=h.run();await tick();
+           h.requests[1].resolve({slots:[{start_at:'NEW',available:true}]});await second;
+           h.requests[0].resolve({slots:[{start_at:'STALE',available:true}]});await first;
+           ok('reversed response order keeps newest data',()=>assert.equal(h.state.availability.slots[0].start_at,'NEW'));
+           ok('stale success does not rerender',()=>assert.equal(h.renders.length,1));
+           h=harness();first=h.run();await tick();h.el.reservationDate.value='2026-10-23';second=h.run();await tick();h.requests[1].resolve({slots:[]});await second;h.requests[0].reject(new Error('Old failure'));await first;
+           ok('stale failure does not overwrite latest display',()=>assert(!h.el.availabilityState.innerHTML.includes('Old failure')));
+           h=harness();first=h.run();await tick();h.state.selectedPlan={id:'plan-B'};h.state.availabilityRequestSeq++;h.requests[0].resolve({slots:[{start_at:'STALE',available:true}]});await first;
+           ok('switching plan rejects old response',()=>assert.equal(h.renders.length,0));
+           h=harness({staff:'staff1'});first=h.run();await tick();h.state.selectedStaffId='staff2';h.requests[0].resolve({slots:[{start_at:'STALE',available:true}]});await first;
+           ok('switching staff rejects old response',()=>assert.equal(h.renders.length,0));
+           h=harness({date:''});await h.run();ok('missing date prevents GET',()=>assert.equal(h.requests.length,0));
+           h=harness({plan:''});await h.run();ok('missing plan prevents GET',()=>assert.equal(h.requests.length,0));
+           h=harness();h.state.selectedPlan.available_weekdays=[];await h.run();ok('disallowed weekday prevents GET',()=>assert.equal(h.requests.length,0));
+           h=harness();let request=h.run();await tick();h.requests[0].reject(new Error('The live API is unavailable'));await request;
+           ok('current error displayed',()=>assert(h.el.availabilityState.innerHTML.includes('The live API is unavailable')));
+           ok('active failure keeps slots empty',()=>assert.equal(h.state.availability,null));
+           h=harness({ruleDeferred:true});first=h.run();await tick();ok('API waits for plan-start-rule',()=>assert.equal(h.requests.length,0));
+           h.el.reservationDate.value='2026-10-24';second=h.run();await tick();
+           h.ruleRequests[0].resolve({});await first;await tick();
+           ok('stale rule resolution does not start GET',()=>assert.equal(h.requests.length,0));
+           h.ruleRequests[1].resolve({});await tick();ok('new rule resolution starts GET',()=>assert.equal(h.requests.length,1));
+           h.requests[0].resolve({slots:[]});await second;
+           h=harness({staff:'staff-one'});request=h.run();await tick();ok('staff parameter captured at request start',()=>assert.equal(h.requests[0].params.staff_id,'staff-one'));h.requests[0].resolve({slots:[]});await request;
+           for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)){if(match[2].trim())new vm.Script(match[2]);}
+           ok('all inline scripts compile',()=>{});
+           const report={standard:'DPRO PHOTO R11 EXACT AVAILABILITY RACE GUARD',mode:'OFFLINE_ASYNC_REGRESSION',counts:{passed:checks.length,failed:0},checks,productionReady:false,liveRequests:0,mutations:0};
+           fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R11.json',JSON.stringify(report,null,2)+'\n');
+           console.log('R11 async fixture checks: '+checks.length+' PASS, 0 FAIL');
+          }
+          main().catch(e=>{console.error('R11 REGRESSION FAILURE',e.stack||String(e));process.exitCode=1;});
+          NODE
+          git diff --check
+          changed="$(git diff --name-only)"
+          if [ -n "$changed" ] && [ "$changed" != 'index.html' ]; then
+            echo "R11 STOP unexpected modified files" >&2
+            exit 1
+          fi
+      - name: Commit verified index update
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- index.html; then
+            echo 'R11 already applied; no new commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- index.html
+          git commit -m 'DPRO PHOTO R11 prevent stale exact availability slots on booking UI'
+          git push
+      - name: Preserve R11 test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R11
+          path: DPRO_PHOTO_PRODUCT_GATE_R11.json
+          if-no-files-found: warn
