@@ -1,0 +1,78 @@
+name: DPRO PHOTO Common Product Baseline R1
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-common-product-baseline-r1.yml'
+      - '*.html'
+      - 'config.js'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  product-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate common demo product and contract-stage blockers
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs=require("fs");
+          const files=["index.html","owner.html","member.html","staff.html","owner-ipad.html","system-check.html","config.js"];
+          const pass=[],fail=[],pending=[];
+          const test=(name,condition,note="")=>(condition?pass:fail).push({name,note});
+          for(const file of files)test("file:"+file,fs.existsSync(file));
+          if(fail.length)throw Error("Product base files missing: "+JSON.stringify(fail));
+          const s=Object.fromEntries(files.map(f=>[f,fs.readFileSync(f,"utf8")]));
+          for(const f of files){try{
+            if(f.endsWith(".js"))new Function(s[f]);
+            else{let count=0;for(const m of s[f].matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)){
+              if(!m[2].trim()||/\btype\s*=\s*["'](?:application\/json|importmap)["']/i.test(m[1]))continue;
+              new Function(m[2]);count++;
+            }if(!count)throw Error("Missing inline JavaScript")}
+            test("syntax:"+f,true);
+          }catch(e){test("syntax:"+f,false,String(e))}}
+          const c=s["config.js"],m=s["member.html"];
+          test("demo studio explicitly bound",c.includes('const STUDIO_CODE = "dpro_photo_demo"'));
+          test("approved demo gateway",c.includes("dpro-photo-product-ready-gateway-v3"));
+          test("member session API",c.includes("async function openMemberSession(")&&c.includes("line_id_token"));
+          test("member auth before request",m.includes("DPRO-PHOTO-MEMBER-AUTH-DRAFT-TABS-R2-20261010")&&m.includes("await refreshMemberSessionForRequest();"));
+          test("draft save and restore",m.includes("function saveRequestDraft(")&&m.includes("function loadRequestDraft(")&&m.includes("requestNote.addEventListener"));
+          test("tabs never overlay customer",/\.tabs-wrap\s*\{[\s\S]{0,210}?position:\s*static/.test(m));
+          test("demo/production identity routes separated",m.includes("C.isDemoMode()")&&m.includes("C.openMemberSession({ line_id_token: idToken })"));
+          test("system-check demo preparation",s["system-check.html"].includes("demo_prepare"));
+          test("owner task workflow",s["owner.html"].includes("タスク")&&s["owner.html"].includes("予約"));
+          test("client sources contain no recognized secret literal",!/(?:sb_secret_[A-Za-z0-9]{20,}|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]{40,}\.)/.test(Object.values(s).join("\n")));
+          for(const [name,note] of [
+           ["LINE LIFF","LINE Official Account, LIFF ID, SDK initialization"],
+           ["Customer workspace","customer-isolated Supabase studio and binding"],
+           ["Production gateway","per-customer API config; prohibit demo credentials"],
+           ["Live identity QA","LINE signed ID token, expiry and reauthorization on phone"],
+           ["Branding and domain","customer store identity and domain"],
+           ["Operational handoff","Owner activation, staff rights, booking and support checks"]
+          ])pending.push({name,status:"PENDING_CONTRACT",note});
+          const report={standard:"DPRO PHOTO COMMON PRODUCT BASELINE R1",utc:new Date().toISOString(),demoGate:fail.length?"FAIL":"PASS",productionReady:false,passed:pass,failed:fail,deferred:pending,demoPages:files.filter(x=>x.endsWith(".html")).map(x=>"https://dpromstk2000-lab.github.io/dpro-photo-studio-line/"+x+"?demo=1")};
+          fs.writeFileSync("DPRO_PHOTO_PRODUCT_GATE_R1.json",JSON.stringify(report,null,2)+"\n");
+          const summary=[
+           "## DPRO PHOTO common product gate R1",
+           "", "**Demo code:** "+report.demoGate,
+           "", "**Customer production:** NOT READY — contract-stage setup pending",
+           "", "| Category | Count |","|---|---:|",
+           "| Passed | "+pass.length+" |","| Failed | "+fail.length+" |",
+           "| Deferred | "+pending.length+" |",
+           "",...fail.map(x=>"- FAIL "+x.name+": "+x.note),
+           "### Contract-stage items",...pending.map(x=>"- "+x.name+": "+x.note),
+           "","No deployment, database modification, LINE operation or demo reset performed."
+          ].join("\n");
+          console.log(summary);
+          if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary+"\n");
+          if(fail.length)process.exitCode=1;
+          NODE
+      - name: Archive read-only product gate result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R1
+          path: DPRO_PHOTO_PRODUCT_GATE_R1.json
+          if-no-files-found: warn
