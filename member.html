@@ -1159,6 +1159,16 @@ function actionButtons(reservation) {
         state.modalReservation = null;
       }
 
+      // DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION-20261010
+      // On member identity switches, discard only the visible input, not R6's
+      // identity-scoped sessionStorage draft. Never close while a POST is in flight.
+      function discardRequestModalForIdentityChange() {
+        if (state.requestSubmitting) return false;
+        closeRequestModal(true);
+        els.requestNote.value = "";
+        return true;
+      }
+
       function reservationAuthPayload(reservation) {
         if (state.lookup.public_token && state.reservations.length === 1) {
           return { public_token: reservation.public_token || state.lookup.public_token };
@@ -1228,7 +1238,16 @@ function actionButtons(reservation) {
         if (state.busy || state.requestSubmitting || !state.modalReservation) return;
         const reservation = state.modalReservation;
         const mode = state.modalMode;
-        const currentStatus = reservation.reservation_status;
+        const currentLoaded = state.loadedLookup;
+        const currentReservation = state.reservations.find((item) => String(item.id || "") === String(reservation.id || "")
+          && String(item.reservation_no || "") === String(reservation.reservation_no || ""));
+        if (!currentReservation || !currentLoaded || currentLoaded.line_user_id !== String(state.lookup.line_user_id || "")
+          || currentLoaded.public_token !== String(state.lookup.public_token || "")) {
+          discardRequestModalForIdentityChange();
+          showToast("予約の確認情報が更新されました。対象の予約を開き直してください。", "error");
+          return;
+        }
+        const currentStatus = currentReservation.reservation_status;
         if (mode === "change" && currentStatus === "change_requested") {
           showToast("予約変更希望はすでに送信済みです。写真館からの連絡をお待ちください。", "error");
           return;
@@ -1364,6 +1383,7 @@ function actionButtons(reservation) {
           showToast("送信処理中です。完了後に別の予約を確認してください。", "error");
           return;
         }
+        discardRequestModalForIdentityChange(); // R18: no previous person's modal survives reset.
         C.clearSessionToken("member"); // R15: do not keep the previous member session on account switch.
         ++state.memberLoadSeq; // R14: discard every unfinished member response.
         state.loadedLookup = null;
@@ -1398,6 +1418,7 @@ function actionButtons(reservation) {
         const prior = state.loadedLookup;
         if (prior && (prior.line_user_id !== lookup.line_user_id || prior.public_token !== lookup.public_token)) {
           // Remove the previous person's visible data before starting a different lookup.
+          discardRequestModalForIdentityChange(); // R18: close any old reservation request dialog.
           state.customer = null;
           state.profile = null;
           state.reservations = [];
@@ -1470,6 +1491,7 @@ function actionButtons(reservation) {
           return;
         }
         try {
+          discardRequestModalForIdentityChange(); // R18: do not carry an old modal into demo user B.
           ++state.memberLoadSeq; // Invalidate unfinished reads before switching the demo session.
           state.loadedLookup = null;
           els.memberArea.hidden = true;
@@ -1507,6 +1529,7 @@ function actionButtons(reservation) {
           const token = els.publicTokenInput.value.trim();
           if (!token) { showToast("予約確認用トークンを入力してください。", "error"); return; }
           if (state.lookup.public_token !== token || state.lookup.line_user_id) {
+            discardRequestModalForIdentityChange(); // R18: the previous token's modal must close.
             C.clearSessionToken("member"); // R15: a new token never inherits the old member session.
           }
           state.lookup = { line_user_id: "", public_token: token };
