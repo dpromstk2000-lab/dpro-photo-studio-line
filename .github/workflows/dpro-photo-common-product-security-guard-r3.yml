@@ -1,0 +1,151 @@
+name: DPRO PHOTO Common Product Security Guard R3
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-common-product-security-guard-r3.yml'
+      - '.github/workflows/dpro-photo-linkage-standard-r1.yml'
+      - '*.html'
+      - '*.js'
+      - '*.css'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  security-guard-r3:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (read only)
+        uses: actions/checkout@v4
+      - name: Run product security and flow consistency QA
+        shell: bash
+        run: |
+          node - <<'NODE'
+          'use strict';
+          const fs = require('node:fs');
+          const vm = require('node:vm');
+          const path = require('node:path');
+          
+          const required = [
+            'config.js','index.html','member.html','owner.html','staff.html',
+            'owner-ipad.html','system-check.html',
+            '.github/workflows/dpro-photo-common-product-baseline-r2.yml',
+            '.github/workflows/dpro-photo-linkage-standard-r1.yml'
+          ];
+          const pages = ['index.html','member.html','owner.html','staff.html','owner-ipad.html','system-check.html'];
+          const checks = [], blockers = [], deferred = [];
+          const check = (name, ok, note='') => checks.push({name, result:ok?'PASS':'FAIL', note});
+          const defer = (name, reason, type='CONTRACT_STAGE') => deferred.push({name, type, reason});
+          const block = (name, evidence, severity='HIGH') => blockers.push({name, severity, evidence});
+          
+          for (const name of required) check('exists/' + name, fs.existsSync(name));
+          const allFiles = fs.readdirSync('.')
+           .filter(x => /\.(?:html|js|css)$/.test(x) && fs.statSync(x).isFile()).sort();
+          const content = {};
+          for(const name of allFiles) content[name] = fs.readFileSync(name,'utf8');
+          const get = (name) => content[name] || '';
+          
+          for (const name of allFiles.filter(x=>x.endsWith('.js'))) {
+           try {new vm.Script(get(name),{filename:name});check('js-syntax/'+name,true);}
+           catch(e) {check('js-syntax/'+name,false,String(e.message||e));}
+          }
+          for (const name of pages) {
+           const html = get(name);
+           let count=0, success=true, errors=[];
+           for(const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+            if(!m[2].trim() || /\btype\s*=\s*["'](?:application\/json|importmap)["']/i.test(m[1]))continue;
+            try {new vm.Script(m[2],{filename:name+'#'+(++count)});}
+            catch(e){success=false;errors.push(String(e.message||e));}
+           }
+           check('inline-js/'+name,success&&count>0,errors.join('; '));
+           check('load-config/'+name,/src=["']\.\/config\.js\b/.test(html));
+           // Check only local JS/CSS assets; never initiate network requests.
+           const links=[...html.matchAll(/<(?:script|link)\b[^>]*?\b(?:src|href)=["']([^"']+)["']/gi)];
+           let missing=[];
+           for(const l of links){
+            const url=l[1].split(/[?#]/)[0];
+            if(!url || /^(?:https?:|\/\/|data:|\/)/i.test(url))continue;
+            const local=path.normalize(url.replace(/^\.\//,''));
+            if(local==='..' || local.startsWith('../') || !fs.existsSync(local))missing.push(local);
+           }
+           check('local-assets/'+name,missing.length===0,missing.slice(0,15).join(', '));
+          }
+          
+          const cfg=get('config.js'),mem=get('member.html'),idx=get('index.html'),own=get('owner.html');
+          const endpointSection=cfg.match(/const ENDPOINTS\s*=\s*Object\.freeze\(\{([\s\S]*?)\}\);/);
+          const available = new Set(endpointSection ? [...endpointSection[1].matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*:/gm)].map(x=>x[1]):[]);
+          const used = new Set(allFiles.flatMap(x=>[...get(x).matchAll(/\bC\.ENDPOINTS\.([A-Z][A-Z0-9_]+)/g)].map(y=>y[1])));
+          const missingEndpoints=[...used].filter(x=>!available.has(x));
+          check('config/api-endpoint-contract',available.size>0&&missingEndpoints.length===0,missingEndpoints.join(', '));
+          check('config/demo-studio-guard',cfg.includes('const STUDIO_CODE = "dpro_photo_demo"'));
+          check('config/timezone',cfg.includes('const DEFAULT_TIMEZONE = "Asia/Tokyo"'));
+          check('config/30-minute-default',/const SLOT_MINUTES\s*=\s*30\s*;/.test(cfg));
+          check('member/draft-save-restore',mem.includes('function saveRequestDraft(')&&mem.includes('function loadRequestDraft(')&&mem.includes('sessionStorage'));
+          check('member/auth-refresh-before-request',mem.includes('await refreshMemberSessionForRequest();'));
+          check('member/demo-and-real-token-isolation',mem.includes('C.isDemoMode()')&&mem.includes('C.openMemberSession({ line_id_token: idToken })'));
+          check('member/R2-fix-preserved',mem.includes('DPRO-PHOTO-MEMBER-AUTH-DRAFT-TABS-R2-20261010'));
+          check('booking/reservation-submission',idx.includes('function buildReservationPayload()')&&idx.includes('selectedSlot'));
+          check('owner/tasks-and-booking',own.includes('タスク')&&own.includes('予約'));
+          check('system/demo-reset-not-auto-test',get('system-check.html').includes('demo_prepare'));
+          const oldPath='.github/workflows/dpro-photo-linkage-standard-r1.yml';
+          const oldText=fs.existsSync(oldPath)?fs.readFileSync(oldPath,'utf8'):'';
+          check('ci/legacy-retired-safely',oldText.includes('DPRO-PHOTO-LEGACY-WORKFLOW-RETIRED-R3')&&oldText.includes('contents: read'));
+          
+          const joined=allFiles.map(x=>get(x)).join('\n');
+          const secret=/(?:sb_secret_[A-Za-z0-9_-]{20,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]{35,}\.[A-Za-z0-9_-]{15,})/;
+          check('security/no-recognized-secret-literal',!secret.test(joined));
+          // Static source may not certify backend authorization; preserve explicit release block.
+          block('database/photo_waitlist','2026-10-10 DB catalog: RLS disabled; anon CRUD privileges; zero RLS policies');
+          block('database/photo_reservation_reminders','2026-10-10 DB catalog: RLS disabled; anon CRUD privileges; zero RLS policies');
+          block('database/photo_build_visit_reminder_queue','2026-10-10 DB catalog: SECURITY DEFINER function executable by anon/authenticated');
+          block('demo/public-admin-code','Demo management code exists in public config and gateway-v3; backend production isolation not independently certified');
+          block('identity/member-URL-tokens','Client passes line_user_id or public_token in member link query; validate scope, token lifetime, redaction and referrer policy before live deployment','REVIEW');
+          block('identity/draft-key','Browser request-draft key uses reservation number and mode; check cross-studio and cross-account collision and stale draft cleanup','REVIEW');
+          
+          for(const name of ['LINE official account and LIFF',
+           'customer-specific tenant isolation',
+           'customer-specific gateway credentials',
+           'owner and staff production authentication',
+           'mobile LINE reauthentication acceptance',
+           'studio domain, branding, customer handoff']) defer('contract/'+name,'Complete only after adoption');
+          defer('qa/browser-device','PC/Android/iPhone/iPad interactive QA, accessibility and lost-network behavior','QA');
+          defer('qa/Google-OAuth','Google OAuth current verification, delegated scope and revoked-token handling','QA');
+          defer('security/remote-authorization','Read-only file checks cannot prove RLS, backend tenant enforcement or RPC safety','SECURITY');
+          
+          const failed=checks.filter(x=>x.result==='FAIL');
+          const report={
+           product:'DPRO PHOTO', standard:'COMMON PRODUCT SECURITY GUARD R3',
+           scope:'READ_ONLY_STATIC_SOURCE_AND_KNOWN_SECURITY_DEBT',
+           gitSha:process.env.GITHUB_SHA || null, checkedAtUtc:new Date().toISOString(),
+           staticGate:failed.length?'FAIL':'PASS',
+           productionReady:false, productionRelease:'BLOCKED_SECURITY_AND_CONTRACT',
+           counts:{passed:checks.length-failed.length,failed:failed.length, securityBlockers:blockers.length,deferred:deferred.length},
+           sourceFiles:allFiles, apiEndpointCount:{declared:available.size,referenced:used.size},
+           checks, blockers, deferred,
+           invariants:['No external API call', 'No database access', 'No source mutation', 'No demo reset', 'No production activation']
+          };
+          fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R3.json',JSON.stringify(report,null,2)+'\n');
+          const summary=[
+           '# DPRO PHOTO Common Product Security Guard R3','',
+           `**Static checks:** ${report.staticGate}`,
+           `**Production release:** ${report.productionRelease}`,
+           `Passed: ${report.counts.passed}; Failed: ${report.counts.failed}; Security/review blockers: ${report.counts.securityBlockers}; Deferred: ${report.counts.deferred}`,'',
+           '## Static failures',...(failed.length?failed.map(x=>'- '+x.name+': '+x.note):['None']),'',
+           '## Security concerns (not automatically remediated)',
+           ...blockers.map(x=>`- [${x.severity}] ${x.name}: ${x.evidence}`),'',
+           'No network requests, data mutations, production deployment or LINE account registration.'
+          ].join('\n');
+          fs.writeFileSync('DPRO_PHOTO_PRODUCT_GATE_R3_SUMMARY.md',summary+'\n');
+          if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary+'\n');
+          console.log(summary);
+          if(failed.length)process.exitCode=1;
+          NODE
+      - name: Archive read-only security audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R3
+          path: |
+            DPRO_PHOTO_PRODUCT_GATE_R3.json
+            DPRO_PHOTO_PRODUCT_GATE_R3_SUMMARY.md
+          if-no-files-found: error
