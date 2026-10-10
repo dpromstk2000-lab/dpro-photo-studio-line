@@ -1,0 +1,264 @@
+name: DPRO PHOTO Whole Product Readonly Acceptance Audit R22
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-whole-product-acceptance-audit-r22.yml'
+permissions:
+  contents: read
+concurrency:
+  group: dpro-photo-whole-product-r22-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  whole-product-readonly-r22:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - name: Checkout exact published product source, without write permissions
+        uses: actions/checkout@v4
+      - name: Audit all seven screens, module syntax, links, security, and public Pages GET
+        shell: bash
+        env:
+          R22_PUBLIC_PROBE: '1'
+        run: |
+          set -euo pipefail
+          python - <<'PY_R22_AUDIT'
+          #!/usr/bin/env python3
+          """DPRO PHOTO R22 whole-product, non-mutating release audit.
+          No credentials or response bodies are retained. The optional Pages probe does only public GET.
+          """
+          from __future__ import annotations
+          import datetime as dt
+          import html.parser
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          
+          ROOT=Path('.').resolve()
+          PAGES=['index.html','member.html','staff.html','owner.html','owner-ipad.html','system-check.html','demo-guide.html']
+          CORE_SCRIPTS=['config.js','photo-booking-calendar-v2.js','photo-booking-presentation.js','photo-crm-import.js','photo-crm-line-link.js','photo-crm-segment.js','photo-feature-switch-master.js','photo-feature-switch-ui-v2.js','photo-integrations-ui.js','photo-owner-business-calendar.js','photo-owner-plan-resource.js','photo-owner-settings-v2.js','photo-owner-setup-checklist.js','photo-reservation-automation-ui.js','tutorial.js','tutorial-data.js']
+          RESULT={'product':'DPRO PHOTO','gate':'R22 COMMON PRODUCT WHOLE-SYSTEM READ-ONLY REVIEW','mode':'SOURCE_STATIC_AND_OPTIONAL_PUBLIC_GET','dateUtc':dt.datetime.now(dt.timezone.utc).isoformat(),'sourceSha':os.getenv('GITHUB_SHA') or None,'productionReady':False,'checks':[],'warnings':[],'deferred':[],'publicGetRequests':0,'dataMutations':0,'releaseDecision':'BLOCKED_PENDING_HUMAN_AND_SIGNED_INTEGRATION'}
+          
+          def add(phase,name,ok,detail=''):
+           RESULT['checks'].append({'phase':phase,'id':name,'result':'PASS' if ok else 'FAIL','detail':detail})
+          def warn(name,reason):RESULT['warnings'].append({'id':name,'reason':reason})
+          def defer(name,reason):RESULT['deferred'].append({'id':name,'reason':reason})
+          def read(name):
+           p=ROOT/name
+           return p.read_text(encoding='utf-8') if p.is_file() else ''
+          
+          class HtmlRefs(html.parser.HTMLParser):
+           def __init__(self):super().__init__(convert_charrefs=True);self.refs=[];self.meta=[];self.scripts=[];self.tags=[];self.ids=set();self.duplicate_ids=[];self.in_script=False;self.inline='';self.inline_scripts=[];self.title='';self.in_title=False
+           def handle_starttag(self,tag,attrs):
+            a=dict(attrs);self.tags.append(tag)
+            if 'id' in a:
+             if a['id'] in self.ids:self.duplicate_ids.append(a['id'])
+             self.ids.add(a['id'])
+            if tag in ('script','link','a','img','iframe'):
+             key={'script':'src','link':'href','a':'href','img':'src','iframe':'src'}[tag]
+             if a.get(key):self.refs.append((tag,a[key]))
+            if tag=='script':self.in_script=True;self.inline='';self.scripts.append(a)
+            if tag=='meta':self.meta.append(a)
+            if tag=='title':self.in_title=True
+           def handle_data(self,data):
+            if self.in_script:self.inline+=data
+            if self.in_title:self.title+=data
+           def handle_endtag(self,tag):
+            if tag=='script':
+             if self.scripts and not self.scripts[-1].get('src') and self.inline.strip():self.inline_scripts.append(self.inline)
+             self.in_script=False;self.inline=''
+            if tag=='title':self.in_title=False
+          
+          texts={p:read(p) for p in PAGES}
+          config=read('config.js');idx=texts['index.html'];member=texts['member.html'];owner=texts['owner.html'];staff=texts['staff.html'];ipad=texts['owner-ipad.html'];system=texts['system-check.html']
+          
+          # Domain 1: explicit product scope, essential screens and JS modules.
+          for file in PAGES:
+           add('screens','required/'+file,len(texts[file])>5000,'Essential public page present')
+          for file in CORE_SCRIPTS:
+           add('modules','required/'+file,len(read(file))>500,'Common product module present')
+          for file in ['photo-booking-calendar-v2.css','tutorial.css']:
+           add('assets','required/'+file,len(read(file))>500)
+          
+          # Domain 2: real page asset graph + script order + unique IDs.
+          for file in PAGES:
+           try:
+            parser=HtmlRefs();parser.feed(texts[file])
+            add('html','title/'+file,len(parser.title.strip())>5)
+            add('html','lang-ja/'+file,bool(re.search(r'<html\b[^>]*lang=["\']ja["\']',texts[file],re.I)))
+            add('html','viewport/'+file,any(x.get('name','').lower()=='viewport' for x in parser.meta))
+            add('html','no-duplicate-ids/'+file,not parser.duplicate_ids,','.join(parser.duplicate_ids[:5]))
+            assets=[]
+            for tag,val in parser.refs:
+             if val.startswith(('http:','https:','//','mailto:','tel:','#','data:','javascript:')):continue
+             clean=urllib.parse.urlsplit(val).path
+             if clean and clean!='/' and not clean.startswith('/'):assets.append((tag,clean))
+            for tag,rel in assets:add('asset-graph',f'{file}/{tag}/{rel}',(ROOT/rel).is_file(),'Referenced local asset')
+            if file!='demo-guide.html':
+             scripts=[x.get('src','') for x in parser.scripts]
+             config_index=next((i for i,s in enumerate(scripts) if s.split('?')[0].removeprefix('./')=='config.js'),-1)
+             first_inline=next((i for i,s in enumerate(scripts) if not s),999)
+             add('boot','config-before-inline/'+file,config_index>=0 and config_index<first_inline)
+            for i,src in enumerate(parser.inline_scripts):
+             tmp=ROOT/('_r22_tmp_'+file.replace('.','_')+'_'+str(i)+'.js')
+             try:
+              tmp.write_text(src,encoding='utf-8')
+              r=subprocess.run(['node','--check',str(tmp)],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=20)
+              add('syntax',f'{file}/inline-{i}',r.returncode==0, ('JS syntax error' if r.returncode else ''))
+             except Exception as e:add('syntax',f'{file}/inline-{i}',False,str(e)[:120])
+             finally:tmp.unlink(missing_ok=True)
+            meta_robots=' '.join(x.get('content','') for x in parser.meta if x.get('name','').lower()=='robots').lower()
+            if file in ['owner.html','staff.html','owner-ipad.html','member.html'] and 'noindex' not in meta_robots:
+             warn('robots-private-ui/'+file,'Public GitHub Pages management/member UI has no noindex directive. This does not replace authentication; review SEO exposure.')
+           except Exception as e:add('html','parser/'+file,False,str(e)[:180])
+          
+          # Domain 3: real JS syntax. No JS runs, no live credentials, no DB changes.
+          for p in sorted(ROOT.glob('*.js')):
+           r=subprocess.run(['node','--check',str(p)],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=20)
+           add('syntax','node-check/'+p.name,r.returncode==0,'JS syntax error' if r.returncode else '')
+          
+          # Domain 4: security and frontend contract guards.
+          markers={
+           'R6-draft-tenant':('member.html','DPRO-PHOTO-MEMBER-DRAFT-TENANT-ISOLATION-R6-20261010'),
+           'R8-calendar-race':('photo-booking-calendar-v2.js','requestSeq'),
+           'R9-calendar-navigation':('photo-booking-calendar-v2.js','R9-NAVIGATION-DATE-GUARD'),
+           'R11-exact-availability':('index.html','DPRO-PHOTO-R11-EXACT-AVAILABILITY-LATEST-REQUEST-GUARD'),
+           'R12-url-privacy':('member.html','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD'),
+           'R13-plan-rule':('index.html','DPRO-PHOTO-R13-PLAN-START-RULE-LATEST-REQUEST-SCOPE'),
+           'R14-member-async':('member.html','DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION'),
+           'R15-submit-context':('member.html','DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK'),
+           'R16-deeplink-exclusive':('member.html','DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY'),
+           'R17-refresh-feedback':('member.html','DPRO-PHOTO-R17-MEMBER-REFRESH-TRUTHFUL-STATUS'),
+           'R18-modal-identity':('member.html','DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION'),
+           'R19-modal-reservation':('member.html','DPRO-PHOTO-R19-MEMBER-MODAL-LIVE-RESERVATION-RECONCILE'),
+           'R20-event-close':('member.html','DPRO-PHOTO-R20-MEMBER-REQUEST-CLOSE-EVENT-SAFETY'),
+           'R21-editor-lock':('member.html','DPRO-PHOTO-R21-MEMBER-REQUEST-EDITOR-INFLIGHT-LOCK'),
+          }
+          for marker,(file,needle) in markers.items():add('regression-marker',marker,needle in read(file))
+          add('security','member-no-referrer',bool(re.search(r'<meta\s+name=["\']referrer["\']\s+content=["\']no-referrer["\']',member,re.I)))
+          add('security','member-identity-before-render','state.loadedLookup' in member and 'isCurrent()' in member)
+          add('security','no-member-session-switch-leak','C.clearSessionToken("member")' in member)
+          add('security','no-inflight-modal-close','button.addEventListener("click", () => closeRequestModal())' in member)
+          add('security','config-demo-studio',re.search(r'STUDIO_CODE\s*=\s*["\']dpro_photo_demo["\']',config) is not None)
+          add('security','config-production-guard','productionGuardRequired: true' in config)
+          add('security','config-30-minute-default','SLOT_MINUTES = 30' in config)
+          add('security','no-embedded-service-role-key',re.search(r'(?:SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY)\s*[:=]\s*["\'][^"\']{8,}',config,re.I) is None)
+          add('security','no-embedded-private-key',not any(re.search(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',read(p)) for p in PAGES+CORE_SCRIPTS))
+          add('auth','owner-session-endpoints','OWNER_SESSION' in config and 'owner' in owner.lower())
+          add('auth','staff-session-endpoints','STAFF_SESSION' in config and 'staff' in staff.lower())
+          add('operations','system-check-demo-prepare', 'DEMO_PREPARE' in system)
+          add('operations','owner-ipad-screen', 'owner-ipad' in ipad.lower() or 'iPad' in ipad)
+          add('product','booking-has-reservation-flow','PUBLIC_RESERVATIONS' in idx)
+          add('product','member-has-reservations-read','MEMBER_RESERVATIONS' in member)
+          add('product','calendar-source-and-css', 'photo-booking-calendar-v2.js' in idx and 'photo-booking-calendar-v2.css' in idx)
+          
+          # Domain 5: deployment and handoff readiness (explicitly deferred where outside static evidence).
+          if 'DEFAULT_ADMIN_CODE = "1234"' in config:warn('demo-admin-pin','Public demo frontend contains intentionally documented demo admin code 1234. Must not be used for customer production.')
+          if not re.search(r'<meta\s+name=["\']robots["\']',idx):warn('booking-search-policy','Booking demo page is publicly indexable by default; confirm customer production SEO policy at handoff.')
+          for name,desc in [
+           ('positive-owner-auth','Signed-in real owner authorization, session expiry and role boundaries need approved positive test.'),
+           ('positive-staff-auth','Real staff access must be checked with permitted staff credentials.'),
+           ('positive-member-auth','Real LINE/LIFF ID token validation and logged-in user identity need contract/real app.'),
+           ('booking-create-modify-cancel','No POST/DELETE/DB writes are allowed during this audit; positive reservation cycle awaits explicit approval.'),
+           ('tenant-B','Second configured studio and cross-tenant tests await a real second tenant.'),
+           ('Google-OAuth','Google sync/OAuth official approval and real sync tests are a separate gate.'),
+           ('production-domain-LINE','Customer domain, LINE official account, LIFF IDs and owner credentials require signed deployment.'),
+           ('authenticated-visual-QA','Screens containing real owner/staff/member data require browser + authorized test accounts.'),
+           ('human-acceptance','Final PC/mobile touch and owner-facing acceptance has not been performed.'),
+          ]:defer(name,desc)
+          
+          if os.environ.get('R22_PUBLIC_PROBE')=='1':
+           base='https://dpromstk2000-lab.github.io/dpro-photo-studio-line/'
+           for file in PAGES:
+            try:
+             req=urllib.request.Request(base+file,headers={'User-Agent':'DPRO-PHOTO-R22-ReadOnly-Audit/1.0','Accept':'text/html'},method='GET')
+             RESULT['publicGetRequests']+=1
+             with urllib.request.urlopen(req,timeout=16) as f:
+              payload=f.read(320000).decode('utf-8',errors='replace')
+              status=f.status
+             add('published-pages','public-get/'+file,status==200 and '<html' in payload.lower(),'HTTP '+str(status))
+             if file=='member.html':add('published-pages','R21-live-marker', 'DPRO-PHOTO-R21-MEMBER-REQUEST-EDITOR-INFLIGHT-LOCK' in payload)
+            except Exception as e:
+             add('published-pages','public-get/'+file,False,'Public GET unavailable: '+type(e).__name__)
+          else:
+           defer('public-pages-GET','Local source preflight; the GitHub Actions run will issue public page GET requests, without authorization or data changes.')
+          
+          passes=sum(x['result']=='PASS' for x in RESULT['checks']);fails=[x for x in RESULT['checks'] if x['result']=='FAIL']
+          RESULT['counts']={'passed':passes,'failed':len(fails),'warnings':len(RESULT['warnings']),'deferred':len(RESULT['deferred'])}
+          RESULT['status']='FAIL' if fails else 'PASS_WITH_WARNINGS_AND_DEFERRED'
+          Path('DPRO_PHOTO_R22_WHOLE_PRODUCT_GATE.json').write_text(json.dumps(RESULT,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          md=['# DPRO PHOTO R22 Whole Product Audit','',f"Status: {RESULT['status']}",f"Checks: {passes} PASS; {len(fails)} FAIL; {len(RESULT['warnings'])} WARN; {len(RESULT['deferred'])} DEFERRED",f"Public GET: {RESULT['publicGetRequests']}; mutating requests: 0",'ProductionReady: false','', '## Blocking failures']
+          md += [f"- {x['id']}: {x['detail']}" for x in fails] if fails else ['- None in inspected scope']
+          md+=['','## Warnings']+[f"- {x['id']}: {x['reason']}" for x in RESULT['warnings']]
+          md+=['','## Deferred release checks']+[f"- {x['id']}: {x['reason']}" for x in RESULT['deferred']]
+          Path('DPRO_PHOTO_R22_WHOLE_PRODUCT_SUMMARY.md').write_text('\n'.join(md)+'\n',encoding='utf-8')
+          if os.environ.get('GITHUB_STEP_SUMMARY'):
+           with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:f.write('\n'.join(md)+'\n')
+          print('\n'.join(md[:11]));print('Warnings:',len(RESULT['warnings']),'Deferred:',len(RESULT['deferred']))
+          if fails:sys.exit(1)
+          PY_R22_AUDIT
+      - name: Re-run existing R10B privacy-verified public GET API gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R22_READONLY'
+          from pathlib import Path
+          p=Path('.github/workflows/dpro-photo-public-booking-verified-contact-r10b.yml')
+          if not p.is_file():raise SystemExit('R22 STOP: R10B read-only live gate source missing')
+          lines=p.read_text().splitlines()
+          start=next(i for i,x in enumerate(lines) if x.strip()=="node - <<'NODE'")
+          end=next(i for i in range(start+1,len(lines)) if lines[i].strip()=='NODE')
+          js='\n'.join(x[10:] if x.startswith('          ') else x for x in lines[start+1:end])+'\n'
+          if len(js.splitlines())<100 or 'LIVE_PUBLIC_GET_INTEGRATION' not in js or '/api/public/availability' not in js:
+              raise SystemExit('R22 STOP: R10B gate changed; refuse unsafe or unverified replay')
+          if 'apiPost(' in js or 'fetch(' not in js:raise SystemExit('R22 STOP: unexpected R10B implementation')
+          Path('_r22_r10b_readonly.js').write_text(js)
+          print('R22 extracted verified public GET-only R10B regression program')
+          PY_R22_READONLY
+          node _r22_r10b_readonly.js
+          rm -f _r22_r10b_readonly.js
+      - name: Validate consolidated release evidence, with production approval blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R22_VERIFY'
+          from pathlib import Path
+          import json,os
+          r22=json.loads(Path('DPRO_PHOTO_R22_WHOLE_PRODUCT_GATE.json').read_text())
+          r10=json.loads(Path('DPRO_PHOTO_PRODUCT_GATE_R10B.json').read_text())
+          if r22['counts']['passed']<136 or r22['counts']['failed']!=0:
+              raise SystemExit('R22 whole-product source verification failed')
+          if r22['publicGetRequests']<7 or any(x['result']=='FAIL' for x in r22['checks']):
+              raise SystemExit('R22 public Pages verification incomplete or failing')
+          if r10['mode']!='LIVE_PUBLIC_GET_INTEGRATION' or r10['counts']['passed']<90 or r10['counts']['failed']!=0 or r10['requests']['liveGET']<12:
+              raise SystemExit('R22 public API live GET contract gate incomplete or failing')
+          if r10['requests']['POST']+r10['requests']['PUT']+r10['requests']['PATCH']+r10['requests']['DELETE'] or r22['dataMutations']:
+              raise SystemExit('R22 safety failure: unexpected write request')
+          if os.getenv('GITHUB_REF') and os.getenv('GITHUB_REF')!='refs/heads/main':raise SystemExit('R22 requires main branch')
+          summary={'gate':'DPRO PHOTO R22 CONSOLIDATED PRODUCT QUALITY EVIDENCE','sourceSha':os.getenv('GITHUB_SHA'),'result':'PASS_WITH_EXPLICIT_RELEASE_BLOCKERS','sourceAndPageChecks':r22['counts'],'publicBookingLiveGETChecks':r10['counts'],'requests':{'publicPagesGET':r22['publicGetRequests'],'publicApiGET':r10['requests']['liveGET'],'writes':0},'releaseApproval':False,'humanAcceptance':False,'authorizationAndLineVerified':False,'note':'R22 is a read-only cross-system source and public API gate, not production acceptance.'}
+          Path('DPRO_PHOTO_R22_CONSOLIDATED_GATE.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n')
+          msg=f"R22 VERIFIED: {r22['counts']['passed']} source/pages PASS, {r10['counts']['passed']} live-public-API PASS, 0 FAIL, 0 writes; production gate remains BLOCKED."
+          print(msg)
+          if os.getenv('GITHUB_STEP_SUMMARY'):
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('\n## Final R22 consolidated result\n'+msg+'\n')
+          PY_R22_VERIFY
+          git diff --exit-code -- . ':!DPRO_PHOTO_R22_WHOLE_PRODUCT_GATE.json' ':!DPRO_PHOTO_R22_WHOLE_PRODUCT_SUMMARY.md' ':!DPRO_PHOTO_PRODUCT_GATE_R10B.json' ':!DPRO_PHOTO_PRODUCT_GATE_R10B_SUMMARY.md' ':!DPRO_PHOTO_R22_CONSOLIDATED_GATE.json'
+      - name: Preserve read-only R22 and R10B audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_WHOLE_PRODUCT_R22
+          path: |
+            DPRO_PHOTO_R22_WHOLE_PRODUCT_GATE.json
+            DPRO_PHOTO_R22_WHOLE_PRODUCT_SUMMARY.md
+            DPRO_PHOTO_PRODUCT_GATE_R10B.json
+            DPRO_PHOTO_PRODUCT_GATE_R10B_SUMMARY.md
+            DPRO_PHOTO_R22_CONSOLIDATED_GATE.json
+          if-no-files-found: warn
