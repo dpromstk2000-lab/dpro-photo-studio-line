@@ -1304,6 +1304,11 @@ function actionButtons(reservation) {
           body = { ...auth, message: note };
         }
         state.requestSubmitting = true;
+        // DPRO-PHOTO-R21-MEMBER-REQUEST-EDITOR-INFLIGHT-LOCK-20261010
+        // Prevent in-flight edits whose new draft could otherwise be discarded on POST success.
+        els.requestNote.readOnly = true;
+        if (els.requestTypeSelect) els.requestTypeSelect.disabled = true;
+        if (els.submitRequestButton) els.submitRequestButton.disabled = true;
         try {
           setLoading(true, "本人確認後に送信しています");
           await refreshMemberSessionForRequest();
@@ -1322,6 +1327,9 @@ function actionButtons(reservation) {
           showToast(expired ? "認証の有効期限が切れました。入力内容は保持されています。LINEからマイページを開き直してください。" : message, "error");
         } finally {
           state.requestSubmitting = false;
+          els.requestNote.readOnly = false;
+          if (els.requestTypeSelect) els.requestTypeSelect.disabled = false;
+          if (els.submitRequestButton) els.submitRequestButton.disabled = false;
           setLoading(false);
         }
       }
@@ -1586,7 +1594,9 @@ function actionButtons(reservation) {
         $$('[data-close-modal]').forEach((button) => button.addEventListener("click", () => closeRequestModal()));
         els.requestModal.addEventListener("click", (event) => { if (event.target === els.requestModal) closeRequestModal(); });
         els.submitRequestButton.addEventListener("click", submitRequest);
-        els.requestNote.addEventListener("input", () => saveRequestDraft(state.modalMode, state.modalReservation, els.requestNote.value));
+        els.requestNote.addEventListener("input", () => {
+          if (!state.requestSubmitting) saveRequestDraft(state.modalMode, state.modalReservation, els.requestNote.value);
+        });
         document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeRequestModal(); });
       }
 
