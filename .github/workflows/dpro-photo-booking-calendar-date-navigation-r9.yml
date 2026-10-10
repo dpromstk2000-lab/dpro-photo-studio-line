@@ -1,0 +1,431 @@
+name: DPRO PHOTO Calendar Date Boundaries and Accessible Navigation R9
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-booking-calendar-date-navigation-r9.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-booking-calendar-r9-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  calendar-r9:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+      - name: Apply R9 guarded patch to 3 frontend files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010' photo-booking-calendar-v2.js; then
+            echo 'R9 already applied; skip source mutation.'
+          else
+            if ! grep -q 'DPRO-PHOTO-CALENDAR-R8-STABLE-ASYNCHRONOUS-STATE-20261010' photo-booking-calendar-v2.js; then
+              echo 'R9 STOP: version drift; refusing to overwrite newer code.' >&2
+              exit 1
+            fi
+            cat > /tmp/dpro-photo-r9.patch <<'R9_EXACT_SOURCE_PATCH'
+          --- a/photo-booking-calendar-v2.js
+          +++ b/photo-booking-calendar-v2.js
+          @@ -1,7 +1,7 @@
+           (() => {
+             "use strict";
+           
+          -  const VERSION = "DPRO-PHOTO-CALENDAR-R8-STABLE-ASYNCHRONOUS-STATE-20261010";
+          +  const VERSION = "DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010";
+             const FALLBACK_API_BASE = "https://cbknucemarcpbscirzyv.supabase.co/functions/v1/dpro-photo-product-ready-gateway-v8";
+             const C = window.DPRO_STUDIO || window.DPRO_PHOTO_STUDIO_CONFIG || null;
+             if (!C) return;
+          @@ -140,8 +140,20 @@
+               })[status] || { mark: "—", label: "確認中", cls: "out" };
+             }
+           
+          +  // R9: reject stale date statuses beyond native booking limits.
+          +  function inDateWindow(date) {
+          +    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) return false;
+          +    const { min, max } = limits();
+          +    return (!min || date >= min) && (!max || date <= max);
+          +  }
+          +
+             function canSelect(day) {
+          -    return day && (day.status === "available" || day.status === "limited");
+          +    return day && inDateWindow(day.date)
+          +      && (day.status === "available" || day.status === "limited");
+          +  }
+          +
+          +  function displayStatus(day) {
+          +    return inDateWindow(day?.date) ? day.status : "out_of_range";
+             }
+           
+             function currentMonthKey() {
+          @@ -203,6 +215,45 @@
+               ).join("");
+             }
+           
+          +  // R9: disable navigation when its visible period lies outside booking limits.
+          +  function navigationTarget(direction) {
+          +    if (direction !== 1 && direction !== -1) return "";
+          +    const current = clampAnchor(state.anchor);
+          +    let target = "";
+          +    if (state.view === "month") target = monthShift(current, direction);
+          +    else if (state.view === "week") target = addDays(current, direction * 7);
+          +    else if (state.view === "day") target = addDays(current, direction);
+          +    else target = addDays(current, direction * 28);
+          +    const { min, max } = limits();
+          +    if (state.view === "month") {
+          +      if ((min && target.slice(0, 7) < min.slice(0, 7))
+          +        || (max && target.slice(0, 7) > max.slice(0, 7))) return "";
+          +    } else if (state.view === "week") {
+          +      const first = startOfWeek(target);
+          +      if ((min && addDays(first, 6) < min) || (max && first > max)) return "";
+          +    } else if (state.view === "list") {
+          +      if ((min && addDays(target, 27) < min) || (max && target > max)) return "";
+          +    } else if (!inDateWindow(target)) return "";
+          +    return clampAnchor(target);
+          +  }
+          +
+          +  function updateNavButtons() {
+          +    for (const [id, direction] of [["dproCalendarPrev", -1], ["dproCalendarNext", 1]]) {
+          +      const button = $(id);
+          +      if (!button) continue;
+          +      button.disabled = !navigationTarget(direction);
+          +      button.setAttribute("aria-disabled", String(button.disabled));
+          +      button.title = button.disabled ? "予約受付期間外のため移動できません" : "";
+          +    }
+          +    const today = $("dproCalendarToday");
+          +    if (today) {
+          +      const now = C.todayYmd?.() || new Date().toLocaleDateString("en-CA", {timeZone:"Asia/Tokyo"});
+          +      today.disabled = !inDateWindow(now);
+          +      today.setAttribute("aria-disabled", String(today.disabled));
+          +      today.title = today.disabled ? "今日は予約受付期間外です" : "";
+          +    }
+          +  }
+          +
+             function renderLoading() {
+               const body = $("dproCalendarBody");
+               if (body) body.innerHTML = `<div class="dpro-cal-empty"><span class="dpro-cal-spinner"></span>空き状況を確認しています</div>`;
+          @@ -220,7 +271,7 @@
+             }
+           
+             function dayInner(day, compact = false) {
+          -    const meta = statusMeta(day.status);
+          +    const meta = statusMeta(displayStatus(day));
+               const d = dateObj(day.date);
+               const selected = nativeDate()?.value === day.date;
+               const monthOutside = state.view === "month" && day.date.slice(0, 7) !== currentMonthKey();
+          @@ -254,7 +305,7 @@
+           
+             function renderWeek() {
+               $("dproCalendarBody").innerHTML = `<div class="dpro-cal-week-grid">${state.days.map((day) => {
+          -      const meta = statusMeta(day.status);
+          +      const meta = statusMeta(displayStatus(day));
+                 return `<article class="dpro-cal-row is-${meta.cls}">
+                   <div class="dpro-cal-row-date"><strong>${esc(formatDay(day.date))}</strong>${day.event?.title ? `<span>${esc(day.event.title)}</span>` : ""}</div>
+                   <div class="dpro-cal-row-state"><b>${meta.mark}</b><span>${meta.label}</span>${day.available_slot_count ? `<small>${day.available_slot_count}枠</small>` : ""}</div>
+          @@ -266,7 +317,7 @@
+             function renderDay() {
+               const day = state.days[0];
+               if (!day) return;
+          -    const meta = statusMeta(day.status);
+          +    const meta = statusMeta(displayStatus(day));
+               $("dproCalendarBody").innerHTML = `<div class="dpro-cal-focus is-${meta.cls}">
+                 <div class="dpro-cal-focus-mark">${meta.mark}</div>
+                 <div>
+          @@ -282,7 +333,7 @@
+           
+             function renderList() {
+               $("dproCalendarBody").innerHTML = `<div class="dpro-cal-list">${state.days.map((day) => {
+          -      const meta = statusMeta(day.status);
+          +      const meta = statusMeta(displayStatus(day));
+                 return `<button type="button" class="dpro-cal-list-item is-${meta.cls}" data-calendar-date="${esc(day.date)}" ${canSelect(day) ? "" : "disabled"}>
+                   <span class="dpro-cal-list-date">${esc(formatDay(day.date))}</span>
+                   <span class="dpro-cal-list-status"><b>${meta.mark}</b>${meta.label}</span>
+          @@ -296,6 +347,7 @@
+               const caption = $("dproCalendarCaption");
+               if (caption) caption.textContent = captionText();
+               renderViewButtons();
+          +    updateNavButtons();
+               if (state.view === "month") renderMonth();
+               else if (state.view === "week") renderWeek();
+               else if (state.view === "day") renderDay();
+          @@ -331,6 +383,7 @@
+               const seq = ++state.requestSeq;
+               if (state.abort) state.abort.abort();
+               state.abort = new AbortController();
+          +    updateNavButtons();
+               renderLoading();
+           
+               try {
+          @@ -366,16 +419,16 @@
+             }
+           
+             function move(direction) {
+          -    if (state.view === "month") state.anchor = monthShift(clampAnchor(state.anchor), direction);
+          -    else if (state.view === "week") state.anchor = addDays(clampAnchor(state.anchor), direction * 7);
+          -    else if (state.view === "day") state.anchor = addDays(clampAnchor(state.anchor), direction);
+          -    else state.anchor = addDays(clampAnchor(state.anchor), direction * 28);
+          -    state.anchor = clampAnchor(state.anchor);
+          +    const target = navigationTarget(direction);
+          +    if (!target) return;
+          +    state.anchor = target;
+               refresh();
+             }
+           
+             function goToday() {
+          -    state.anchor = clampAnchor(C.todayYmd?.() || new Date().toISOString().slice(0, 10));
+          +    const today = C.todayYmd?.() || new Date().toLocaleDateString("en-CA", {timeZone:"Asia/Tokyo"});
+          +    if (!inDateWindow(today)) return;
+          +    state.anchor = today;
+               refresh();
+             }
+           
+          --- a/photo-booking-calendar-v2.css
+          +++ b/photo-booking-calendar-v2.css
+          @@ -285,3 +285,10 @@
+             .dpro-cal-status b { font-size: 15px; }
+             .dpro-cal-first { font-size: 10px; }
+           }
+          +
+          +/* DPRO-PHOTO-CALENDAR-R9-ACCESSIBLE-NAV-CSS */
+          +.dpro-cal-nav button:disabled { cursor: not-allowed; opacity: .54; background: #f1f4f3; color: #586b67; }
+          +.dpro-cal-nav button:focus-visible,
+          +.dpro-cal-day:focus-visible,
+          +.dpro-cal-view:focus-visible,
+          +.dpro-cal-list-item:focus-visible { outline: 3px solid #006b87; outline-offset: 2px; }
+          --- a/index.html
+          +++ b/index.html
+          @@ -357,7 +357,7 @@
+               }
+             </style>
+             <!-- DPRO-PHOTO-RESERVATION-CALENDAR-V2-BRUSHUP-8-3-UI-20260919 / feature-flagged / additive -->
+          -  <link rel="stylesheet" href="./photo-booking-calendar-v2.css?v=DPRO-PHOTO-RESERVATION-CALENDAR-V2-BRUSHUP-8-3-1-POLISH1-20260919">
+          +  <link rel="stylesheet" href="./photo-booking-calendar-v2.css?v=DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010">
+           </head>
+           <body>
+             <main class="app-shell" id="app" aria-live="polite">
+          @@ -1520,6 +1520,6 @@
+               initialize();
+             })();
+             </script>
+          -  <!-- DPRO-PHOTO-RESERVATION-START-RULES-BRUSHUP-8-3-2-UI-20260919 --><script src="./photo-booking-calendar-v2.js?v=DPRO-PHOTO-CALENDAR-R8-STABLE-ASYNCHRONOUS-STATE-20261010"></script>
+          +  <!-- DPRO-PHOTO-RESERVATION-START-RULES-BRUSHUP-8-3-2-UI-20260919 --><script src="./photo-booking-calendar-v2.js?v=DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010"></script>
+           </body>
+           </html>
+          R9_EXACT_SOURCE_PATCH
+            git apply --check /tmp/dpro-photo-r9.patch
+            git apply /tmp/dpro-photo-r9.patch
+          fi
+          grep -q 'DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010' photo-booking-calendar-v2.js
+          grep -q 'DPRO-PHOTO-CALENDAR-R9-ACCESSIBLE-NAV-CSS' photo-booking-calendar-v2.css
+          grep -q 'photo-booking-calendar-v2.css?v=DPRO-PHOTO-CALENDAR-R9' index.html
+          grep -q 'photo-booking-calendar-v2.js?v=DPRO-PHOTO-CALENDAR-R9' index.html
+          node --check photo-booking-calendar-v2.js
+      - name: Verify R8 stability and R9 navigation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > __dpro_photo_r8_test.js <<'R8_NODE_SUITE'
+          'use strict';
+          const fs=require('node:fs');
+          const vm=require('node:vm');
+          const assert=require('node:assert/strict');
+          const code=fs.readFileSync('photo-booking-calendar-v2.js','utf8');
+          const index=fs.readFileSync('index.html','utf8');
+          const version='DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010';
+          const checks=[];
+          function ok(name,fn){fn();checks.push(name);}
+          function deferred(){let resolve,reject;const promise=new Promise((res,rej)=>{resolve=res;reject=rej});return {promise,resolve,reject};}
+          function harness(opts={}){
+           const events={},calls=[],delays=[],els={},dateCard={hidden:false,parentNode:{insertBefore(){}}};
+           const make=(id)=>els[id]||=({id,innerHTML:'',value:'',textContent:'',listeners:{},attributes:{},setAttribute(k,v){this.attributes[k]=v},addEventListener(name,cb){this.listeners[name]=cb},dispatchEvent(){},scrollIntoView(){}});
+           make('reservationDate').min='2026-10-10';make('reservationDate').max='2027-04-10';
+           make('planGrid');make('staffGrid');make('availabilityState');make('dproCalendarBody');
+           make('dproCalendarCaption');make('dproCalendarViews');make('dproCalendarPrev');make('dproCalendarNext');make('dproCalendarToday');
+           const document={readyState:'complete',getElementById:make,createElement(){return {innerHTML:'',firstElementChild:{}}},
+            querySelector(sel){if(sel.includes('.date-card'))return dateCard;if(sel.startsWith('#planGrid'))return opts.selectedPlan===false?null:{dataset:{planId:opts.selectedPlan||'planA'}};return null;},addEventListener(name,cb){events[name]=cb}};
+           let interval;
+           const localStorage={getItem(){if(opts.storageThrows)throw Error('STORAGE_RESTRICTED');return opts.savedView||''},setItem(){if(opts.storageThrows)throw Error('STORAGE_RESTRICTED')}};
+           const fetch=async (url)=>{const path=new URL(url).pathname;
+            if(path.endsWith('/api/public/config'))return {ok:true,json:async()=>({ok:true,settings:{feature_flags:{reservation_calendar_v2:true},ui_settings:{booking_v2:{enabled_views:['month','week'],default_view:'month'}}}})};
+            if(path.endsWith('/api/public/calendar-summary')){const d=deferred();calls.push({url:String(url),...d});return d.promise;}
+            throw Error('unexpected fetch '+url);
+           };
+           const win={DPRO_STUDIO:{CALENDAR_API_BASE_URL:'https://example.invalid/functions/v1/calendar',todayYmd:()=> '2026-10-10'},
+            setInterval(fn){interval=fn;return 10;},clearInterval(){},setTimeout(fn){delays.push(fn);return 1;}};
+           const ctx={window:win,document,localStorage,fetch,URL,Date,AbortController,Event,console:{warn(){}},setTimeout:win.setTimeout};
+           vm.runInNewContext(code,ctx,{filename:'photo-booking-calendar-v2.js'});
+           return {win,make,dateCard,calls,opts,tick(){interval()},events,delays};
+          }
+          async function flush(){for(let i=0;i<8;i++)await Promise.resolve();}
+          async function run(){
+           ok('R8 JS wrapper/version',()=>assert(code.includes(version)));
+           ok('R8 public index cache-bust',()=>assert(index.includes('photo-booking-calendar-v2.js?v='+version)));
+           const h=harness({selectedPlan:'planA',storageThrows:true});h.tick();await flush();
+           ok('Private browsing does not prevent calendar mount',()=>assert.equal(h.calls.length,1));
+           h.calls[0].resolve({ok:true,json:async()=>({ok:true,days:[{date:'2026-10-12',status:'available',available_slot_count:2}]})});await flush();
+           ok('Calendar renders selected plan before switch',()=>assert(h.make('dproCalendarBody').innerHTML.includes('10月')));
+           h.make('dproCalendarViews').listeners.click({target:{closest:()=>({dataset:{calendarView:'week'}})}});
+           await flush();
+           ok('Storage-denied view change does not crash',()=>assert.equal(h.calls.length,2));
+           h.calls[1].resolve({ok:true,json:async()=>({ok:true,days:[{date:'2026-10-13',status:'available'}]})});await flush();
+           ok('Week view loads in private browsing',()=>assert(h.make('dproCalendarBody').innerHTML.includes('dpro-cal-week-grid')));
+           const k=harness({selectedPlan:'planA'});k.tick();await flush();
+           ok('First plan initiates calendar fetch',()=>assert.equal(k.calls.length,1));
+           k.opts.selectedPlan=false;await k.win.DPRO_PHOTO_BOOKING_CALENDAR_V2.refresh();
+           ok('No-plan state clears old availability',()=>assert(k.make('dproCalendarBody').innerHTML.includes('先に撮影プラン')));
+           k.calls[0].resolve({ok:true,json:async()=>({ok:true,days:[{date:'2026-10-18',status:'available'}]})});await flush();
+           ok('Old success cannot replace cleared plan',()=>assert(k.make('dproCalendarBody').innerHTML.includes('先に撮影プラン')));
+           k.opts.selectedPlan='planB';const first=k.win.DPRO_PHOTO_BOOKING_CALENDAR_V2.refresh();await flush();
+           k.opts.selectedPlan='planC';const second=k.win.DPRO_PHOTO_BOOKING_CALENDAR_V2.refresh();await flush();
+           ok('Consecutive plan changes spawn requests',()=>assert.equal(k.calls.length,3));
+           k.calls[2].resolve({ok:true,json:async()=>({ok:true,days:[{date:'2026-10-20',status:'available',available_slot_count:1}]})});await second;await flush();
+           ok('Newest plan C is rendered',()=>assert(k.make('dproCalendarBody').innerHTML.includes('10月')));
+           k.calls[1].reject(new Error('Old plan B network failure'));await first;await flush();
+           ok('Old plan B error cannot override new plan C',()=>assert(!k.make('dproCalendarBody').innerHTML.includes('dpro-cal-error')));
+           ok('Stale fallback date selector remains hidden',()=>assert.equal(k.dateCard.hidden,true));
+           const report={standard:'DPRO PHOTO R8 CALENDAR RACE AND STORAGE QA',passed:checks.length,failed:0,checks,productionReady:false,fixtureOnly:true};
+           fs.writeFileSync('DPRO_PHOTO_R8_VERIFY.json',JSON.stringify(report,null,2)+'\n');
+           console.log(JSON.stringify({passed:checks.length,failed:0,tests:checks},null,2));
+          }
+          run().catch(e=>{console.error(e.stack||e);process.exitCode=1});
+          R8_NODE_SUITE
+          cat > __dpro_photo_r9_test.js <<'R9_NODE_SUITE'
+          'use strict';
+          const fs=require('node:fs');
+          const vm=require('node:vm');
+          const assert=require('node:assert/strict');
+          const code=fs.readFileSync('photo-booking-calendar-v2.js','utf8');
+          const index=fs.readFileSync('index.html','utf8');
+          const version='DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010';
+          const checks=[];
+          function ok(name,fn){fn();checks.push(name);}
+          function deferred(){let resolve,reject;const promise=new Promise((res,rej)=>{resolve=res;reject=rej});return {promise,resolve,reject};}
+          function harness(opts={}){
+           const events={},calls=[],delays=[],els={},dateCard={hidden:false,parentNode:{insertBefore(){}}};
+           const make=(id)=>els[id]||=({id,innerHTML:'',value:'',textContent:'',listeners:{},attributes:{},setAttribute(k,v){this.attributes[k]=v},addEventListener(name,cb){this.listeners[name]=cb},dispatchEvent(){},scrollIntoView(){}});
+           make('reservationDate').min=opts.min||'2026-10-10';make('reservationDate').max=opts.max||'2027-04-10';
+           make('planGrid');make('staffGrid');make('availabilityState');make('dproCalendarBody');
+           make('dproCalendarCaption');make('dproCalendarViews');make('dproCalendarPrev');make('dproCalendarNext');make('dproCalendarToday');
+           const document={readyState:'complete',getElementById:make,createElement(){return {innerHTML:'',firstElementChild:{}}},
+            querySelector(sel){if(sel.includes('.date-card'))return dateCard;if(sel.startsWith('#planGrid'))return opts.selectedPlan===false?null:{dataset:{planId:opts.selectedPlan||'planA'}};return null;},addEventListener(name,cb){events[name]=cb}};
+           let interval;
+           const localStorage={getItem(){if(opts.storageThrows)throw Error('STORAGE_RESTRICTED');return opts.savedView||''},setItem(){if(opts.storageThrows)throw Error('STORAGE_RESTRICTED')}};
+           const fetch=async (url)=>{const path=new URL(url).pathname;
+            if(path.endsWith('/api/public/config'))return {ok:true,json:async()=>({ok:true,settings:{feature_flags:{reservation_calendar_v2:true},ui_settings:{booking_v2:{enabled_views:['month','week','day','list'],default_view:'month'}}}})};
+            if(path.endsWith('/api/public/calendar-summary')){const d=deferred();calls.push({url:String(url),...d});return d.promise;}
+            throw Error('unexpected fetch '+url);
+           };
+           const win={DPRO_STUDIO:{CALENDAR_API_BASE_URL:'https://example.invalid/functions/v1/calendar',todayYmd:()=> '2026-10-10'},
+            setInterval(fn){interval=fn;return 10;},clearInterval(){},setTimeout(fn){delays.push(fn);return 1;}};
+           const ctx={window:win,document,localStorage,fetch,URL,Date,AbortController,Event,console:{warn(){}},setTimeout:win.setTimeout};
+           vm.runInNewContext(code,ctx,{filename:'photo-booking-calendar-v2.js'});
+           return {win,make,dateCard,calls,opts,tick(){interval()},events,delays};
+          }
+          async function flush(){for(let i=0;i<8;i++)await Promise.resolve();}
+          async function run(){
+           const version='DPRO-PHOTO-CALENDAR-R9-NAVIGATION-DATE-GUARD-20261010';
+           const css=fs.readFileSync('photo-booking-calendar-v2.css','utf8');
+           ok('R9 JS version',()=>assert(code.includes('const VERSION = "'+version+'"')));
+           ok('R9 JS cache-busting',()=>assert(index.includes('photo-booking-calendar-v2.js?v='+version)));
+           ok('R9 CSS cache-busting',()=>assert(index.includes('photo-booking-calendar-v2.css?v='+version)));
+           ok('R9 CSS accessible focus',()=>assert(css.includes('DPRO-PHOTO-CALENDAR-R9-ACCESSIBLE-NAV-CSS')&&css.includes('focus-visible')&&css.includes('button:disabled')));
+           const h=harness({max:'2026-10-31'});h.tick();await flush();
+           ok('Initial calendar request occurs',()=>assert.equal(h.calls.length,1));
+           ok('Prev disabled at min-month',()=>assert.equal(h.make('dproCalendarPrev').disabled,true));
+           ok('Next disabled at max-month',()=>assert.equal(h.make('dproCalendarNext').disabled,true));
+           ok('Today active inside window',()=>assert.equal(h.make('dproCalendarToday').disabled,false));
+           ok('Aria state matches navigation',()=>assert.equal(h.make('dproCalendarNext').attributes['aria-disabled'],'true'));
+           h.make('dproCalendarNext').listeners.click();await flush();
+           ok('Disabled forward navigation emits no request',()=>assert.equal(h.calls.length,1));
+           h.make('dproCalendarPrev').listeners.click();await flush();
+           ok('Disabled backward navigation emits no request',()=>assert.equal(h.calls.length,1));
+           h.calls[0].resolve({ok:true,json:async()=>({ok:true,days:[{date:'2026-10-09',status:'available'},{date:'2026-10-12',status:'available'}]})});await flush();
+           const html=h.make('dproCalendarBody').innerHTML;
+           const sliceOf=(date)=>html.match(new RegExp('<button[^>]*data-calendar-date="'+date+'"[\\s\\S]*?<\\/button>'))?.[0]||'';
+           ok('Stale available day before minimum is disabled',()=>assert(/\bdisabled\b/.test(sliceOf('2026-10-09'))));
+           ok('Valid available day remains enabled',()=>assert(!/\bdisabled\b/.test(sliceOf('2026-10-12'))));
+           ok('Out-of-window day has truthful closed display',()=>assert(sliceOf('2026-10-09').includes('受付期間外')));
+           h.make('dproCalendarBody').listeners.click({target:{closest:()=>({dataset:{calendarDate:'2026-10-09'},disabled:false})}});await flush();
+           ok('Out-of-range click does not select date',()=>assert.equal(h.make('reservationDate').value,''));
+           h.make('dproCalendarBody').listeners.click({target:{closest:()=>({dataset:{calendarDate:'2026-10-12'},disabled:false})}});await flush();
+           ok('In-range click selects valid date',()=>assert.equal(h.make('reservationDate').value,'2026-10-12'));
+           const k=harness({max:'2026-11-15'});k.tick();await flush();
+           ok('Next month available within booking window',()=>assert.equal(k.make('dproCalendarNext').disabled,false));
+           k.calls[0].resolve({ok:true,json:async()=>({ok:true,days:[]})});await flush();
+           k.make('dproCalendarNext').listeners.click();await flush();
+           ok('Next-month click sends fresh query',()=>assert.equal(k.calls.length,2));
+           ok('Next disabled in last allowed month',()=>assert.equal(k.make('dproCalendarNext').disabled,true));
+           ok('Prev enabled after advancing month',()=>assert.equal(k.make('dproCalendarPrev').disabled,false));
+           k.calls[1].resolve({ok:true,json:async()=>({ok:true,days:[]})});await flush();
+           k.make('dproCalendarPrev').listeners.click();await flush();
+           ok('Previous returns to initial month',()=>assert.equal(k.calls.length,3));
+           k.calls[2].resolve({ok:true,json:async()=>({ok:true,days:[]})});await flush();
+           const m=harness({min:'2026-10-11',max:'2026-11-15'});m.tick();await flush();
+           ok('Today disabled before booking minimum',()=>assert.equal(m.make('dproCalendarToday').disabled,true));
+           m.make('dproCalendarToday').listeners.click();await flush();
+           ok('Today outside window is no-op',()=>assert.equal(m.calls.length,1));
+           const w=harness({max:'2026-11-15'});w.tick();await flush();
+           w.calls[0].resolve({ok:true,json:async()=>({ok:true,days:[]})});await flush();
+           w.make('dproCalendarViews').listeners.click({target:{closest:()=>({dataset:{calendarView:'week'}})}});await flush();
+           ok('Week view prev disabled past minimum',()=>assert.equal(w.make('dproCalendarPrev').disabled,true));
+           ok('Week view next enabled within period',()=>assert.equal(w.make('dproCalendarNext').disabled,false));
+           w.calls[1].resolve({ok:true,json:async()=>({ok:true,days:[]})});await flush();
+           w.make('dproCalendarViews').listeners.click({target:{closest:()=>({dataset:{calendarView:'day'}})}});await flush();
+           ok('Day view prev disabled on first date',()=>assert.equal(w.make('dproCalendarPrev').disabled,true));
+           ok('Day view next enabled',()=>assert.equal(w.make('dproCalendarNext').disabled,false));
+           const report={standard:'DPRO PHOTO R9 ACCESSIBLE NAVIGATION AND DATE WINDOW GUARD',passed:checks.length,failed:0,checks,fixtureOnly:true,productionReady:false};
+           fs.writeFileSync('DPRO_PHOTO_R9_VERIFY.json',JSON.stringify(report,null,2)+'\n');
+           console.log(JSON.stringify({passed:checks.length,failed:0,tests:checks},null,2));
+          }
+          run().catch(e=>{console.error(e.stack||e);process.exitCode=1});
+          R9_NODE_SUITE
+          node __dpro_photo_r8_test.js
+          node __dpro_photo_r9_test.js
+          python - <<'R9_REPORT_PY'
+          from pathlib import Path
+          import json
+          r8=json.loads(Path('DPRO_PHOTO_R8_VERIFY.json').read_text())
+          r9=json.loads(Path('DPRO_PHOTO_R9_VERIFY.json').read_text())
+          assert r8['passed']==13 and r8['failed']==0
+          assert r9['passed']==27 and r9['failed']==0
+          data={'standard':'DPRO PHOTO R9 CALENDAR DATE WINDOW AND NAVIGATION',
+              'status':'PASS','testMode':'OFFLINE_MOCK_JS_WITH_R8_REGRESSION','productionReady':False,
+              'dataMutation':False,'liveApiRequests':0,'counts':{'passed':40,'failed':0,'r8Regression':13,'r9NewChecks':27},
+              'r8':r8,'r9':r9,
+              'deferred':['real-browser mobile interaction','real booking and cancellation',
+                          'cross-studio positive-session test','customer contract LINE integration']}
+          Path('DPRO_PHOTO_PRODUCT_GATE_R9.json').write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+          print('DPRO PHOTO R9 simulated navigation and R8 regressions: PASS 40 FAIL 0')
+          R9_REPORT_PY
+          rm -f __dpro_photo_r8_test.js __dpro_photo_r9_test.js DPRO_PHOTO_R8_VERIFY.json DPRO_PHOTO_R9_VERIFY.json
+          git diff --check
+          changed=$(git diff --name-only | sort)
+          expected=$(printf 'index.html\nphoto-booking-calendar-v2.css\nphoto-booking-calendar-v2.js' | sort)
+          if [ "$changed" != "$expected" ] && [ -n "$changed" ]; then
+            echo "R9 STOP unexpected modifications: $changed" >&2
+            exit 1
+          fi
+      - name: Commit verified R9 frontend changes only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- index.html photo-booking-calendar-v2.js photo-booking-calendar-v2.css; then
+            echo 'R9 already applied; no commit needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- index.html photo-booking-calendar-v2.js photo-booking-calendar-v2.css
+          git commit -m 'DPRO PHOTO R9 improve calendar date boundaries and accessible navigation'
+          git push
+      - name: Upload R9 offline QA results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_PRODUCT_GATE_R9
+          path: DPRO_PHOTO_PRODUCT_GATE_R9.json
+          if-no-files-found: error
