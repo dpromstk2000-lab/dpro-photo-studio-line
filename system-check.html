@@ -678,7 +678,7 @@
         <span id="demoModeText"></span>
       </div>
       <div class="notice" id="authHelp">
-        通常はセッション中だけ保存します。「このブラウザに保存」を選んだ場合のみ、ブラウザを閉じた後も残ります。
+        本番URLでは管理コード自体を保存せず、認証セッションだけを使用します。「このブラウザに保存」はデモURL専用です。
         本番運用ではCloudflare側の管理コードを必ず変更してください。
       </div>
     </section>
@@ -1107,18 +1107,19 @@
         };
       }
 
+      /* DPRO-PHOTO-SYSTEM-CHECK-OWNER-SESSION-QA-FIX-V1-20261010 */
       async function checkAdmin() {
         const config = requireConfig();
-        const code = String(config.getAdminCode() || "").trim();
-        if (!code) return { state: "warn", detail: "管理コードが未設定です。上の認証欄から認証してください。", payload: { verified: false, reason: "ADMIN_CODE_REQUIRED" } };
-        const payload = await config.verifyAdminCode(code);
-        updateAuthState(true, "認証済み");
-        return { state: payload?.verified ? "ok" : "error", detail: payload?.verified ? "管理コード認証に成功しました。" : "管理コードを確認できませんでした。", payload };
+        if (!config.getSessionToken("owner")) return { state: "warn", detail: "管理者セッションがありません。上の認証欄から認証してください。", payload: { verified: false, reason: "OWNER_SESSION_REQUIRED" } };
+        const payload = await config.adminGet(config.ENDPOINTS.ADMIN_DASHBOARD);
+        if (!payload?.ok) throw new Error("管理セッションでダッシュボードAPIに接続できません。");
+        updateAuthState(true, "認証済み・管理セッション有効");
+        return { state: "ok", detail: "管理セッションによる認証と管理APIへの接続を確認しました。", payload: { verified: true, session_check: true } };
       }
 
       async function checkPhone() {
         const config = requireConfig();
-        if (!config.getAdminCode()) return { state: "warn", detail: "管理コード認証後に電話番号正規化を確認します。", payload: { skipped: true } };
+        if (!config.getSessionToken("owner")) return { state: "warn", detail: "管理者セッション認証後に電話番号正規化を確認します。", payload: { skipped: true } };
         const payload = await config.adminGet(config.ENDPOINTS.ADMIN_PHONE_NORMALIZE_CHECK);
         return {
           state: payload.standard_match ? "ok" : "error",
@@ -1155,7 +1156,7 @@
 
       async function checkDashboard() {
         const config = requireConfig();
-        if (!config.getAdminCode()) return { state: "warn", detail: "管理コード認証後に管理ダッシュボードを確認します。", payload: { skipped: true } };
+        if (!config.getSessionToken("owner")) return { state: "warn", detail: "管理者セッション認証後に管理ダッシュボードを確認します。", payload: { skipped: true } };
         const payload = await config.adminGet(config.ENDPOINTS.ADMIN_DASHBOARD);
         if (!payload?.ok) throw new Error("管理ダッシュボードがOKを返していません。");
         const counts = payload.counts || {};
@@ -1291,7 +1292,8 @@
           const payload = await config.verifyAdminCode(code);
           if (!payload?.verified) throw new Error("管理コードを確認できませんでした。");
           config.saveAdminCode(code, { sessionOnly: !elements.persistCode.checked });
-          updateAuthState(true, elements.persistCode.checked ? "認証済み・ブラウザ保存" : "認証済み・セッション保存");
+          updateAuthState(true, config.RUNTIME?.demoMode ? (elements.persistCode.checked ? "認証済み・デモ用ブラウザ保存" : "認証済み・デモ用セッション保存") : "認証済み・管理セッション有効");
+          if (!config.RUNTIME?.demoMode) elements.adminCode.value = "";
           setCheck("admin", "ok", "管理コード認証に成功しました。", payload);
           showToast("管理コードを確認しました。", "ok");
         } catch (error) {
@@ -1313,11 +1315,14 @@
         if (!config) return;
         const code = String(config.getAdminCode() || "");
         elements.adminCode.value = code;
-        if (code) updateAuthState(false, "保存済み・未検証");
+        if (code) updateAuthState(false, "デモ管理コード保存済み・未検証");
+        else if (config.getSessionToken("owner")) updateAuthState(false, "管理セッションあり・未検証");
         else updateAuthState(false, "未確認");
+        elements.persistCode.disabled = !config.RUNTIME?.demoMode;
+        if (!config.RUNTIME?.demoMode) elements.persistCode.checked = false;
         elements.demoModeText.textContent = config.RUNTIME?.demoMode
           ? "デモURL：管理コードはセッションへ自動設定されています。"
-          : "通常URL：管理コードは自動設定されません。";
+          : "本番URL：管理コードは保存せず、管理セッションで確認します。";
       }
 
       function clearAdminCode() {
