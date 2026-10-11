@@ -1,0 +1,136 @@
+name: DPRO PHOTO Japanese Staff Calendar R28
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-staff-japanese-calendar-r28.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-staff-calendar-r28-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  r28-staff-calendar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout verified DPRO PHOTO source
+        uses: actions/checkout@v4
+      - name: Reuse existing R26 Japanese calendar for staff date input
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R28_PATCH'
+          from pathlib import Path
+          import hashlib
+
+          name='staff.html'
+          p=Path(name)
+          raw=p.read_bytes()
+
+          def gitsha(b):
+              return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+
+          OLD_SHA='f8b34d9f4832edaf8c3fdfb881e90aba4d27c983'
+          REUSED_SHA='d0cf70ce1a52e0f9afe424ddba290c6c0d61d06d'
+          anchor=b'  </script>\n</body>'
+          mark=b'<!-- DPRO-PHOTO-R28-STAFF-JAPANESE-CALENDAR-20261011 -->'
+          insert=(b'  </script>\n  '+mark+b'\n'
+                  b'  <script src="./photo-admin-calendar-ja-r26.js?v=DPRO-PHOTO-R28-STAFF-JA-DATE-20261011"></script>\n'
+                  b'</body>')
+          js=Path('photo-admin-calendar-ja-r26.js')
+          assert js.is_file() and gitsha(js.read_bytes())==REUSED_SHA, 'R28 stopped: R26 common calendar changed'
+          assert raw.count(b'id="workDate"')==1 and raw.count(b'type="date"')==1, 'R28 stopped: expected staff date field missing'
+          assert raw.count(b'<meta name="robots" content="noindex, nofollow" />')==1, 'R28 stopped: R23 privacy guard missing'
+          if mark in raw:
+              assert raw.count(mark)==1 and raw.count(insert)==1, 'R28 stopped: unexpected existing patch'
+              assert gitsha(raw.replace(insert, anchor))==OLD_SHA, 'R28 stopped: existing patch differs from baseline'
+              print('R28 PATCH VERIFIED: already applied; no source changes')
+          else:
+              assert gitsha(raw)==OLD_SHA, 'R28 stopped: staff.html has changed upstream'
+              assert raw.count(anchor)==1, 'R28 stopped: expected safe insert position missing'
+              patched=raw.replace(anchor,insert)
+              assert patched.count(mark)==1
+              p.write_bytes(patched)
+              print('R28 PATCH VERIFIED: staff.html only; existing R26 calendar reused')
+          PY_R28_PATCH
+      - name: Verify one-file changes, date event compatibility and JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R28_QA'
+          from pathlib import Path
+          import json,re,subprocess,hashlib
+
+          staff=Path('staff.html').read_text(encoding='utf-8')
+          cal=Path('photo-admin-calendar-ja-r26.js').read_text(encoding='utf-8')
+          checks=[]
+          def ck(n,ok):checks.append({'check':n,'result':'PASS' if ok else 'FAIL'})
+          ck('R28 explicit marker',staff.count('DPRO-PHOTO-R28-STAFF-JAPANESE-CALENDAR-20261011')==1)
+          ck('Staff demo private noindex retained','<meta name="robots" content="noindex, nofollow" />' in staff)
+          ck('Staff form exact date field retained',staff.count('<input id="workDate" class="input" type="date" />')==1)
+          ck('Staff original date value assignment preserved','$("workDate").value = C.todayYmd();' in staff)
+          ck('Staff original date GET preserved','const date = $("workDate").value || C.todayYmd();' in staff)
+          ck('Staff original date change event preserved','$("workDate").addEventListener("change", loadSchedule);' in staff)
+          ck('Staff today operation preserved','$("todayBtn").addEventListener("click"' in staff)
+          ck('Staff schedule load operation preserved','$("loadBtn").addEventListener("click"' in staff)
+          ck('No duplicate calendar script',staff.count('src="./photo-admin-calendar-ja-r26.js?v=DPRO-PHOTO-R28-STAFF-JA-DATE-20261011"')==1)
+          ck('Common R26 version marker in script','DPRO-PHOTO-R26-ADMIN-JA-DATE-20261011' in cal)
+          ck('Japanese seven weekdays','const WEEK = [\'日\',\'月\',\'火\',\'水\',\'木\',\'金\',\'土\']' in cal)
+          ck('ISO date validation is present','function splitIso(value)' in cal)
+          ck('Japanese month is rendered','年${viewMonth}月' in cal)
+          ck('Date change notification preserved',"dispatchEvent(new Event('change',{bubbles:true}))" in cal)
+          ck('Date input originally preserved',"input.insertAdjacentElement('afterend',b)" in cal)
+          ck('Calendar asset script available',Path('photo-admin-calendar-ja-r26.js').is_file())
+          ck('Calendar clear action','case \'clear\':' in cal)
+          ck('Calendar today action',"case 'today':" in cal)
+          ck('Calendar Esc key closes',"e.key==='Escape'" in cal)
+          ck('Calendar keyboard navigation','ArrowLeft:-1' in cal)
+          ck('Calendar disabled min max', 'function allowed(input,day)' in cal)
+          ck('Safe backdrop interaction','DOC.addEventListener(\'pointerdown\'' in cal)
+          ck('Prior staff modules preserved','撮影スケジュール' in staff and '撮影スタッフ' in staff)
+          ck('Single original date field',staff.count('type="date"')==1)
+          ck('One inline main staff script',len(re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>',staff,flags=re.S))==1)
+          ck('Node calendar syntax',subprocess.run(['node','--check','photo-admin-calendar-ja-r26.js'],capture_output=True).returncode==0)
+          inline=re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>',staff,flags=re.S)[0]
+          Path('_r28_staff_inline_tmp.js').write_text(inline)
+          ck('Node staff inline JS syntax',subprocess.run(['node','--check','_r28_staff_inline_tmp.js'],capture_output=True).returncode==0)
+          Path('_r28_staff_inline_tmp.js').unlink()
+          ck('No embedded mutation requests in added markup','POST' not in staff.split('<!-- DPRO-PHOTO-R28-STAFF-JAPANESE-CALENDAR-20261011 -->')[-1].split('</body>')[0])
+          ck('No added backend route from calendar script','/api/' not in cal)
+          ck('R26 calendar shared JS remains unmodified',hashlib.sha1(b'blob '+str(len(cal.encode())).encode()+b'\0'+cal.encode()).hexdigest()=='d0cf70ce1a52e0f9afe424ddba290c6c0d61d06d')
+          check_failed=[x for x in checks if x['result']=='FAIL']
+          report={'gate':'DPRO PHOTO R28 Staff Japanese Calendar Reuse','type':'GITHUB_STATIC_NODE_NON_MUTATING','counts':{'passed':len(checks)-len(check_failed),'failed':len(check_failed)},'checks':checks,'affectedFiles':['staff.html'],'reusedAsset':'photo-admin-calendar-ja-r26.js','sourceEditsOnly':True,'apiWrites':0,'productionReady':False,'humanAcceptance':False,'localBrowserTest':'57 PASS / 0 FAIL; performed separately offline in isolated Chromium'}
+          Path('DPRO_PHOTO_R28_STATIC_GATE.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+          print(f"R28 SOURCE QA {report['counts']['passed']} PASS / {report['counts']['failed']} FAIL, no data writes")
+          if check_failed:raise SystemExit('R28 failed: '+str(check_failed))
+          PY_R28_QA
+          git diff --check
+          python - <<'PY_R28_SCOPE'
+          import subprocess
+          changed={line[3:] for line in subprocess.check_output(['git','status','--porcelain'],text=True).splitlines() if line[3:]!='DPRO_PHOTO_R28_STATIC_GATE.json'}
+          assert changed in [set(),{'staff.html'}],f'R28 stopped: unexpected changed files {changed}'
+          print('R28 source scope verified:',sorted(changed),'(idempotent if empty)')
+          PY_R28_SCOPE
+      - name: Commit only validated staff Japanese calendar integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == 'refs/heads/main' ]] || { echo 'R28 stopped: main branch only' >&2; exit 1; }
+          git add -- staff.html
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'DPRO PHOTO R28 standardize staff schedule calendar in Japanese'
+            git push
+          else
+            echo 'R28 already applied: no second commit.'
+          fi
+      - name: Archive R28 regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_STAFF_CALENDAR_R28
+          path: DPRO_PHOTO_R28_STATIC_GATE.json
+          if-no-files-found: warn
