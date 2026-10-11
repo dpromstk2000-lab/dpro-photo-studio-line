@@ -1,0 +1,320 @@
+name: DPRO PHOTO Japanese Admin Calendar Standard R26
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-admin-calendar-japanese-r26.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-admin-calendar-r26-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  r26-owner-calendar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact common-product frontend
+        uses: actions/checkout@v4
+      - name: Patch source-guarded Japanese admin date picker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R26_PATCH'
+          import base64,hashlib,subprocess,sys
+          from pathlib import Path
+          expected='75c016cdf2d0c577b9d99ebff3b3b5465efafcec'
+          source_sha256='94f293d71c785483704def5e7d2b886ac62823302fdb6433ceeca043aabc5530'
+          source=base64.b64decode(''.join("""LyogRFBSTyBQSE9UTyBSMjYgfCBKYXBhbmVzZSBhZG1pbiBjYWxlbmRhciB8IG5vbi1tdXRhdGluZyBkaXNwbGF5IGFkYXB0ZXIK
+          ICogQWxsIG9yaWdpbmFsIGlucHV0W3R5cGU9ZGF0ZV0gSURzL0lTTyB2YWx1ZXMvY2hhbmdlIGV2ZW50cyBzdGF5IGludGFjdC4K
+          ICogTm8gYm9va2luZyBBUEkgY2FsbHMsIGNyZWRlbnRpYWxzLCBvciBwZXJzaXN0ZW5jZSBhcmUgdXNlZCBoZXJlLgogKi8KKCgp
+          ID0+IHsKICAndXNlIHN0cmljdCc7CiAgY29uc3QgVkVSU0lPTiA9ICdEUFJPLVBIT1RPLVIyNi1BRE1JTi1KQS1EQVRFLTIwMjYx
+          MDExJzsKICBpZiAod2luZG93LkRQUk9fUEhPVE9fQURNSU5fQ0FMRU5EQVJfSkFfUjI2KSByZXR1cm47CiAgY29uc3QgRE9DID0g
+          ZG9jdW1lbnQ7CiAgY29uc3QgV0VFSyA9IFsn5pelJywn5pyIJywn54GrJywn5rC0Jywn5pyoJywn6YeRJywn5ZyfJ107CiAgY29u
+          c3QgRlVMTF9XRUVLID0gWyfml6Xmm5zml6UnLCfmnIjmm5zml6UnLCfngavmm5zml6UnLCfmsLTmm5zml6UnLCfmnKjmm5zml6Un
+          LCfph5Hmm5zml6UnLCflnJ/mm5zml6UnXTsKICBjb25zdCB0YXJnZXRzID0gbmV3IE1hcCgpOwogIGxldCBhY3RpdmUgPSBudWxs
+          OwogIGxldCB2aWV3WWVhciA9IDA7CiAgbGV0IHZpZXdNb250aCA9IDA7CiAgY29uc3QgcGFkID0gdiA9PiBTdHJpbmcodikucGFk
+          U3RhcnQoMiwnMCcpOwogIGNvbnN0IGlzbyA9ICh5LG0sZCkgPT4gYCR7eX0tJHtwYWQobSl9LSR7cGFkKGQpfWA7CiAgZnVuY3Rp
+          b24gc3BsaXRJc28odmFsdWUpIHsKICAgIGNvbnN0IG0gPSAvXihcZHs0fSktKFxkezJ9KS0oXGR7Mn0pJC8uZXhlYyhTdHJpbmco
+          dmFsdWUgfHwgJycpKTsKICAgIGlmICghbSkgcmV0dXJuIG51bGw7CiAgICBjb25zdCB5PSttWzFdLCBtbz0rbVsyXSwgZD0rbVsz
+          XSwgdGVzdD1uZXcgRGF0ZShEYXRlLlVUQyh5LG1vLTEsZCkpOwogICAgcmV0dXJuIHRlc3QuZ2V0VVRDRnVsbFllYXIoKT09PXkg
+          JiYgdGVzdC5nZXRVVENNb250aCgpKzE9PT1tbyAmJiB0ZXN0LmdldFVUQ0RhdGUoKT09PWQgPyB7eSxtOm1vLGR9IDogbnVsbDsK
+          ICB9CiAgZnVuY3Rpb24gdG9kYXlKc3QoKSB7CiAgICB0cnkgewogICAgICBjb25zdCBvYmo9T2JqZWN0LmZyb21FbnRyaWVzKG5l
+          dyBJbnRsLkRhdGVUaW1lRm9ybWF0KCdlbi1DQScse3RpbWVab25lOidBc2lhL1Rva3lvJyx5ZWFyOidudW1lcmljJyxtb250aDon
+          Mi1kaWdpdCcsZGF5OicyLWRpZ2l0J30pLmZvcm1hdFRvUGFydHMobmV3IERhdGUoKSkuZmlsdGVyKHg9PngudHlwZSE9PSdsaXRl
+          cmFsJykubWFwKHg9Plt4LnR5cGUseC52YWx1ZV0pKTsKICAgICAgcmV0dXJuIGAke29iai55ZWFyfS0ke29iai5tb250aH0tJHtv
+          YmouZGF5fWA7CiAgICB9IGNhdGNoIHsgcmV0dXJuIG5ldyBEYXRlKCkudG9JU09TdHJpbmcoKS5zbGljZSgwLDEwKTsgfQogIH0K
+          ICBmdW5jdGlvbiBkaXNwbGF5RGF0ZSh2YWx1ZSkgewogICAgY29uc3QgcD1zcGxpdElzbyh2YWx1ZSk7CiAgICBpZiAoIXApIHJl
+          dHVybiAn5pel5LuY44KS6YG45oqeJzsKICAgIGNvbnN0IHdkID0gbmV3IERhdGUoRGF0ZS5VVEMocC55LHAubS0xLHAuZCkpLmdl
+          dFVUQ0RheSgpOwogICAgcmV0dXJuIGAke3AueX0vJHtwYWQocC5tKX0vJHtwYWQocC5kKX3vvIgke1dFRUtbd2Rdfe+8iWA7CiAg
+          fQogIGZ1bmN0aW9uIGFsbG93ZWQoaW5wdXQsZGF5KXtyZXR1cm4gKCFpbnB1dC5taW58fGRheT49aW5wdXQubWluKSYmKCFpbnB1
+          dC5tYXh8fGRheTw9aW5wdXQubWF4KTt9CiAgZnVuY3Rpb24gbW9udGhBbGxvd2VkKGlucHV0LHksbSl7CiAgICBjb25zdCBmaXJz
+          dD1pc28oeSxtLDEpLGxhc3Q9aXNvKHksbSxuZXcgRGF0ZShEYXRlLlVUQyh5LG0sMCkpLmdldFVUQ0RhdGUoKSk7CiAgICByZXR1
+          cm4gKCFpbnB1dC5taW58fGxhc3Q+PWlucHV0Lm1pbikmJighaW5wdXQubWF4fHxmaXJzdDw9aW5wdXQubWF4KTsKICB9CiAgY29u
+          c3QgY3NzPWAKLmRwcm8tamEtZGF0ZS1vcmlnaW5hbHtkaXNwbGF5Om5vbmUhaW1wb3J0YW50fQouZHByby1qYS1kYXRlLXRyaWdn
+          ZXJ7d2lkdGg6MTAwJTttaW4taGVpZ2h0OjQzcHg7cGFkZGluZzo5cHggMTJweDtkaXNwbGF5OmZsZXg7YWxpZ24taXRlbXM6Y2Vu
+          dGVyO2p1c3RpZnktY29udGVudDpzcGFjZS1iZXR3ZWVuO2dhcDoxMHB4O2N1cnNvcjpwb2ludGVyO3RleHQtYWxpZ246bGVmdDtj
+          b2xvcjojMTAzZjNjO2JhY2tncm91bmQ6I2ZmZjtib3JkZXI6MXB4IHNvbGlkICNjOWRmZGE7Ym9yZGVyLXJhZGl1czoxMXB4O2Zv
+          bnQ6aW5oZXJpdDtmb250LXNpemU6MTRweDtsaW5lLWhlaWdodDoxLjQ7dHJhbnNpdGlvbjpib3JkZXItY29sb3IgLjE1cyxib3gt
+          c2hhZG93IC4xNXN9Ci5kcHJvLWphLWRhdGUtdHJpZ2dlcjpob3Zlcntib3JkZXItY29sb3I6IzEyODE2ZX0uZHByby1qYS1kYXRl
+          LXRyaWdnZXI6Zm9jdXMtdmlzaWJsZSwuZHByby1qYS1kYXRlLXBvcCBidXR0b246Zm9jdXMtdmlzaWJsZXtvdXRsaW5lOjNweCBz
+          b2xpZCAjYjBlNWRjO291dGxpbmUtb2Zmc2V0OjJweH0uZHByby1qYS1kYXRlLXRyaWdnZXJbZGlzYWJsZWRde29wYWNpdHk6LjQ1
+          O2N1cnNvcjpub3QtYWxsb3dlZH0uZHByby1qYS1kYXRlLXRyaWdnZXIgLmRwcm8tamEtZGF0ZS12YWx1ZS5pcy1lbXB0eXtjb2xv
+          cjojODE5MjhmfQouZHByby1qYS1kYXRlLXRyaWdnZXIgc3Zne3dpZHRoOjE4cHg7aGVpZ2h0OjE4cHg7ZmxleC1zaHJpbms6MDtz
+          dHJva2U6IzBlNmM2MDtmaWxsOm5vbmU7c3Ryb2tlLXdpZHRoOjEuOH0KLmRwcm8tamEtZGF0ZS1wb3B7cG9zaXRpb246Zml4ZWQ7
+          ei1pbmRleDoyMTQ3NDgzMDAwO2JveC1zaXppbmc6Ym9yZGVyLWJveDt3aWR0aDptaW4oMzMwcHgsY2FsYygxMDB2dyAtIDIwcHgp
+          KTttYXgtaGVpZ2h0OmNhbGMoMTAwZHZoIC0gMTZweCk7b3ZlcmZsb3cteTphdXRvO3BhZGRpbmc6MTVweDtiYWNrZ3JvdW5kOiNm
+          ZmY7Ym9yZGVyOjFweCBzb2xpZCAjYzRkZGQ3O2JvcmRlci1yYWRpdXM6MThweDtib3gtc2hhZG93OjAgMjJweCA2MHB4IHJnYmEo
+          MTEsNjUsNTksLjIwKTtmb250LWZhbWlseTotYXBwbGUtc3lzdGVtLEJsaW5rTWFjU3lzdGVtRm9udCwnTm90byBTYW5zIEpQJywn
+          WXUgR290aGljIFVJJyxNZWlyeW8sc2Fucy1zZXJpZjtjb2xvcjojMTQzZjM5fQouZHByby1qYS1kYXRlLXBvcFtoaWRkZW5de2Rp
+          c3BsYXk6bm9uZSFpbXBvcnRhbnR9LmRwcm8tamEtZGF0ZS1oZWFkLC5kcHJvLWphLWRhdGUtZm9vdHtkaXNwbGF5OmZsZXg7YWxp
+          Z24taXRlbXM6Y2VudGVyO2p1c3RpZnktY29udGVudDpzcGFjZS1iZXR3ZWVuO2dhcDo3cHh9Ci5kcHJvLWphLWRhdGUtaGVhZHtt
+          YXJnaW4tYm90dG9tOjEycHh9LmRwcm8tamEtZGF0ZS10aXRsZXtmb250LXdlaWdodDo4NTA7Zm9udC1zaXplOjE3cHg7d2hpdGUt
+          c3BhY2U6bm93cmFwfQouZHByby1qYS1kYXRlLXBvcCBidXR0b257Zm9udDppbmhlcml0O2N1cnNvcjpwb2ludGVyfS5kcHJvLWph
+          LWRhdGUtYXJyb3d7ZGlzcGxheTpncmlkO3BsYWNlLWl0ZW1zOmNlbnRlcjtib3JkZXI6MXB4IHNvbGlkICNkOWU3ZTM7Ym9yZGVy
+          LXJhZGl1czoxMHB4O2JhY2tncm91bmQ6I2YyZjhmNjt3aWR0aDozOHB4O2hlaWdodDozOHB4O2ZvbnQtc2l6ZToyM3B4O2NvbG9y
+          OiMwZDZjNjB9Ci5kcHJvLWphLWRhdGUtYXJyb3c6ZGlzYWJsZWQsLmRwcm8tamEtZGF0ZS1kYXk6ZGlzYWJsZWR7b3BhY2l0eTou
+          Mjg7Y3Vyc29yOm5vdC1hbGxvd2VkfS5kcHJvLWphLWRhdGUtd2VlaywuZHByby1qYS1kYXRlLWRheXN7ZGlzcGxheTpncmlkO2dy
+          aWQtdGVtcGxhdGUtY29sdW1uczpyZXBlYXQoNyxtaW5tYXgoMCwxZnIpKTtnYXA6M3B4fQouZHByby1qYS1kYXRlLXdlZWsgc3Bh
+          bnt0ZXh0LWFsaWduOmNlbnRlcjtmb250LXNpemU6MTJweDtmb250LXdlaWdodDo4MDA7cGFkZGluZzo0cHggMDtjb2xvcjojNjU3
+          ZDc4fS5kcHJvLWphLWRhdGUtd2VlayBzcGFuOmZpcnN0LWNoaWxkLC5kcHJvLWphLWRhdGUtZGF5LmlzLXN1bntjb2xvcjojYjY1
+          MjUwfS5kcHJvLWphLWRhdGUtd2VlayBzcGFuOmxhc3QtY2hpbGQsLmRwcm8tamEtZGF0ZS1kYXkuaXMtc2F0e2NvbG9yOiM0Mjcz
+          YWF9Ci5kcHJvLWphLWRhdGUtZGF5e2hlaWdodDozN3B4O3BhZGRpbmc6MDtib3JkZXI6MXB4IHNvbGlkIHRyYW5zcGFyZW50O2Jv
+          cmRlci1yYWRpdXM6MTBweDtiYWNrZ3JvdW5kOiNmZmY7Zm9udC1zaXplOjE0cHg7Y29sb3I6IzE4M2YzYX0uZHByby1qYS1kYXRl
+          LWRheTpub3QoOmRpc2FibGVkKTpob3ZlcntiYWNrZ3JvdW5kOiNlNGY1ZWY7Ym9yZGVyLWNvbG9yOiNhN2Q0Yzh9LmRwcm8tamEt
+          ZGF0ZS1kYXkuaXMtb3RoZXJ7Y29sb3I6IzkzYTI5Zn0uZHByby1qYS1kYXRlLWRheS5pcy10b2RheXtib3JkZXItY29sb3I6IzFh
+          OWE4NDtmb250LXdlaWdodDo4MDB9LmRwcm8tamEtZGF0ZS1kYXkuaXMtc2VsZWN0ZWR7Y29sb3I6I2ZmZjtiYWNrZ3JvdW5kOiMw
+          ZDZhNWU7Zm9udC13ZWlnaHQ6OTAwO2JvcmRlci1jb2xvcjojMGQ2YTVlfS5kcHJvLWphLWRhdGUtZGF5LmlzLXNlbGVjdGVkLmlz
+          LXN1biwuZHByby1qYS1kYXRlLWRheS5pcy1zZWxlY3RlZC5pcy1zYXR7Y29sb3I6I2ZmZn0KLmRwcm8tamEtZGF0ZS1mb290e21h
+          cmdpbi10b3A6MTFweDtib3JkZXItdG9wOjFweCBzb2xpZCAjZTdmMGVkO3BhZGRpbmctdG9wOjExcHh9LmRwcm8tamEtZGF0ZS1m
+          b290IGJ1dHRvbntib3JkZXI6MXB4IHNvbGlkICNjZmRmZGI7YmFja2dyb3VuZDojZjFmOGY1O2JvcmRlci1yYWRpdXM6MTBweDtw
+          YWRkaW5nOjhweCAxMXB4O2NvbG9yOiMwYzY3NWE7Zm9udC1zaXplOjEycHg7Zm9udC13ZWlnaHQ6ODAwfS5kcHJvLWphLWRhdGUt
+          Zm9vdCAuaXMtcHJpbWFyeXtiYWNrZ3JvdW5kOiMwZTcwNjE7Y29sb3I6d2hpdGU7Ym9yZGVyLWNvbG9yOiMwZTcwNjF9LmRwcm8t
+          amEtZGF0ZS1mb290IGJ1dHRvbjpkaXNhYmxlZHtvcGFjaXR5Oi40NTtjdXJzb3I6bm90LWFsbG93ZWR9CkBtZWRpYShtYXgtd2lk
+          dGg6NDIwcHgpey5kcHJvLWphLWRhdGUtcG9we3BhZGRpbmc6MTBweH0uZHByby1qYS1kYXRlLWRheXtoZWlnaHQ6MzZweH19CmA7
+          CiAgY29uc3Qgc3R5bGU9RE9DLmNyZWF0ZUVsZW1lbnQoJ3N0eWxlJyk7c3R5bGUuaWQ9J2Rwcm8tamEtZGF0ZS1zdHlsZS1yMjYn
+          O3N0eWxlLnRleHRDb250ZW50PWNzcztET0MuaGVhZC5hcHBlbmRDaGlsZChzdHlsZSk7CiAgY29uc3QgcG9wPURPQy5jcmVhdGVF
+          bGVtZW50KCdkaXYnKTtwb3AuaWQ9J2Rwcm8tamEtZGF0ZS1wb3AtcjI2Jztwb3AuY2xhc3NOYW1lPSdkcHJvLWphLWRhdGUtcG9w
+          Jztwb3Auc2V0QXR0cmlidXRlKCdyb2xlJywnZGlhbG9nJyk7cG9wLnNldEF0dHJpYnV0ZSgnYXJpYS1sYWJlbCcsJ+aXpeS7mOmB
+          uOaKnuOCq+ODrOODs+ODgOODvCcpO3BvcC5zZXRBdHRyaWJ1dGUoJ2FyaWEtbW9kYWwnLCdmYWxzZScpO3BvcC5oaWRkZW49dHJ1
+          ZTtET0MuYm9keS5hcHBlbmRDaGlsZChwb3ApOwogIGZ1bmN0aW9uIHN5bmMoaW5wdXQpe2NvbnN0IGI9dGFyZ2V0cy5nZXQoaW5w
+          dXQpO2lmKCFiKXJldHVybjtjb25zdCBzcGFuPWIucXVlcnlTZWxlY3RvcignLmRwcm8tamEtZGF0ZS12YWx1ZScpO2NvbnN0IHNo
+          b3duPWRpc3BsYXlEYXRlKGlucHV0LnZhbHVlKTtpZihzcGFuLnRleHRDb250ZW50IT09c2hvd24pc3Bhbi50ZXh0Q29udGVudD1z
+          aG93bjtzcGFuLmNsYXNzTGlzdC50b2dnbGUoJ2lzLWVtcHR5Jywhc3BsaXRJc28oaW5wdXQudmFsdWUpKTtiLmRpc2FibGVkPWlu
+          cHV0LmRpc2FibGVkO2Iuc2V0QXR0cmlidXRlKCdhcmlhLWxhYmVsJyxgJHtpbnB1dC5kYXRhc2V0LmRwcm9EYXRlTGFiZWx8fCfm
+          l6Xku5gnfe+8miR7c2hvd25944CC44Kr44Os44Oz44OA44O844KS6ZaL44GPYCk7fQogIGZ1bmN0aW9uIHJlcG9zaXRpb24oKXsK
+          ICAgIGlmKCFhY3RpdmV8fHBvcC5oaWRkZW4pcmV0dXJuOwogICAgY29uc3QgYj10YXJnZXRzLmdldChhY3RpdmUpO2lmKCFiKXJl
+          dHVybjsKICAgIGNvbnN0IHI9Yi5nZXRCb3VuZGluZ0NsaWVudFJlY3QoKTtjb25zdCB3PU1hdGgubWluKDMzMCx3aW5kb3cuaW5u
+          ZXJXaWR0aC0yMCksaD1wb3Aub2Zmc2V0SGVpZ2h0fHwzNzA7CiAgICBsZXQgbGVmdD1NYXRoLm1heCgxMCxNYXRoLm1pbihyLmxl
+          ZnQsd2luZG93LmlubmVyV2lkdGgtdy0xMCkpOwogICAgbGV0IHRvcD1yLmJvdHRvbSs4OwogICAgaWYodG9wK2g+d2luZG93Lmlu
+          bmVySGVpZ2h0LTgmJnIudG9wLWgtOD49OCl0b3A9ci50b3AtaC04OwogICAgZWxzZSB0b3A9TWF0aC5tYXgoOCxNYXRoLm1pbih0
+          b3Asd2luZG93LmlubmVySGVpZ2h0LWgtOCkpOwogICAgcG9wLnN0eWxlLmxlZnQ9YCR7TWF0aC5yb3VuZChsZWZ0KX1weGA7cG9w
+          LnN0eWxlLnRvcD1gJHtNYXRoLnJvdW5kKHRvcCl9cHhgOwogIH0KICBmdW5jdGlvbiBjbG9zZSh7Zm9jdXM9ZmFsc2V9PXt9KXsK
+          ICAgIGNvbnN0IGI9YWN0aXZlJiZ0YXJnZXRzLmdldChhY3RpdmUpO3BvcC5oaWRkZW49dHJ1ZTtwb3AuaW5uZXJIVE1MPScnO2lm
+          KGIpYi5zZXRBdHRyaWJ1dGUoJ2FyaWEtZXhwYW5kZWQnLCdmYWxzZScpO2FjdGl2ZT1udWxsOwogICAgaWYoZm9jdXMmJmIpYi5m
+          b2N1cygpOwogIH0KICBmdW5jdGlvbiBzZWxlY3RlZChpbnB1dCx2YWx1ZSl7CiAgICBpZighL15cZHs0fS1cZHsyfS1cZHsyfSQv
+          LnRlc3QodmFsdWUpfHwhc3BsaXRJc28odmFsdWUpfHwhYWxsb3dlZChpbnB1dCx2YWx1ZSkpcmV0dXJuOwogICAgY29uc3Qgb2xk
+          PWlucHV0LnZhbHVlO2lucHV0LnZhbHVlPXZhbHVlO3N5bmMoaW5wdXQpO2Nsb3NlKHtmb2N1czp0cnVlfSk7CiAgICBpZihvbGQh
+          PT1pbnB1dC52YWx1ZSl7aW5wdXQuZGlzcGF0Y2hFdmVudChuZXcgRXZlbnQoJ2lucHV0Jyx7YnViYmxlczp0cnVlfSkpO2lucHV0
+          LmRpc3BhdGNoRXZlbnQobmV3IEV2ZW50KCdjaGFuZ2UnLHtidWJibGVzOnRydWV9KSk7fQogIH0KICBmdW5jdGlvbiByZW5kZXIo
+          KXsKICAgIGlmKCFhY3RpdmUpcmV0dXJuOwogICAgY29uc3QgaW5wdXQ9YWN0aXZlOwogICAgY29uc3QgY3VycmVudD1zcGxpdElz
+          byhpbnB1dC52YWx1ZSksdG9kYXk9dG9kYXlKc3QoKSx0PXNwbGl0SXNvKHRvZGF5KTsKICAgIGNvbnN0IGZpcnN0RGF5PW5ldyBE
+          YXRlKERhdGUuVVRDKHZpZXdZZWFyLHZpZXdNb250aC0xLDEpKS5nZXRVVENEYXkoKTsKICAgIGNvbnN0IHN0YXJ0PW5ldyBEYXRl
+          KERhdGUuVVRDKHZpZXdZZWFyLHZpZXdNb250aC0xLDEtZmlyc3REYXkpKTsKICAgIGNvbnN0IFtweSxwbV09dmlld01vbnRoPT09
+          MT9bdmlld1llYXItMSwxMl06W3ZpZXdZZWFyLHZpZXdNb250aC0xXTsKICAgIGNvbnN0IFtueSxubV09dmlld01vbnRoPT09MTI/
+          W3ZpZXdZZWFyKzEsMV06W3ZpZXdZZWFyLHZpZXdNb250aCsxXTsKICAgIGxldCBkYXlzPScnOwogICAgZm9yKGxldCBuPTA7bjw0
+          MjtuKyspewogICAgICBjb25zdCBkdD1uZXcgRGF0ZShzdGFydC5nZXRUaW1lKCkrbio4NjQwMDAwMCksZGF5PWlzbyhkdC5nZXRV
+          VENGdWxsWWVhcigpLGR0LmdldFVUQ01vbnRoKCkrMSxkdC5nZXRVVENEYXRlKCkpOwogICAgICBjb25zdCBvdGhlcj1kdC5nZXRV
+          VENNb250aCgpKzEhPT12aWV3TW9udGgsd2Q9ZHQuZ2V0VVRDRGF5KCk7CiAgICAgIGNvbnN0IGNsYXNzZXM9WydkcHJvLWphLWRh
+          dGUtZGF5JyxvdGhlcj8naXMtb3RoZXInOicnLGRheT09PXRvZGF5Pydpcy10b2RheSc6JycsZGF5PT09aW5wdXQudmFsdWU/J2lz
+          LXNlbGVjdGVkJzonJyx3ZD09PTA/J2lzLXN1bic6d2Q9PT02Pydpcy1zYXQnOicnXS5maWx0ZXIoQm9vbGVhbikuam9pbignICcp
+          OwogICAgICBkYXlzKz1gPGJ1dHRvbiB0eXBlPSJidXR0b24iIGNsYXNzPSIke2NsYXNzZXN9IiBkYXRhLWRwcm8tZGF5PSIke2Rh
+          eX0iIGFyaWEtbGFiZWw9IiR7ZGF5LnJlcGxhY2VBbGwoJy0nLCcvJyl9ICR7RlVMTF9XRUVLW3dkXX0iIGFyaWEtcHJlc3NlZD0i
+          JHtkYXk9PT1pbnB1dC52YWx1ZX0iICR7YWxsb3dlZChpbnB1dCxkYXkpPycnOidkaXNhYmxlZCd9PiR7ZHQuZ2V0VVRDRGF0ZSgp
+          fTwvYnV0dG9uPmA7CiAgICB9CiAgICBwb3AuaW5uZXJIVE1MPWA8ZGl2IGNsYXNzPSJkcHJvLWphLWRhdGUtaGVhZCI+PGJ1dHRv
+          biB0eXBlPSJidXR0b24iIGNsYXNzPSJkcHJvLWphLWRhdGUtYXJyb3ciIGRhdGEtZHByby1uYXY9InByZXYiIGFyaWEtbGFiZWw9
+          IuWJjeOBruaciCIgJHttb250aEFsbG93ZWQoaW5wdXQscHkscG0pPycnOidkaXNhYmxlZCd9PuKAuTwvYnV0dG9uPjxkaXYgY2xh
+          c3M9ImRwcm8tamEtZGF0ZS10aXRsZSIgYXJpYS1saXZlPSJwb2xpdGUiPiR7dmlld1llYXJ95bm0JHt2aWV3TW9udGh95pyIPC9k
+          aXY+PGJ1dHRvbiB0eXBlPSJidXR0b24iIGNsYXNzPSJkcHJvLWphLWRhdGUtYXJyb3ciIGRhdGEtZHByby1uYXY9Im5leHQiIGFy
+          aWEtbGFiZWw9IuasoeOBruaciCIgJHttb250aEFsbG93ZWQoaW5wdXQsbnksbm0pPycnOidkaXNhYmxlZCd9PuKAujwvYnV0dG9u
+          PjwvZGl2PjxkaXYgY2xhc3M9ImRwcm8tamEtZGF0ZS13ZWVrIj4ke1dFRUsubWFwKHc9PmA8c3Bhbj4ke3d9PC9zcGFuPmApLmpv
+          aW4oJycpfTwvZGl2PjxkaXYgY2xhc3M9ImRwcm8tamEtZGF0ZS1kYXlzIj4ke2RheXN9PC9kaXY+PGRpdiBjbGFzcz0iZHByby1q
+          YS1kYXRlLWZvb3QiPjxidXR0b24gdHlwZT0iYnV0dG9uIiBkYXRhLWRwcm8tYWN0aW9uPSJjbGVhciIgJHtpbnB1dC5yZXF1aXJl
+          ZD8nZGlzYWJsZWQnOicnfT7jgq/jg6rjgqI8L2J1dHRvbj48YnV0dG9uIHR5cGU9ImJ1dHRvbiIgZGF0YS1kcHJvLWFjdGlvbj0i
+          Y2xvc2UiPumWieOBmOOCizwvYnV0dG9uPjxidXR0b24gdHlwZT0iYnV0dG9uIiBjbGFzcz0iaXMtcHJpbWFyeSIgZGF0YS1kcHJv
+          LWFjdGlvbj0idG9kYXkiICR7YWxsb3dlZChpbnB1dCx0b2RheSk/Jyc6J2Rpc2FibGVkJ30+5LuK5pel77yIJHt0Lm19LyR7dC5k
+          fe+8iTwvYnV0dG9uPjwvZGl2PmA7CiAgICByZXBvc2l0aW9uKCk7CiAgfQogIGZ1bmN0aW9uIG9wZW4oaW5wdXQpewogICAgaWYo
+          aW5wdXQuZGlzYWJsZWQpcmV0dXJuOwogICAgaWYoYWN0aXZlPT09aW5wdXQmJiFwb3AuaGlkZGVuKXtjbG9zZSh7Zm9jdXM6dHJ1
+          ZX0pO3JldHVybjt9CiAgICBjbG9zZSgpO2FjdGl2ZT1pbnB1dDsKICAgIGNvbnN0IHM9c3BsaXRJc28oaW5wdXQudmFsdWUpfHxz
+          cGxpdElzbyh0b2RheUpzdCgpKTsKICAgIHZpZXdZZWFyPXMueTt2aWV3TW9udGg9cy5tOwogICAgY29uc3QgYj10YXJnZXRzLmdl
+          dChpbnB1dCk7aWYoIWIpcmV0dXJuOwogICAgcG9wLmhpZGRlbj1mYWxzZTtiLnNldEF0dHJpYnV0ZSgnYXJpYS1leHBhbmRlZCcs
+          J3RydWUnKTtzeW5jKGlucHV0KTtyZW5kZXIoKTsKICAgIGNvbnN0IHNlbGVjdGVkQnV0dG9uPXBvcC5xdWVyeVNlbGVjdG9yKCcu
+          aXMtc2VsZWN0ZWQnKXx8cG9wLnF1ZXJ5U2VsZWN0b3IoJy5kcHJvLWphLWRhdGUtZGF5Om5vdCg6ZGlzYWJsZWQpJyk7CiAgICBp
+          ZihzZWxlY3RlZEJ1dHRvbilzZWxlY3RlZEJ1dHRvbi5mb2N1cyh7cHJldmVudFNjcm9sbDp0cnVlfSk7CiAgfQogIGZ1bmN0aW9u
+          IGF0dGFjaChpbnB1dCl7CiAgICBpZih0YXJnZXRzLmhhcyhpbnB1dCl8fCFpbnB1dC5pZHx8IWlucHV0Lm1hdGNoZXMoJ2lucHV0
+          W3R5cGU9ImRhdGUiXScpKXJldHVybjsKICAgIGlucHV0LmNsYXNzTGlzdC5hZGQoJ2Rwcm8tamEtZGF0ZS1vcmlnaW5hbCcpOwog
+          ICAgaW5wdXQuZGF0YXNldC5kcHJvRGF0ZUxhYmVsPURPQy5xdWVyeVNlbGVjdG9yKGBsYWJlbFtmb3I9IiR7aW5wdXQuaWR9Il1g
+          KT8udGV4dENvbnRlbnQ/LnRyaW0oKXx8J+aXpeS7mCc7CiAgICBjb25zdCBiPURPQy5jcmVhdGVFbGVtZW50KCdidXR0b24nKTti
+          LnR5cGU9J2J1dHRvbic7Yi5pZD1pbnB1dC5pZCsnRHByb0NhbGVuZGFyQnV0dG9uJztiLmNsYXNzTmFtZT0nZHByby1qYS1kYXRl
+          LXRyaWdnZXInO2Iuc2V0QXR0cmlidXRlKCdhcmlhLWNvbnRyb2xzJyxwb3AuaWQpO2Iuc2V0QXR0cmlidXRlKCdhcmlhLWhhc3Bv
+          cHVwJywnZGlhbG9nJyk7Yi5zZXRBdHRyaWJ1dGUoJ2FyaWEtZXhwYW5kZWQnLCdmYWxzZScpOwogICAgY29uc3QgY29udGVudD1E
+          T0MuY3JlYXRlRWxlbWVudCgnc3BhbicpO2NvbnRlbnQuY2xhc3NOYW1lPSdkcHJvLWphLWRhdGUtdmFsdWUnO2IuYXBwZW5kQ2hp
+          bGQoY29udGVudCk7CiAgICBjb25zdCBpY29uPURPQy5jcmVhdGVFbGVtZW50TlMoJ2h0dHA6Ly93d3cudzMub3JnLzIwMDAvc3Zn
+          Jywnc3ZnJyk7aWNvbi5zZXRBdHRyaWJ1dGUoJ3ZpZXdCb3gnLCcwIDAgMjQgMjQnKTtpY29uLnNldEF0dHJpYnV0ZSgnYXJpYS1o
+          aWRkZW4nLCd0cnVlJyk7aWNvbi5pbm5lckhUTUw9JzxyZWN0IHg9IjMiIHk9IjUiIHdpZHRoPSIxOCIgaGVpZ2h0PSIxNiIgcng9
+          IjIiLz48cGF0aCBkPSJNNyAzdjRNMTcgM3Y0TTMgMTBoMTgiLz4nO2IuYXBwZW5kQ2hpbGQoaWNvbik7CiAgICBpbnB1dC5pbnNl
+          cnRBZGphY2VudEVsZW1lbnQoJ2FmdGVyZW5kJyxiKTt0YXJnZXRzLnNldChpbnB1dCxiKTsKICAgIGNvbnN0IGxhYj1ET0MucXVl
+          cnlTZWxlY3RvcihgbGFiZWxbZm9yPSIke2lucHV0LmlkfSJdYCk7aWYobGFiKWxhYi5odG1sRm9yPWIuaWQ7CiAgICBiLmFkZEV2
+          ZW50TGlzdGVuZXIoJ2NsaWNrJywoKT0+b3BlbihpbnB1dCkpOwogICAgaW5wdXQuYWRkRXZlbnRMaXN0ZW5lcignZm9jdXMnLCgp
+          PT57aW5wdXQuYmx1cigpO29wZW4oaW5wdXQpfSk7CiAgICBpbnB1dC5hZGRFdmVudExpc3RlbmVyKCdpbnB1dCcsKCk9PnN5bmMo
+          aW5wdXQpKTtpbnB1dC5hZGRFdmVudExpc3RlbmVyKCdjaGFuZ2UnLCgpPT5zeW5jKGlucHV0KSk7CiAgICBzeW5jKGlucHV0KTsK
+          ICB9CiAgZnVuY3Rpb24gc2Nhbigpe0RPQy5xdWVyeVNlbGVjdG9yQWxsKCdpbnB1dFt0eXBlPSJkYXRlIl06bm90KC5kcHJvLWph
+          LWRhdGUtb3JpZ2luYWwpJykuZm9yRWFjaChhdHRhY2gpO3RhcmdldHMuZm9yRWFjaCgoYnV0dG9uLGlucHV0KT0+e2lmKGlucHV0
+          LmlzQ29ubmVjdGVkKXN5bmMoaW5wdXQpO30pO30KICBsZXQgc2NoZWR1bGVkPWZhbHNlOwogIGNvbnN0IG9ic2VydmVyPW5ldyBN
+          dXRhdGlvbk9ic2VydmVyKCgpPT57CiAgICBpZihzY2hlZHVsZWQpcmV0dXJuO3NjaGVkdWxlZD10cnVlOwogICAgcmVxdWVzdEFu
+          aW1hdGlvbkZyYW1lKCgpPT57c2NoZWR1bGVkPWZhbHNlO3NjYW4oKX0pOwogIH0pOwogIG9ic2VydmVyLm9ic2VydmUoRE9DLmJv
+          ZHkse3N1YnRyZWU6dHJ1ZSxjaGlsZExpc3Q6dHJ1ZX0pOwogIHBvcC5hZGRFdmVudExpc3RlbmVyKCdjbGljaycsZT0+ewogICAg
+          Y29uc3QgYnRuPWUudGFyZ2V0LmNsb3Nlc3QoJ2J1dHRvbicpO2lmKCFidG58fCFhY3RpdmUpcmV0dXJuOwogICAgaWYoYnRuLmRh
+          dGFzZXQuZHByb0RheSl7c2VsZWN0ZWQoYWN0aXZlLGJ0bi5kYXRhc2V0LmRwcm9EYXkpO3JldHVybjt9CiAgICBpZihidG4uZGF0
+          YXNldC5kcHJvTmF2KXsKICAgICAgaWYoYnRuLmRhdGFzZXQuZHByb05hdj09PSdwcmV2Jyl7dmlld01vbnRoLS07aWYodmlld01v
+          bnRoPT09MCl7dmlld01vbnRoPTEyO3ZpZXdZZWFyLS19fQogICAgICBlbHNle3ZpZXdNb250aCsrO2lmKHZpZXdNb250aD09PTEz
+          KXt2aWV3TW9udGg9MTt2aWV3WWVhcisrfX0KICAgICAgcmVuZGVyKCk7cG9wLnF1ZXJ5U2VsZWN0b3IoYFtkYXRhLWRwcm8tbmF2
+          PSIke2J0bi5kYXRhc2V0LmRwcm9OYXZ9Il1gKT8uZm9jdXMoe3ByZXZlbnRTY3JvbGw6dHJ1ZX0pOwogICAgICByZXR1cm47CiAg
+          ICB9CiAgICBzd2l0Y2goYnRuLmRhdGFzZXQuZHByb0FjdGlvbil7CiAgICAgIGNhc2UgJ3RvZGF5JzpzZWxlY3RlZChhY3RpdmUs
+          dG9kYXlKc3QoKSk7YnJlYWs7CiAgICAgIGNhc2UgJ2Nsb3NlJzpjbG9zZSh7Zm9jdXM6dHJ1ZX0pO2JyZWFrOwogICAgICBjYXNl
+          ICdjbGVhcic6ewogICAgICAgIGlmKGFjdGl2ZS5yZXF1aXJlZClyZXR1cm47Y29uc3QgaW5wPWFjdGl2ZSxvbGQ9aW5wLnZhbHVl
+          O2lucC52YWx1ZT0nJztzeW5jKGlucCk7Y2xvc2Uoe2ZvY3VzOnRydWV9KTtpZihvbGQpe2lucC5kaXNwYXRjaEV2ZW50KG5ldyBF
+          dmVudCgnaW5wdXQnLHtidWJibGVzOnRydWV9KSk7aW5wLmRpc3BhdGNoRXZlbnQobmV3IEV2ZW50KCdjaGFuZ2UnLHtidWJibGVz
+          OnRydWV9KSk7fWJyZWFrOwogICAgICB9CiAgICB9CiAgfSk7CiAgRE9DLmFkZEV2ZW50TGlzdGVuZXIoJ3BvaW50ZXJkb3duJyxl
+          PT57aWYoYWN0aXZlJiYhcG9wLmNvbnRhaW5zKGUudGFyZ2V0KSYmIXRhcmdldHMuZ2V0KGFjdGl2ZSk/LmNvbnRhaW5zKGUudGFy
+          Z2V0KSljbG9zZSgpO30sdHJ1ZSk7CiAgRE9DLmFkZEV2ZW50TGlzdGVuZXIoJ2tleWRvd24nLGU9PnsKICAgIGlmKCFhY3RpdmUp
+          cmV0dXJuOwogICAgaWYoZS5rZXk9PT0nRXNjYXBlJyl7ZS5wcmV2ZW50RGVmYXVsdCgpO2Uuc3RvcFByb3BhZ2F0aW9uKCk7Y2xv
+          c2Uoe2ZvY3VzOnRydWV9KTtyZXR1cm47fQogICAgY29uc3QgYj1ET0MuYWN0aXZlRWxlbWVudDtpZighYj8ubWF0Y2hlcygnLmRw
+          cm8tamEtZGF0ZS1kYXknKSlyZXR1cm47CiAgICBjb25zdCBkZWx0YT17QXJyb3dMZWZ0Oi0xLEFycm93UmlnaHQ6MSxBcnJvd1Vw
+          Oi03LEFycm93RG93bjo3fVtlLmtleV07CiAgICBpZihkZWx0YT09PXVuZGVmaW5lZClyZXR1cm47ZS5wcmV2ZW50RGVmYXVsdCgp
+          OwogICAgY29uc3QgdmFsdWU9Yi5kYXRhc2V0LmRwcm9EYXkscGFydD1zcGxpdElzbyh2YWx1ZSk7aWYoIXBhcnQpcmV0dXJuOwog
+          ICAgY29uc3QgZHQ9bmV3IERhdGUoRGF0ZS5VVEMocGFydC55LHBhcnQubS0xLHBhcnQuZCtkZWx0YSkpO2NvbnN0IHRhcmdldD1p
+          c28oZHQuZ2V0VVRDRnVsbFllYXIoKSxkdC5nZXRVVENNb250aCgpKzEsZHQuZ2V0VVRDRGF0ZSgpKTsKICAgIGlmKCFhbGxvd2Vk
+          KGFjdGl2ZSx0YXJnZXQpKXJldHVybjsKICAgIGlmKGR0LmdldFVUQ0Z1bGxZZWFyKCkhPT12aWV3WWVhcnx8ZHQuZ2V0VVRDTW9u
+          dGgoKSsxIT09dmlld01vbnRoKXt2aWV3WWVhcj1kdC5nZXRVVENGdWxsWWVhcigpO3ZpZXdNb250aD1kdC5nZXRVVENNb250aCgp
+          KzE7cmVuZGVyKCk7fQogICAgcG9wLnF1ZXJ5U2VsZWN0b3IoYFtkYXRhLWRwcm8tZGF5PSIke3RhcmdldH0iXWApPy5mb2N1cyh7
+          cHJldmVudFNjcm9sbDp0cnVlfSk7CiAgfSx0cnVlKTsKICB3aW5kb3cuYWRkRXZlbnRMaXN0ZW5lcigncmVzaXplJyxyZXBvc2l0
+          aW9uKTsKICB3aW5kb3cuYWRkRXZlbnRMaXN0ZW5lcignc2Nyb2xsJyxyZXBvc2l0aW9uLHRydWUpOwogIHdpbmRvdy5hZGRFdmVu
+          dExpc3RlbmVyKCdwYWdlc2hvdycsc2Nhbik7CiAgRE9DLmFkZEV2ZW50TGlzdGVuZXIoJ3Zpc2liaWxpdHljaGFuZ2UnLCgpPT57
+          aWYoIURPQy5oaWRkZW4pc2NhbigpfSk7CiAgRE9DLmFkZEV2ZW50TGlzdGVuZXIoJ2NsaWNrJywoKT0+cmVxdWVzdEFuaW1hdGlv
+          bkZyYW1lKHNjYW4pLGZhbHNlKTsKICBzY2FuKCk7CiAgc2V0VGltZW91dChzY2FuLDMwMCk7c2V0VGltZW91dChzY2FuLDE1MDAp
+          OwogIC8vIFRoZSBvd25lciBhcHAgYXNzaWducyBzb21lIGRhdGVzIHByb2dyYW1tYXRpY2FsbHkgYWZ0ZXIgYXN5bmMgbG9hZGlu
+          Zy4KICAvLyBSZWZyZXNoIG9ubHkgdGhlIGxvY2FsIGxhYmVscywgbmV2ZXIgaXNzdWUgYW55IG5ldHdvcmsgb3IgZGF0YSBvcGVy
+          YXRpb25zLgogIHNldEludGVydmFsKCgpPT57aWYoIURPQy5oaWRkZW4pc2NhbigpO30sMTAwMCk7CiAgd2luZG93LkRQUk9fUEhP
+          VE9fQURNSU5fQ0FMRU5EQVJfSkFfUjI2PU9iamVjdC5mcmVlemUoe3ZlcnNpb246VkVSU0lPTixyZWZyZXNoOnNjYW4sZm9ybWF0
+          RGF0ZTpkaXNwbGF5RGF0ZSxjbG9zZTooKT0+Y2xvc2UoKX0pOwp9KSgpOwo=""".split()))
+          assert hashlib.sha256(source).hexdigest()==source_sha256, 'R26 embedded source mismatch'
+          owner=Path('owner.html')
+          js=Path('photo-admin-calendar-ja-r26.js')
+          assert owner.is_file(), 'R26 missing owner.html'
+          original=owner.read_bytes()
+          current=subprocess.check_output(['git','hash-object','owner.html'],text=True).strip()
+          marker='<script src="./photo-admin-calendar-ja-r26.js?v=DPRO-PHOTO-R26-ADMIN-JA-DATE-20261011"></script>'
+          anchor='<script src="./photo-owner-business-calendar.js?v=DPRO-PHOTO-LINKAGE-STANDARD-R1-FIX-20261006"></script>'
+          if marker.encode() in original:
+           assert original.count(marker.encode())==1, 'R26 marker duplicated'
+          else:
+           assert current==expected, f'R26 source guard stopped: owner.html differs {current}'
+           assert original.count(anchor.encode())==1, 'R26 owner script anchor differs'
+           assert '<meta name="robots" content="noindex, nofollow" />'.encode() in original,'R26 missing R23 private page protection'
+           assert 'id="todayDate"'.encode() in original and 'id="manualDate"'.encode() in original
+           changed=original.replace(anchor.encode(),anchor.encode()+b'\n'+marker.encode())
+           owner.write_bytes(changed)
+          if js.exists():
+           assert js.read_bytes()==source,'R26 existing calendar script differs; refuse overwrite'
+          else:js.write_bytes(source)
+          print('R26 PATCH/IDEMPOTENCY PASS: owner.html and Japanese date adapter only, no API/DB updates')
+          PY_R26_PATCH
+      - name: Verify JavaScript syntax and unchanged user interaction contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check photo-admin-calendar-ja-r26.js
+          python - <<'PY_R26_VERIFY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          import json,re,subprocess,hashlib
+          owner=Path('owner.html').read_text(encoding='utf-8'); js=Path('photo-admin-calendar-ja-r26.js').read_text(encoding='utf-8')
+          class HtmlParser(HTMLParser):
+           def __init__(self):super().__init__();self.scripts=[];self.cur=None
+           def handle_starttag(self,tag,attrs):
+            if tag=='script':self.cur={'attrs':dict(attrs),'data':''}
+           def handle_data(self,data):
+            if self.cur is not None:self.cur['data']+=data
+           def handle_endtag(self,tag):
+            if tag=='script' and self.cur is not None:self.scripts.append(self.cur);self.cur=None
+          p=HtmlParser();p.feed(owner)
+          checks=[]
+          def check(name,ok):
+           checks.append({'name':name,'status':'PASS' if ok else 'FAIL'})
+           checkn=checks[-1]
+           if not ok: print('FAILED R26',name,flush=True)
+          check('Owner HTML uses Japanese language',bool(re.search(r'<html\s+lang="ja"',owner)))
+          check('R23 noindex remains',bool(re.search(r'<meta name="robots" content="noindex, nofollow"',owner)))
+          check('Module included exactly once',owner.count('photo-admin-calendar-ja-r26.js?v=')==1)
+          check('Prior owner business calendar remains', 'photo-owner-business-calendar.js?' in owner)
+          check('Module appended after owner business calendar',owner.index('photo-owner-business-calendar.js?')<owner.index('photo-admin-calendar-ja-r26.js?'))
+          for key in ['todayDate','filterDateFrom','filterDateTo','manualDate','selectionDeadline','deliveryDate']:
+           check('Native ISO field retained: '+key,bool(re.search(r'<input[^>]+id="'+key+'"[^>]+type="date"',owner)))
+           check('Legacy field used by owner logic: '+key,owner.count('"'+key+'"')>=2)
+          for needle in [
+           '2026','DPRO-PHOTO-R26-ADMIN-JA-DATE-20261011','Asia/Tokyo','日曜日','月曜日','火曜日','水曜日','木曜日','金曜日','土曜日',
+           'ISO','role','aria-label','aria-pressed','aria-expanded','prev','next','today','clear','Escape','ArrowLeft','ArrowRight','ArrowUp','ArrowDown',
+           'min','max','dataset.dproDay','new Event(\'change\'','MutationObserver','is-selected','is-today','is-sun','is-sat',
+           'noindex' if False else 'dpro-ja-date-trigger','focus-visible','setInterval']:
+           check('Module standard marker: '+needle,needle in js)
+          for forbidden in ['fetch(', 'XMLHttpRequest','apiGet(', 'apiPost(', 'localStorage.', 'sessionStorage.', 'eval(']:
+           check('No network/DB/storage access: '+forbidden,forbidden not in js)
+          check('Existing R21 member code not embedded in module', 'memberLoadSeq' not in js)
+          check('Module size under 30 kB',len(js.encode())<30000)
+          check('Owner page source under 200 kB',len(owner.encode())<200000)
+          check('Owner date format stays ISO', '$("todayDate").value' in owner)
+          check('Owner date fetch remains explicit on click', '$("todayLoadBtn").addEventListener("click", () => loadToday()' in owner)
+          check('Manual date availability change handler remains', '$("manualDate").addEventListener("change"' in owner)
+          check('No HTML scripts removed',len(p.scripts)>=12)
+          check('No surprise new scripts',sum('photo-admin-calendar-ja-r26' in s['attrs'].get('src','') for s in p.scripts)==1)
+          status=subprocess.run(['git','status','--porcelain'],check=True,text=True,capture_output=True).stdout.splitlines()
+          changed={line[3:] for line in status if line.strip() and not line.startswith('?? DPRO_PHOTO_R26_')}
+          check('Only two expected source paths changed',changed.issubset({'owner.html','photo-admin-calendar-ja-r26.js'}))
+          pass_count=sum(x['status']=='PASS' for x in checks)
+          failed=[x for x in checks if x['status']=='FAIL']
+          report={'gate':'DPRO PHOTO R26 JAPANESE ADMIN DATE PICKER','scope':'owner management date fields; ISO and legacy handlers preserved','testMode':'GITHUB_SOURCE_STATIC_AND_NODE_SYNTAX','checks':checks,'counts':{'passed':pass_count,'failed':len(failed)},'liveApiGet':0,'mutatingRequests':0,'dataMutations':0,'sourceChangedPaths':sorted(changed),'productionReady':False,'humanAcceptance':False,'localBrowserQa':'28 PASS local Chromium in separate pre-upload check; browser not run by this workflow'}
+          Path('DPRO_PHOTO_R26_STATIC_GATE.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+          print(f'R26 source gate: {pass_count} PASS, {len(failed)} FAIL; changes={sorted(changed)}; API/DB writes=0')
+          if failed:raise SystemExit('R26 STOP static QA failure')
+          PY_R26_VERIFY
+          git diff --check
+      - name: Commit verified two-file frontend-only improvement
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == 'refs/heads/main' ]] || { echo 'R26 stop: wrong branch'; exit 1; }
+          git add -- owner.html photo-admin-calendar-ja-r26.js
+          python - <<'PY_R26_SCOPE'
+          import subprocess
+          changed=subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines()
+          assert set(changed).issubset({'owner.html','photo-admin-calendar-ja-r26.js'}), changed
+          assert not bool(set(changed)-{'owner.html','photo-admin-calendar-ja-r26.js'})
+          print('R26 staged files: ',changed or '(already applied)')
+          PY_R26_SCOPE
+          if git diff --cached --quiet; then
+            echo 'R26 already applied; no second commit.'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'DPRO PHOTO R26 use Japanese admin date picker with native ISO compatibility'
+            git push
+          fi
+      - name: Archive R26 release evidence without customer data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_ADMIN_CALENDAR_R26
+          path: DPRO_PHOTO_R26_STATIC_GATE.json
+          if-no-files-found: warn
