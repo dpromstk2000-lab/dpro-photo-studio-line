@@ -1,0 +1,129 @@
+name: DPRO PHOTO R32I - Read-only QA (NO DEPLOY)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dpro-photo-r32i-readonly-qa
+  cancel-in-progress: false
+
+jobs:
+  readonly-gate:
+    name: R32I Frontend and Gateway contract baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout product sources (read only)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Verify current frontend JavaScript parses
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check config.js
+          for file in photo-booking-calendar-v2.js photo-admin-calendar-ja-r26.js; do
+            if [ -f "$file" ]; then node --check "$file"; fi
+          done
+      - name: Run R32I static, network-free QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'R32I_PYTHON'
+          #!/usr/bin/env python3
+          """DPRO PHOTO R32I: repository structural regression gate. NO production safety certification.
+          Reads only files in cwd. No network access, SQL, secrets, or writes to source files.
+          """
+          import json, pathlib, re, sys, os
+          ROOT=pathlib.Path.cwd()
+          checks=[]
+          
+          def record(name, condition, detail=''):
+              checks.append({'check':name,'result':'PASS' if condition else 'FAIL','detail':detail})
+              print(('PASS' if condition else 'FAIL')+' | '+name+((' | '+detail) if detail else ''))
+          
+          def read(name):
+              p=ROOT/name
+              return p.read_text(encoding='utf-8-sig') if p.is_file() else ''
+          
+          pages=['index.html','member.html','owner.html','staff.html','owner-ipad.html','system-check.html']
+          files=['config.js',*pages]
+          src={name:read(name) for name in files}
+          for name in files:
+              record('required file: '+name, bool(src[name]) and len(src[name])>100)
+          for name in pages:
+              record('shared config loaded: '+name, bool(re.search(r'<script[^>]+src\s*=\s*["\'](?:\./)?config\.js(?:\?|["\'])',src[name],re.I)))
+          cfg=src['config.js']
+          record('frontend uses existing Gateway v3', '/dpro-photo-product-ready-gateway-v3' in cfg)
+          record('frontend uses existing calendar Gateway v9', '/dpro-photo-product-ready-gateway-v9' in cfg)
+          for endpoint in ['/api/owner/session','/api/staff/session','/api/member/session',
+           '/api/public/availability','/api/public/reservations','/api/public/contact',
+           '/api/public/change-request','/api/public/cancel-request',
+           '/api/member/profile','/api/member/reservations',
+           '/api/admin/reservations','/api/admin/shooting-records/save',
+           '/api/admin/selection-guides/save','/api/admin/delivery/save',
+           '/api/staff/reservations/status','/api/ipad/reservations/status']:
+              record('API contract present: '+endpoint,endpoint in cfg)
+          for header in ['X-Owner-Session','X-Staff-Session','X-Member-Session']:
+              record('session header present: '+header, header in cfg)
+          record('LIFF ID token sent to member session', 'getIDToken' in cfg and 'line_id_token' in cfg)
+          record('member page invokes session flow', 'openMemberSession' in src['member.html'])
+          record('owner page invokes admin credential verification', 'verifyAdminCode' in src['owner.html'])
+          record('staff page invokes staff credential flow', 'verifyAdminCode' in src['staff.html'])
+          record('iPad page invokes staff credential flow', 'verifyAdminCode' in src['owner-ipad.html'])
+          record('booking page uses public availability', 'PUBLIC_AVAILABILITY' in src['index.html'])
+          record('member page uses member reservations', 'MEMBER_RESERVATIONS' in src['member.html'])
+          record('owner page uses admin reservations', 'ADMIN_RESERVATIONS' in src['owner.html'])
+          record('system check has health endpoint', 'HEALTH' in src['system-check.html'])
+          record('historical R31B workflow retained', (ROOT/'.github/workflows/dpro-photo-r31b-current-product-check-stdlib.yml').is_file())
+          # Check for obvious newly embedded server-side secrets in publicly served resources.
+          # This is NOT a comprehensive secret scan. Flag literal assignments, not the documented demo PIN.
+          public='\n'.join(src.values())
+          for label,pat in [
+           ('no hardcoded service-role assignment',r'(?i)\b(?:SUPABASE_SERVICE_ROLE_KEY|service_role_key)\s*[:=]\s*["\'][A-Za-z0-9._-]{20,}'),
+           ('no hardcoded Cloudflare API token',r'(?i)\b(?:CLOUDFLARE_API_TOKEN|CF_API_TOKEN)\s*[:=]\s*["\'][A-Za-z0-9._-]{20,}'),
+           ('no hardcoded LINE channel secret',r'(?i)\b(?:LINE_CHANNEL_SECRET)\s*[:=]\s*["\'][A-Za-z0-9._-]{20,}')
+          ]:
+              record(label,re.search(pat,public) is None)
+          
+          issues=[]
+          if 'public_token' in src['member.html'] and 'searchParams' in src['member.html']:
+              issues.append('Member uses URL or stored public tokens: ensure server-side ownership and URL-referrer protection')
+          if 'line_user_id' in src['index.html']:
+              issues.append('Public index carries line_user_id: identifier alone is not proof of ownership')
+          if 'DEFAULT_ADMIN_CODE = "1234"' in cfg:
+              issues.append('Demo code 1234 exists intentionally: never treat it as production authorization')
+          issues.extend([
+           'Existing Gateway/Worker token interoperability NOT tested by this workflow',
+           'Atomic PostgreSQL cancellation/shoot/delivery transitions NOT tested by this workflow',
+           'No real LINE/LIFF, Supabase database, Cloudflare Worker or multi-tenant end-to-end test',
+           'Production rollout remains HOLD; this workflow performs no writes or deployments'
+          ])
+          pass_count=sum(c['result']=='PASS' for c in checks)
+          fail_count=len(checks)-pass_count
+          result={'step':'R32I','scope':'GitHub main frontend static regression only','passed':pass_count,'failed':fail_count,
+           'production_release':'HOLD','security_approved':False,'checks':checks,'open_blockers':issues}
+          (ROOT/'R32I_GITHUB_READONLY_RESULTS.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          summary=['## DPRO PHOTO R32I — read-only static regression',
+           f'**{pass_count} PASS / {fail_count} FAIL** (does not certify production security)',
+           '**RELEASE: HOLD.** This workflow did not deploy or alter the product.',
+           '', '### Open issues (not covered by static checks)']+['- '+item for item in issues]
+          path=os.getenv('GITHUB_STEP_SUMMARY')
+          if path:
+              with open(path,'a',encoding='utf-8') as h:h.write('\n'.join(summary)+'\n')
+          print(f'R32I result: {pass_count} passed, {fail_count} failed; RELEASE HOLD')
+          print('OPEN BLOCKERS: '+'; '.join(issues))
+          if fail_count:sys.exit(1)
+          R32I_PYTHON
+      - name: Ensure no tracked product source was changed
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- . ':!.github/workflows/dpro-photo-r32i-readonly-security-qa.yml'
+          echo 'READ ONLY: no product file changed; no deploy; no SQL; no LINE dispatch'
