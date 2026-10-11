@@ -1251,7 +1251,7 @@
       waiting: {
         title: "来店前の確認",
         type: "visit_reminder",
-        body: "{customer_name}様\n本日は{reservation_time}より{plan_name}のご予約です。\nお気をつけてお越しください。"
+        body: "{customer_name}様\n撮影のご予約日は{reservation_date} {reservation_time}からです（{plan_name}）。\nお気をつけてお越しください。"
       },
       arrived: {
         title: "受付のお礼",
@@ -2852,6 +2852,7 @@
     function renderStatusButtons() {
       const reservation = state.selected?.reservation;
       const future = !canAdvanceVisit(reservation);
+      $("saveStatusBtn").textContent = future ? "事前メモを保存" : "進行状態とメモを保存";
       $("statusButtons").innerHTML = (future
         ? '<p class="field-note" style="grid-column:1/-1">撮影日前のため、当日進行の変更はできません。内部メモは保存できます。</p>' : '')
         + C.VISIT_STATUS_FLOW.map((status) => `
@@ -2880,6 +2881,7 @@
       const values = {
         customer_name: customerName(reservation),
         reservation_time: fmtTime(reservation.start_at),
+        reservation_date: reservation.start_at ? C.formatDate(reservation.start_at, { weekday: "short" }) : "日付未登録",
         plan_name: planName(reservation),
       };
       let body = item.body;
@@ -2889,16 +2891,22 @@
       return body;
     }
 
+    // DPRO-PHOTO-R30-DATE-AWARE-MESSAGE-SAFETY-20261011
+    // Pre-visit notices display the actual booking date; day-of messages wait until the booking date.
+    function isFutureVisitMessageBlocked(reservation, key) {
+      return key !== "waiting" && !canAdvanceVisit(reservation);
+    }
     function renderMessageCards() {
       const reservation = state.selected?.reservation || {};
       $("messageCards").innerHTML = Object.entries(messages).map(([key, item]) => {
-        const body = filledMessage(item, reservation);
+        const blocked = isFutureVisitMessageBlocked(reservation, key);
+        const body = blocked ? "撮影日当日に使用する案内文です。撮影日前はコピーできません。" : filledMessage(item, reservation);
         return `
           <div class="message-card">
             <h5>${esc(item.title)}</h5>
             <p>${esc(body)}</p>
             <button class="btn btn-secondary btn-small" type="button"
-              data-copy-message="${esc(key)}">文面をコピー</button>
+              data-copy-message="${esc(key)}" ${blocked ? 'disabled title="撮影日当日にコピーできます"' : ''}>${blocked ? '撮影日当日に利用' : '文面をコピー'}</button>
           </div>
         `;
       }).join("");
@@ -2929,6 +2937,10 @@
       const item = messages[key];
       const reservation = state.selected?.reservation;
       if (!item || !reservation) return;
+      if (isFutureVisitMessageBlocked(reservation, key)) {
+        toast("撮影日前のため、受付・撮影後の案内文はコピーできません。", "error", 5200);
+        return;
+      }
 
       const body = filledMessage(item, reservation);
       await C.copyText(body);

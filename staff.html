@@ -1454,9 +1454,18 @@
       await reloadSelected();
     }
 
+    // DPRO-PHOTO-R30-DATE-AWARE-MESSAGE-SAFETY-20261011
+    // Presets on this screen are on-the-day/post-shooting messages, not pre-visit reminders.
+    function staffMessageBlocked(reservation) { return !canAdvanceVisit(reservation); }
     function renderMessageBody() {
       const preset = messagePresets[$("messagePreset").value] || Object.values(messagePresets)[0];
       const r = state.selected?.reservation || {};
+      const blocked = staffMessageBlocked(r);
+      $("copyMessageBtn").disabled = blocked;
+      if (blocked) {
+        $("messageBody").value = "撮影日前の予約です。受付・撮影後の当日用文面は、撮影日当日に利用できます。";
+        return;
+      }
       const values = {
         customer_name: reservationName(r),
         plan_name: planName(r),
@@ -1474,6 +1483,10 @@
     async function copyMessage() {
       const r = state.selected?.reservation;
       if (!r) return;
+      if (staffMessageBlocked(r)) {
+        toast("撮影日前は、当日用の案内文をコピーできません。", "error", 5200);
+        return;
+      }
       const preset = messagePresets[$("messagePreset").value] || Object.values(messagePresets)[0];
       const body = $("messageBody").value.trim();
       if (!body) {
