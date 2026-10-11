@@ -639,10 +639,10 @@
           <p class="eyebrow">DPRO PHOTO STUDIO LINE</p>
           <h1>営業前システムチェック</h1>
         </div>
-        <span class="version-badge">STEP STUDIO-11</span>
+        <span class="version-badge">QA R31 / STUDIO-11互換</span>
       </div>
       <p class="hero-copy">
-        Worker・Supabase・共通設定・管理認証・営業デモデータを一画面で確認します。
+        Worker・Supabase・共通設定・管理認証・R26〜R30公開反映・営業デモデータを一画面で確認します。
         この画面は営業担当・管理者専用です。お客様へは案内しません。
       </p>
       <div class="overall-panel" aria-live="polite">
@@ -686,7 +686,7 @@
     <section class="section" aria-labelledby="autoTitle">
       <div class="section-head">
         <div>
-          <h2 class="section-title" id="autoTitle">2. 全自動チェック</h2>
+          <h2 class="section-title" id="autoTitle">2. 全自動チェック（R30公開反映まで）</h2>
           <p class="section-note">公開APIは管理コードなしでも確認できます。管理APIは認証後に確認します。</p>
         </div>
         <div class="actions">
@@ -716,7 +716,7 @@
       <div class="section-head">
         <div>
           <h2 class="section-title" id="demoTitle">3. 営業デモデータ準備</h2>
-          <p class="section-note">営業当日の予約・タスク・セレクト・納品・再注文相談を、今日の日付に合わせて再準備します。</p>
+          <p class="section-note">営業当日の予約・タスク・セレクト・納品・再注文相談を、今日の日付に合わせて再準備します。現在の開発検証データは保持できます。営業デモ完全初期化は必要時だけ実行してください。</p>
         </div>
       </div>
 
@@ -792,7 +792,8 @@
         { id: "publicConfig", title: "公開店舗設定", description: "30分枠・公開カメラマン2名・全体スタッフ3名・撮影スペースを確認します。" },
         { id: "plans", title: "撮影プラン", description: "営業デモに必要な撮影プランが取得できるか確認します。" },
         { id: "routes", title: "APIルート", description: "公開・管理・スタッフ・iPad用APIが公開されているか確認します。" },
-        { id: "screens", title: "全画面バージョン・配置", description: "予約・マイページ・PC管理・スタッフ・受付iPadの最新ファイルを確認します。" },
+        { id: "screens", title: "全5画面の基本互換・配置", description: "STUDIO-11画面識別子が残り、予約・マイページ・管理画面が配置されていることを確認します。" },
+        { id: "releaseScreens", title: "R26〜R30 公開修正反映", description: "日本語カレンダー・未来日の進行操作制限・案内文コピー制限を公開6ファイルから読み取り検査します。" },
         { id: "admin", title: "管理コード認証", description: "管理APIへ安全に接続できるか確認します。" },
         { id: "phone", title: "電話番号正規化", description: "ハイフン・空白・全角・+81形式を同じ番号として判定します。" },
         { id: "guards", title: "予約・写真データ安全設計", description: "30分枠、担当者・撮影スペース・同一撮影対象者の同日重複防止、外部ギャラリー運用を確認します。" },
@@ -1102,8 +1103,49 @@
           state: stale.length ? "warn" : "ok",
           detail: stale.length
             ? `GitHub Pages反映待ちまたは旧版：${stale.map((row) => row.file).join("、")}`
-            : `全5画面のSTEP STUDIO-11版を確認しました。`,
+            : `全5画面のSTUDIO-11基本互換を確認しました。R26〜R30の追加改善は次項で確認します。`,
           payload: { results },
+        };
+      }
+
+
+      // DPRO-PHOTO-R31-PUBLIC-RELEASE-READONLY-CHECK-20261011
+      // These are deployment evidence markers, not a live-API authorization or booking mutation test.
+      const R31_RELEASE_FILES = Object.freeze({
+        "owner.html": ["photo-admin-calendar-ja-r26.js"],
+        "photo-admin-calendar-ja-r26.js": ["DPRO-PHOTO-R26-ADMIN-JA-DATE-20261011"],
+        "owner-ipad.html": [
+          "DPRO-PHOTO-R27-IPAD-JAPANESE-CALENDAR-20261011",
+          "DPRO-PHOTO-R29-FUTURE-BOOKING-PROGRESS-GUARD-20261011",
+          "DPRO-PHOTO-R30-DATE-AWARE-MESSAGE-SAFETY-20261011",
+          "isFutureVisitMessageBlocked"
+        ],
+        "photo-ipad-calendar-ja-r27.js": ["DPRO-PHOTO-R27-IPAD-JA-DATE-20261011"],
+        "staff.html": [
+          "DPRO-PHOTO-R28-STAFF-JAPANESE-CALENDAR-20261011",
+          "DPRO-PHOTO-R29-FUTURE-BOOKING-PROGRESS-GUARD-20261011",
+          "DPRO-PHOTO-R30-DATE-AWARE-MESSAGE-SAFETY-20261011",
+          "staffMessageBlocked"
+        ]
+      });
+      async function checkReleaseScreens() {
+        const config = requireConfig();
+        const base = String(config.SITE_BASE_URL || "").replace(/\/$/, "");
+        const results = await Promise.all(Object.entries(R31_RELEASE_FILES).map(async ([file, markers]) => {
+          const response = await fetch(`${base}/${file}?r31_readonly=${Date.now()}`, { cache: "no-store" });
+          if (!response.ok) return { file, ok: false, missing: [`HTTP ${response.status}`] };
+          const source = await response.text();
+          const missing = markers.filter((marker) => !source.includes(marker));
+          return { file, ok: missing.length === 0, missing };
+        }));
+        const failed = results.filter((item) => !item.ok);
+        return {
+          state: failed.length ? "warn" : "ok",
+          detail: failed.length
+            ? `R26〜R30公開反映を要確認：${failed.map((item) => item.file).join("、")}。GitHub Pagesの反映またはファイル内容を確認してください。`
+            : `R26〜R30の日本語カレンダー・未来日操作制限・案内文コピー制限を公開${results.length}ファイルで確認しました（読み取りのみ）。`,
+          payload: { release: "R30", mode: "PUBLIC_SOURCE_READ_ONLY", files: results,
+                     production_approved: false, live_write_tested: false }
         };
       }
 
@@ -1211,6 +1253,7 @@
           reorderCount === 1;
 
         // Only explicit ?qa=1 on a DEMO studio distinguishes preserved QA data.
+        // The default ?demo=1 sales-day URL deliberately warns rather than quietly approving QA data.
         // Normal sales-day URL keeps the strict initial-state warning unchanged.
         const qaMode = new URLSearchParams(window.location.search).get("qa") === "1"
           && health.database.is_demo === true;
@@ -1254,6 +1297,7 @@
           await runSingleCheck("plans", checkPlans);
           await runSingleCheck("routes", checkRoutes);
           await runSingleCheck("screens", checkScreens);
+          await runSingleCheck("releaseScreens", checkReleaseScreens);
           await runSingleCheck("admin", checkAdmin);
           await runSingleCheck("phone", checkPhone);
           await runSingleCheck("guards", checkGuards);
