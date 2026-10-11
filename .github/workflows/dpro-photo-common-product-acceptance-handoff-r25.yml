@@ -1,0 +1,207 @@
+name: DPRO PHOTO Common Product Acceptance and Handoff R25
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-common-product-acceptance-handoff-r25.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dpro-photo-handoff-r25-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  common-product-acceptance-r25:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout current DPRO PHOTO common-product source
+        uses: actions/checkout@v4
+      - name: Build acceptance gates and customer-onboarding evidence without API or code mutations
+        shell: bash
+        env:
+          R25_OUTPUT_DIR: r25-evidence
+        run: |
+          set -euo pipefail
+          python - <<'PY_R25_ACCEPTANCE'
+          #!/usr/bin/env python3
+          """DPRO PHOTO R25: read-only common-product acceptance and customer rollout contract.
+          Reads only public product source. Creates local, non-secret handoff evidence files.
+          NEVER calls the backend, updates data, writes to GitHub or approves production.
+          """
+          import csv, datetime, hashlib, json, os, re, subprocess, sys
+          from pathlib import Path
+          ROOT=Path.cwd()
+          OUT=Path(os.environ.get('R25_OUTPUT_DIR','.'))
+          OUT.mkdir(parents=True,exist_ok=True)
+          STAMP=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')
+          BASE='https://dpromstk2000-lab.github.io/dpro-photo-studio-line/'
+          PAGES=['index.html','member.html','staff.html','owner.html','owner-ipad.html','system-check.html','demo-guide.html']
+          PRIVATE=['member.html','staff.html','owner.html','owner-ipad.html','system-check.html']
+          SCRIPTS=['config.js','photo-booking-calendar-v2.js','photo-booking-presentation.js','photo-crm-import.js','photo-crm-line-link.js','photo-crm-segment.js','photo-feature-switch-master.js','photo-feature-switch-ui-v2.js','photo-integrations-ui.js','photo-owner-business-calendar.js','photo-owner-plan-resource.js','photo-owner-settings-v2.js','photo-owner-setup-checklist.js','photo-reservation-automation-ui.js']
+          CHECKS=[]
+          def check(cid,ok,detail,critical=True):
+              CHECKS.append({'id':cid,'result':'PASS' if ok else 'FAIL','detail':detail,'critical':critical})
+              return ok
+          SRC={}
+          for p in PAGES+SCRIPTS:
+              f=ROOT/p
+              check('source-file/'+p,f.is_file() and f.stat().st_size>500,'Source present and non-empty' if f.is_file() else 'MISSING',True)
+              if f.is_file():SRC[p]=f.read_text(encoding='utf-8')
+          for p in PRIVATE:
+              s=SRC.get(p,'')
+              check('robots-noindex/'+p,bool(re.search(r'<meta\s+name=[\"\']robots[\"\']\s+content=[\"\'][^\"\']*noindex',s,re.I)),'Private demo screen carries a noindex robots directive')
+          config=SRC.get('config.js','')
+          check('demo-tenant',bool(re.search(r'const\s+STUDIO_CODE\s*=\s*[\"\']dpro_photo_demo[\"\']',config)),'Demo studio code confirmed')
+          check('demo-admin-code-is-public',bool(re.search(r'const\s+DEFAULT_ADMIN_CODE\s*=\s*[\"\']1234[\"\']',config)),'Published code is for demos only; NOT a production credential')
+          check('demo-guard-declared','productionGuardRequired: true' in config,'Production guard requested by frontend')
+          check('owner-session-endpoint','/api/owner/session' in config,'Owner session endpoint defined; positive auth NOT proven')
+          check('staff-session-endpoint','/api/staff/session' in config,'Staff session endpoint defined; positive auth NOT proven')
+          check('member-session-endpoint','/api/member/session' in config,'Member session endpoint defined; positive auth NOT proven')
+          check('reservation-read-endpoint','/api/public/availability' in config,'Public availability endpoint defined; no write called')
+          check('reservation-write-endpoint','/api/public/reservations' in config,'Reservation endpoint named; no positive write test')
+          check('member-async-guard','DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION' in SRC.get('member.html',''),'R14 async identity isolation marker retained')
+          check('member-editor-guard','DPRO-PHOTO-R21-MEMBER-REQUEST-EDITOR-INFLIGHT-LOCK' in SRC.get('member.html',''),'R21 editor lock retained')
+          check('member-modal-guard','DPRO-PHOTO-R20-MEMBER-REQUEST-CLOSE-EVENT-SAFETY' in SRC.get('member.html',''),'R20 close callback guard retained')
+          check('member-deeplink-guard','DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY' in SRC.get('member.html',''),'R16 deep link exclusive identity marker retained')
+          check('product-no-secret-key',not re.search(r'(?i)(?:SUPABASE_SERVICE_ROLE_KEY|GOOGLE_CLIENT_SECRET|LINE_CHANNEL_SECRET)\s*[:=]\s*[\"\'][^\"\']{12,}',config),'No obvious hard-coded server secret assignment in config.js')
+          check('r24-release-gate-present',(ROOT/'.github/workflows/dpro-photo-release-boundary-readonly-r24.yml').is_file(),'R24 release boundary gate remains in repository')
+          check('r23-search-gate-present',(ROOT/'.github/workflows/dpro-photo-private-pages-search-guard-r23.yml').is_file(),'R23 four-screen indexing guard remains in repository')
+          check('public-demo-booking-is-indexable',not bool(re.search(r'<meta\s+name=[\"\']robots[\"\']\s+content=[\"\'][^\"\']*noindex',SRC.get('index.html',''),re.I)),'Indexable demo booking page is intentional for public demo; production decision pending')
+          for p in SCRIPTS:
+              if (ROOT/p).is_file():
+                  r=subprocess.run(['node','--check',str(ROOT/p)],capture_output=True,text=True)
+                  check('node-syntax/'+p,r.returncode==0,(r.stderr or 'Syntax OK').strip()[:160])
+
+          # Releases: the 9 explicit blockers originate from the verified R24 GitHub artifact (run 38097097414).
+          BLOCKERS=[
+           ('owner-auth-positive','Authenticated owner session & role boundaries','After customer contract','Owner + engineer','Owner signs in; role checks pass, unauthorized actions fail','Redacted owner auth QA and role matrix'),
+           ('staff-auth-positive','Staff sign in, scoped permissions and logout','After customer contract','Staff lead + engineer','Only permitted studio tasks available; expired sessions denied','Redacted staff QA and revocation evidence'),
+           ('member-line-positive','Real LINE/LIFF ID-token validation','After LINE registration','Owner + LINE admin','Only correct verified LINE identity can open own profile','Authorized LINE LIFF device acceptance log'),
+           ('reservation-lifecycle','Positive create/change/cancel and double-book conflict','Approved isolated test environment','QA owner + engineer','Create/update/cancel flows correct; no duplicate bookings','Test reservation IDs (redacted), rollback confirmation'),
+           ('tenant-isolation','Two-studio data isolation negative/positive gates','Two configured test tenants','QA engineer','Tenant A cannot see or mutate tenant B records','Synthetic cross-tenant negative/positive report'),
+           ('google-oauth','Google OAuth review & real calendar sync','Authorized Google connection','Google admin + engineer','Approved scopes; add/update/cancel works and no duplicate sync','Approved consent and calendar sync evidence'),
+           ('customer-domain-line','Customer domain, LINE official, LIFF, owner self-activation','After contract','Customer owner + implementation lead','Correct domain & LINE routing, credentials, branding and recovery','Setup checklist with masked screenshots'),
+           ('authenticated-visual','Authenticated UI on owner/staff/member/iPad','Approved test accounts','QA owner + device reviewer','Post-login layout, dialogs and permissions confirmed','PC/iPad/mobile screenshots without personal data'),
+           ('human-acceptance','Human acceptance PC/Android/iPhone','After product setup','Customer owner + QA reviewer','Owner signs off complete critical journeys','Signed human acceptance and release decision')]
+          DECISIONS=[
+           ('demo-admin-pin','Published demo admin code 1234','Hard STOP for production until replaced with backend-only secret / real auth','Implementation lead','Before first customer deployment','Not resolved by R25'),
+           ('booking-search-policy','Demo booking page is indexable','Choose per-customer robots and SEO policy; keep public sales demo distinct','Customer owner + implementation lead','Before domain launch','Not resolved by R25')]
+
+          checks_pass=sum(c['result']=='PASS' for c in CHECKS)
+          fail=[c for c in CHECKS if c['result']=='FAIL']
+          report={'gate':'DPRO PHOTO R25 COMMON PRODUCT HANDOFF & CUSTOMER ACCEPTANCE CONTRACT','verified_r24_run_id':38097097414,'verified_r24_source_sha':'29859f00355b55a05accdc7be7500e26e921dab2','generated_at_utc':STAMP,'source_sha':os.getenv('GITHUB_SHA') or None,'result':'FAIL' if fail else 'COMMON_DEMO_READY_FOR_FURTHER_QA_PRODUCTION_BLOCKED','sourceChecks':{'passed':checks_pass,'failed':len(fail)},'checks':CHECKS,'releaseWarnings':len(DECISIONS),'deferred':len(BLOCKERS),'evidenceScope':'Local code presence and JavaScript syntax only; independent R24 live GET report retained externally','publicDemo':{'sourceReadOnly':True,'productionReady':False,'humanAcceptance':False},'customerProduction':{'releaseApproved':False,'requiresExplicitApproval':True,'requiresAuthorizedWriteTests':True,'requiresVerifiedOwnerStaffMemberAuth':True,'requiresTenantBoundary':True},'backendRequests':0,'dataWrites':0}
+          (OUT/'DPRO_PHOTO_R25_ACCEPTANCE_GATE.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          with (OUT/'DPRO_PHOTO_R25_CUSTOMER_ACCEPTANCE_MATRIX.csv').open('w',encoding='utf-8-sig',newline='') as f:
+              w=csv.writer(f);w.writerow(['ID','受入項目','実施時期','担当','合格条件','必要証拠','状態']);
+              for id_,title,when,owner,success,evidence in BLOCKERS:w.writerow([id_,title,when,owner,success,evidence,'未実施／本番承認不可'])
+          with (OUT/'DPRO_PHOTO_R25_PENDING_RELEASE_DECISIONS.csv').open('w',encoding='utf-8-sig',newline='') as f:
+              w=csv.writer(f);w.writerow(['ID','決定事項','安全基準','責任者','期限','現在の判断']);
+              for row in DECISIONS:w.writerow(row)
+
+          runbook='''# DPRO PHOTO — 共通商品から顧客納品へ（R25）
+
+          **判定：共通デモの公開・読み取り検査は合格。顧客本番の公開・納品は未承認。**
+
+          ## 1｜共通商品（契約前）として揃ったもの
+          - 予約WEB、会員、スタッフ、管理者、iPad、system-check、デモガイドの公開コード
+          - R6～R23の前画面安全ガード・GitHub Actions QA
+          - R22: 公開7画面と公開予約API GETの検査、合計240 PASS、0 FAIL。R23: 検索掲載対策後の警告2件。R24: 78 PASS、0 FAIL、2 WARN、9 DEFERRED（GitHub実行で検証済み）
+          - R25: この引継ぎと受入マトリクス（読み取り専用／既存業務データ変更なし）
+
+          ## 2｜必ず守る境界
+          - 公開のデモ管理コード `1234` を顧客本番で**絶対に使用しない**。本番シークレットはフロント側に書かず、サーバー管理する。
+          - GitHub Pages での表示成功や `noindex` は認証・認可の証拠にならない。
+          - 予約登録・変更・取消・ユーザー権限変更は、**テスト用環境への明示的な許可**があるまで実施しない。
+          - 顧客のドメイン、LINE公式、LIFF、実Google認証、オーナー設定は契約・導入後に準備する。
+          - `status=PASS` でも `productionReady=false` とし、本番承認を自動化しない。
+
+          ## 3｜顧客個別導入の標準順序
+          1. 契約と責任者・対象店舗・本番データ取扱方針の確認
+          2. 店舗の構成、ドメイン、LINE公式、LIFF、写真館名称・ロゴ・予約条件の確定
+          3. サーバー側シークレットとowner/staff/member認証を設定し、デモ用管理コードを無効化
+          4. 別店舗への情報流出防止を、専用の合成データと2テナント環境で検査
+          5. 許可済みテスト環境で新規予約→変更→取消→重複枠防止→履歴を確認
+          6. 許可を得てLINE/LIFF本人認証とGoogle OAuthの同期・取消を検査
+          7. PC・Android・iPhoneで受入（大きな文字、操作可能、横はみ出し、セッション期限・下書き）
+          8. 実機と受入証拠の整理、オーナー承認、最終リリース判定
+          9. 顧客には管理センター経由で操作導線を案内し、GitHub/Cloudflareを直接開示しない
+
+          ## 4｜停止条件（ひとつでも該当すれば公開・引き渡し不可）
+          - 公開デモのPINが本番認証で利用可能／認証回避が起こる
+          - 他店データを閲覧・操作できる
+          - 予約作成・変更・取消で整合性が崩れる
+          - LINE/LIFFで本人以外のマイページを表示できる
+          - 必要なGoogle OAuth承認・スコープ・データ保護が未確認
+          - 管理者・スタッフ・会員の実認証、または実機の受入結果が未承認
+          - 利用規約・個人情報取扱・バックアップ・サポート運用が整っていない
+
+          ## 5｜今回の作業が証明しないもの
+          R25はソース構成と構文、受入条件が明文化されたことの確認。認証・個人情報保護の完全性・外部サービスの審査・本番予約操作の合格は証明していない。
+          '''
+          (OUT/'DPRO_PHOTO_R25_RELEASE_RUNBOOK.md').write_text(runbook,encoding='utf-8')
+
+          helptext='''# DPRO PHOTO ヒューマン受入検査（実際の店舗での最終チェック）
+
+          **事前に必要：** 受入担当者、テスト用のオーナー・スタッフ・会員、テスト環境、LINE/Google権限（必要時のみ）。本番データを使う場合は個別に承認を得る。
+
+          - 予約者：空き枠・プラン・担当者・料金表示・過去日時不可・予約確定・二重操作防止
+          - 予約者：長い入力中にログイン期限が切れても、下書きが復元できるか
+          - 会員：自分の予約だけ表示されるか／別のLINE・トークンへの切替時に前の情報が消えるか
+          - 会員：変更・キャンセル希望・問い合わせ・再注文、送信中の編集禁止と失敗時の復帰
+          - スタッフ：本人ログイン、担当予約、許可された操作のみ、ログアウトと期限切れ
+          - オーナー：ログイン、スタッフ権限、予約・顧客台帳・履歴・操作ログ、招待・再設定
+          - 複数店舗：店舗Aのコードで店舗Bを閲覧・変更できないことをテスト用アカウントで検証
+          - Google：承認済みスコープで新規・更新・取消、重複イベント、認証解除
+          - LINE：公式アカウント、LIFF起動、本人確認、深いリンク、スマホOS差異
+          - 見た目：PC 1440／iPad 1024／Android 390／iPhone 390／狭幅320のレイアウト、押せないボタン、文字、横スクロール
+          - system-check：営業前一括チェック、必要ならテスト環境でdemo_prepare（本番変更は明示承認後のみ）
+          - 受入記録：実施者・日時・画面・入力・結果・失敗時の画面／ログ／再現手順・是正確認・サイン
+
+          **判定：** 必須項目未実施・FAIL・未承認が1件でもあれば、本番リリースはBLOCKED。
+          '''
+          (OUT/'DPRO_PHOTO_R25_HUMAN_ACCEPTANCE_GUIDE.md').write_text(helptext,encoding='utf-8')
+          (OUT/'DPRO_PHOTO_R25_NEXT_ACTION.txt').write_text('R25 Gate: source/static handoff checks only. Confirm GitHub Actions artifact, then prepare contract-onboarding acceptance in an authorized isolated environment. Keep customer production BLOCKED until all nine deferred items and two decisions resolve. No SQL/Worker/LINE/Google writes from this package.\n',encoding='utf-8')
+          print(f'R25 acceptance preflight {checks_pass} PASS, {len(fail)} FAIL, 2 WARN, 9 DEFERRED; local evidence only, no backend/data writes')
+          if fail:
+              print('FAILED:',[(x['id'],x['detail']) for x in fail],file=sys.stderr)
+              sys.exit(1)
+          PY_R25_ACCEPTANCE
+          python - <<'PY_R25_VALIDATE'
+          import csv,json,os
+          from pathlib import Path
+          out=Path('r25-evidence')
+          data=json.loads((out/'DPRO_PHOTO_R25_ACCEPTANCE_GATE.json').read_text(encoding='utf-8'))
+          assert data['sourceChecks']['passed']>=56 and data['sourceChecks']['failed']==0, 'R25 static gate failed'
+          assert data['releaseWarnings']==2 and data['deferred']==9, 'R25 blocker ledger changed'
+          assert data['dataWrites']==0 and data['backendRequests']==0, 'Unsafe R25 network/data activity'
+          assert data['customerProduction']['releaseApproved'] is False, 'Production approval forbidden'
+          assert data['customerProduction']['requiresAuthorizedWriteTests'] is True, 'Human write gate required'
+          for name in ['DPRO_PHOTO_R25_CUSTOMER_ACCEPTANCE_MATRIX.csv','DPRO_PHOTO_R25_PENDING_RELEASE_DECISIONS.csv','DPRO_PHOTO_R25_RELEASE_RUNBOOK.md','DPRO_PHOTO_R25_HUMAN_ACCEPTANCE_GUIDE.md','DPRO_PHOTO_R25_NEXT_ACTION.txt']:
+              assert (out/name).is_file(),f'Missing R25 artifact {name}'
+          with (out/'DPRO_PHOTO_R25_CUSTOMER_ACCEPTANCE_MATRIX.csv').open(encoding='utf-8-sig',newline='') as f:
+              assert len(list(csv.reader(f)))==10,'9 release blockers must be present'
+          with (out/'DPRO_PHOTO_R25_PENDING_RELEASE_DECISIONS.csv').open(encoding='utf-8-sig',newline='') as f:
+              assert len(list(csv.reader(f)))==3,'2 explicit deployment decisions must be present'
+          if os.getenv('GITHUB_REF') and os.getenv('GITHUB_REF')!='refs/heads/main':raise SystemExit('Unexpected branch')
+          if os.getenv('GITHUB_STEP_SUMMARY'):
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:
+                  f.write('## R25 DPRO PHOTO common product acceptance\n')
+                  f.write(f"{data['sourceChecks']['passed']} static PASS / 0 FAIL; 2 WARN / 9 DEFERRED; production BLOCKED. No API or data writes.\n")
+          print('R25 VERIFIED: 56 source/static PASS, 0 FAIL; 2 WARN, 9 DEFERRED; customer production BLOCKED; no writes')
+          PY_R25_VALIDATE
+          git diff --exit-code
+          git diff --cached --exit-code
+          if git status --porcelain | grep -v '^?? r25-evidence/$' | grep -q .; then
+            echo 'R25 STOP unexpected git working tree change' >&2
+            git status --short
+            exit 1
+          fi
+      - name: Upload R25 acceptance and deployment runbook evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_COMMON_PRODUCT_R25
+          path: r25-evidence/
+          if-no-files-found: warn
