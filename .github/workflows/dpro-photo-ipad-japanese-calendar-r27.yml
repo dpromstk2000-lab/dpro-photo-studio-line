@@ -1,0 +1,217 @@
+name: DPRO PHOTO Japanese iPad Date Calendar R27
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-ipad-japanese-calendar-r27.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dpro-photo-r27-ipad-calendar-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  r27-ipad-calendar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout current DPRO PHOTO common product
+        uses: actions/checkout@v4
+      - name: Apply exact-source guarded iPad calendar UI improvement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R27_PATCH'
+          from pathlib import Path
+          import subprocess,hashlib,base64,gzip
+          p=Path('owner-ipad.html')
+          js_path=Path('photo-ipad-calendar-ja-r27.js')
+          current=p.read_bytes()
+          baseline='f6777ca8327e25250f78ef9ffb357151e4835a6c'
+          expected_js='87dab0242dddd1ead77bb43abf274815e60aacaa5a2af91f2a47faf490c60da5'
+          anchor=b'  <script>\n  (() => {'
+          after_anchor=b'  <!-- DPRO-PHOTO-R27-IPAD-JAPANESE-CALENDAR-20261011 -->\n  <script src="./photo-ipad-calendar-ja-r27.js?v=DPRO-PHOTO-R27-IPAD-JA-DATE-20261011"></script>\n  <script>\n  (() => {'
+          old_func=b'    function openNativeDatePicker(input) {\n      try {'
+          new_func=b'    function openNativeDatePicker(input) {\n      // R27: always prefer DPRO Japanese calendar, retain native as asset fallback.\n      if (window.DPRO_PHOTO_IPAD_CALENDAR_JA_R27?.open(input)) return;\n      try {'
+          packed=''.join('''
+          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
+          '''.split())
+          source=gzip.decompress(base64.b64decode(packed))
+          assert hashlib.sha256(source).hexdigest()==expected_js, 'R27 embedded JS SHA mismatch'
+          marker=b'DPRO-PHOTO-R27-IPAD-JAPANESE-CALENDAR-20261011'
+          if marker in current:
+              assert current.count(marker)==1 and new_func in current and after_anchor in current, 'R27 existing HTML differs'
+              assert js_path.is_file() and hashlib.sha256(js_path.read_bytes()).hexdigest()==expected_js, 'R27 existing module differs'
+              print('R27 already installed; idempotent, no source rewrite')
+          else:
+              got=subprocess.check_output(['git','hash-object',str(p)],text=True).strip()
+              assert got==baseline, f'R27 halted: baseline has changed {{got}}'
+              assert current.count(anchor)==1 and current.count(old_func)==1, 'R27 original anchors changed'
+              assert not js_path.exists(), 'R27 module path unexpectedly exists'
+              revised=current.replace(anchor,after_anchor,1).replace(old_func,new_func,1)
+              assert revised.count(marker)==1 and revised.count(new_func)==1, 'R27 patch assembly problem'
+              js_path.write_bytes(source)
+              p.write_bytes(revised)
+              print('R27 patched: owner-ipad.html and new Japanese calendar module only')
+          PY_R27_PATCH
+      - name: Validate UI compatibility, JavaScript syntax, and two-file scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY_R27_VERIFY'
+          from pathlib import Path
+          import json,hashlib,re,subprocess
+          html=Path('owner-ipad.html').read_text(encoding='utf-8')
+          js=Path('photo-ipad-calendar-ja-r27.js').read_text(encoding='utf-8')
+          checks=[]
+          def ck(name,ok):
+              checks.append({'name':name,'status':'PASS' if ok else 'FAIL'})
+              if not ok:print('R27 FAILED',name)
+          ck('R23 private-page noindex retained','<meta name="robots" content="noindex, nofollow" />' in html)
+          ck('R27 module loaded exactly once',html.count('photo-ipad-calendar-ja-r27.js')==1)
+          ck('R27 source marker exactly once',html.count('DPRO-PHOTO-R27-IPAD-JAPANESE-CALENDAR-20261011')==1)
+          ck('R27 calendar used before native fallback','if (window.DPRO_PHOTO_IPAD_CALENDAR_JA_R27?.open(input)) return;' in html)
+          ck('Existing native fallback preserved',html.count('if (typeof input.showPicker === "function") input.showPicker();')==1)
+          ck('Original iPad workDate handler retained','$("workDate").addEventListener("change"' in html)
+          ck('Original iPad manualDate handler retained','$("manualDate").addEventListener("change"' in html)
+          ck('Original "show reservations" button retained','$("loadBtn").addEventListener("click", () => loadReservations());' in html)
+          ck('Original Today button retained','$("todayBtn").addEventListener("click"' in html)
+          ck('Original manual availability handler retained','loadManualSlots().catch(() => {});' in html)
+          ck('Original booking form submit retained','$("manualSubmitBtn").addEventListener("click"' in html)
+          ck('Original iPad UI large buttons retained',html.count('class="date-display-button"')==2)
+          ck('Original iPad hidden ISO fields retained',html.count('class="native-date-input" type="date"')==2)
+          ck('Existing date-display buttons mapped',js.count("DOC.getElementById(input.id+'Display')")==1)
+          ck('Only workDate and manualDate adapted',js.count("['workDate','manualDate']")>=2)
+          ck('Existing input change events used',"input.dispatchEvent(new Event('change',{bubbles:true}))" in js)
+          ck('No new booking API call by adapter',not any(x in js for x in ['fetch(', 'XMLHttpRequest', '.apiPost(','.apiGet(','sendBeacon(']))
+          ck('Adapter does not store credentials',not any(x in js for x in ['localStorage','sessionStorage','document.cookie']))
+          ck('Owner admin code not overwritten',not any(x in js for x in ['ADMIN_CODE','adminCode','setStoredValue']))
+          ck('Calendar JPN day labels',"['日','月','火','水','木','金','土']" in js)
+          ck('Tokyo today anchor',"timeZone:'Asia/Tokyo'" in js)
+          ck('ISO date storage preserved',"`${y}-${pad(m)}-${pad(d)}`" in js)
+          ck('Respects min/max date limits',"(!input.min||day>=input.min)&&(!input.max||day<=input.max)" in js)
+          ck('Previous next month controls preserved','data-dpro-nav="prev"' in js and 'data-dpro-nav="next"' in js)
+          ck('Selected day marked for screen reader','aria-pressed=' in js)
+          ck('Escape to close preserved',"e.key==='Escape'" in js)
+          ck('Touch accessible 330px popup','width:min(330px,calc(100vw - 20px))' in js)
+          ck('Mobile viewport positioning',"window.innerWidth-w-10" in js)
+          ck('Browser native picker not called by adapter','.showPicker(' not in js)
+          ck('R27 exports exact open method','version:VERSION,refresh:scan,formatDate:displayDate,open,close' in js)
+          ck('R27 opens only registered controls','if(!input||!targets.has(input))return false;' in js)
+          ck('Native ISO values used unchanged',html.count('id="workDate"')==1 and html.count('id="manualDate"')==1)
+          # Source syntax; no live credentials, API or DB operations.
+          process=subprocess.run(['node','--check','photo-ipad-calendar-ja-r27.js'],capture_output=True,text=True)
+          ck('Node JS syntax for R27',process.returncode==0)
+          # Guard no changes to legacy app other than exact two HTML substitutions.
+          base=subprocess.run(['git','show','HEAD:owner-ipad.html'],capture_output=True)
+          if base.returncode==0:
+              old=base.stdout
+              anchor=b'  <script>\n  (() => {'
+              after_anchor=b'  <!-- DPRO-PHOTO-R27-IPAD-JAPANESE-CALENDAR-20261011 -->\n  <script src="./photo-ipad-calendar-ja-r27.js?v=DPRO-PHOTO-R27-IPAD-JA-DATE-20261011"></script>\n  <script>\n  (() => {'
+              old_func=b'    function openNativeDatePicker(input) {\n      try {'
+              new_func=b'    function openNativeDatePicker(input) {\n      // R27: always prefer DPRO Japanese calendar, retain native as asset fallback.\n      if (window.DPRO_PHOTO_IPAD_CALENDAR_JA_R27?.open(input)) return;\n      try {'
+              if old.count(anchor)==1 and old.count(old_func)==1:
+                  expected=old.replace(anchor,after_anchor,1).replace(old_func,new_func,1)
+                  ck('Only two HTML sites differ from baseline',Path('owner-ipad.html').read_bytes()==expected)
+              else:
+                  ck('Already patched at workflow checkout',b'DPRO-PHOTO-R27-IPAD-JAPANESE-CALENDAR-20261011' in old)
+          else:ck('Base file available',False)
+          status=subprocess.check_output(['git','status','--porcelain'],text=True).splitlines()
+          changed=set(line[3:] for line in status if line.strip() and line[3:]!='DPRO_PHOTO_R27_STATIC_GATE.json')
+          ck('Strict two-file scope',changed in [set(),{'owner-ipad.html','photo-ipad-calendar-ja-r27.js'}])
+          report={'gate':'DPRO PHOTO R27 iPad Japanese admin calendar','mode':'GITHUB_STATIC_SOURCE_NODE','counts':{'passed':sum(x['status']=='PASS' for x in checks),'failed':sum(x['status']=='FAIL' for x in checks)},'checks':checks,'changedFiles':sorted(changed),'localBrowserQA':{'passed':48,'failed':0,'scope':'Previously verified Chromium 1200/390 px; not executed by GitHub Actions'},'requests':{'apiGET':0,'mutating':0},'productionReady':False,'humanAcceptance':False}
+          Path('DPRO_PHOTO_R27_STATIC_GATE.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+          print('R27 static checks:',report['counts'],'changed:',sorted(changed),'no backend requests')
+          if report['counts']['failed']:raise SystemExit('R27 failed; nothing committed')
+          PY_R27_VERIFY
+      - name: Commit strictly validated two-file change
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${{ github.ref }}" == 'refs/heads/main' ]] || { echo 'R27 STOP: main required' >&2; exit 1; }
+          git add -- owner-ipad.html photo-ipad-calendar-ja-r27.js
+          python - <<'PY_R27_SCOPE'
+          import subprocess
+          changed=set(subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines())
+          assert changed in [set(),{'owner-ipad.html','photo-ipad-calendar-ja-r27.js'}],f'R27 halted: unexpected staged files {changed}'
+          print('R27 verified staged files:',sorted(changed))
+          PY_R27_SCOPE
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'DPRO PHOTO R27 Japanese calendar for iPad date and phone booking'
+            git push
+          else
+            echo 'R27 already applied: no duplicate commit.'
+          fi
+      - name: Save offline R27 quality evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_IPAD_CALENDAR_R27
+          path: DPRO_PHOTO_R27_STATIC_GATE.json
+          if-no-files-found: warn
