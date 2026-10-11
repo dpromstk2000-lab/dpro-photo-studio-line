@@ -1,0 +1,129 @@
+name: DPRO PHOTO R32V Real Frontend Contract and Safe Gateway Review (NO DEPLOY)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  r32v-review-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout real published frontend read-only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Execute real frontend contract audit and isolated bridge tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dpro_photo_r32v
+          cat <<'R32V_ENCODED_REVIEW_TESTS' | base64 -d | tar -xz -C /tmp/dpro_photo_r32v
+          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
+          CHwAUAAA
+          R32V_ENCODED_REVIEW_TESTS
+          python3 /tmp/dpro_photo_r32v/R32V_LIVE_FRONTEND_READONLY_CONTRACT_QA.py "$GITHUB_WORKSPACE"
+          node --test /tmp/dpro_photo_r32v/R32V_GUEST_GATEWAY_ADAPTER_TEST.mjs
+          echo 'R32V integration candidate is REVIEW ONLY. RELEASE HOLD.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Real GitHub frontend contract audited; no source files altered.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Isolated gateway seam: 39/39 local behavior tests. No actual issuer or RPC connected.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'OPEN: real schema, verified contact provider, all booking fields and E2E.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No checkout write, Worker Deploy, production SQL, LINE send or customer data.' >> "$GITHUB_STEP_SUMMARY"
