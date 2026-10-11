@@ -1,0 +1,194 @@
+name: DPRO PHOTO Demo Production Release Boundary R24
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dpro-photo-release-boundary-readonly-r24.yml'
+permissions:
+  contents: read
+concurrency:
+  group: dpro-photo-r24-release-boundary-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  r24-demo-production-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout actual DPRO PHOTO common product source
+        uses: actions/checkout@v4
+      - name: Verify public pages, source JavaScript, demo guard and human release blockers without mutations
+        shell: bash
+        env:
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cat > _dpro_photo_r24_gate.py <<'PY_R24_RELEASE_GATE'
+          #!/usr/bin/env python3
+          """DPRO PHOTO R24: deny production approval for demonstration-only deployment.
+          Runs on checked-out source. No methods other than public GET (optional).
+          Do not emit API responses or any user/customer data in reports.
+          """
+          import argparse, json, os, re, subprocess, sys, time
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError, URLError
+
+          parser=argparse.ArgumentParser()
+          parser.add_argument('--base',default='https://dpromstk2000-lab.github.io/dpro-photo-studio-line/')
+          parser.add_argument('--public-get',action='store_true')
+          parser.add_argument('--out',default='DPRO_PHOTO_R24_RELEASE_GATE.json')
+          args=parser.parse_args()
+          base=args.base.rstrip('/')+'/'
+          checks=[]; warnings=[]; deferred=[]; public_requests=0; mutation_requests=0
+
+          def check(scope,name,ok,detail=''):
+              checks.append({'scope':scope,'id':name,'result':'PASS' if bool(ok) else 'FAIL','detail':detail[:180]})
+
+          def warn(name,desc):warnings.append({'id':name,'reason':desc})
+          def defer(name,desc):deferred.append({'id':name,'reason':desc})
+
+          def src(path):
+              p=Path(path)
+              return p.read_text(encoding='utf-8') if p.is_file() else ''
+
+          def noindex(html):
+              m=re.search(r'<meta\b(?=[^>]*\bname\s*=\s*["\']robots["\'])([^>]*)>',html,re.I)
+              if not m:return False
+              data=m.group(1)
+              x=re.search(r'\bcontent\s*=\s*["\']([^"\']+)',data,re.I)
+              return bool(x and 'noindex' in [z.strip().lower() for z in x.group(1).split(',')])
+
+          private=['member.html','staff.html','owner.html','owner-ipad.html','system-check.html']
+          public=['index.html','demo-guide.html']
+          for path in private+public:
+              s=src(path)
+              check('entrypoints',f'present/{path}',bool(s),'Must be a tracked site HTML')
+              check('entrypoints',f'document/{path}',bool(re.search(r'<html\b',s,re.I) and re.search(r'</html>',s,re.I)))
+              check('entrypoints',f'javascript-bundle/{path}','config.js' in s if path!='demo-guide.html' else True)
+              if path in private:check('robots',f'private-noindex/{path}',noindex(s),'Meta robots noindex required on private UI')
+          check('robots','demo-guide-noindex',noindex(src('demo-guide.html')))
+          check('robots','index-does-not-accidentally-forbid-customer-seo',not noindex(src('index.html')),
+                'Keep customer-facing booking page indexability configurable at tenant deployment')
+
+          cfg=src('config.js')
+          check('config','config-present',len(cfg)>5000)
+          check('config','demo-studio-is-explicit',bool(re.search(r'\bSTUDIO_CODE\s*=\s*["\']dpro_photo_demo["\']',cfg)))
+          check('config','demo-code-never-a-secret','const DEFAULT_ADMIN_CODE = "1234";' in cfg,
+                'Visible PIN is a demo sample, NOT an authentication credential for production')
+          check('config','demo-pin-auto-store-requires-demo-mode',bool(re.search(r'if\s*\(!force\s*&&\s*!isDemoMode\(\)\)\s*return false',cfg)))
+          check('config','demo-pin-storage-session', 'saveAdminCode(DEMO.adminCode, { sessionOnly: true })' in cfg)
+          check('config','no-owner-static-bearer-token',not re.search(r'(?:OWNER_SESSION|STAFF_SESSION|MEMBER_SESSION)\s*=\s*["\'][A-Za-z0-9_-]{32,}',cfg),
+                'Check obvious hardcoded session assignments only; not a substitute for a secret scanner')
+          check('config','production-release-guard-required','productionGuardRequired: true' in cfg)
+          check('config','actual-api-destination-in-config','API_BASE_URL' in cfg and 'functions/v1' in cfg)
+          check('config','demo-only-studio-code-not-live','dpro_photo_demo' in cfg and 'STUDIO_CODE' in cfg)
+
+          member=src('member.html')
+          for id,mark in [('R12','DPRO-PHOTO-R12-MEMBER-URL-PRIVACY-GUARD'),('R14','DPRO-PHOTO-R14-MEMBER-LOADING-IDENTITY-ISOLATION'),('R15','DPRO-PHOTO-R15-MEMBER-REQUEST-CONTEXT-SESSION-LOCK'),('R16','DPRO-PHOTO-R16-EXCLUSIVE-MEMBER-DEEP-LINK-IDENTITY'),('R17','DPRO-PHOTO-R17-MEMBER-REFRESH-TRUTHFUL-STATUS'),('R18','DPRO-PHOTO-R18-MEMBER-MODAL-IDENTITY-ISOLATION'),('R19','DPRO-PHOTO-R19-MEMBER-MODAL-LIVE-RESERVATION-RECONCILE'),('R20','DPRO-PHOTO-R20-MEMBER-REQUEST-CLOSE-EVENT-SAFETY'),('R21','DPRO-PHOTO-R21-MEMBER-REQUEST-EDITOR-INFLIGHT-LOCK')]:
+              check('regressions',f'original-guard/{id}',mark in member)
+          check('regressions','R23-noindex-meta-present',all(noindex(src(p)) for p in private))
+          check('regressions','R21-editor-control',all(x in member for x in ('els.requestTypeSelect.disabled = true','els.submitRequestButton.disabled = true')))
+
+          for js_path in sorted(Path('.').glob('*.js')):
+              if js_path.name.startswith('DPRO_PHOTO_R24_'):continue
+              p=subprocess.run(['node','--check',str(js_path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+              check('javascript',f'node-check/{js_path.name}',p.returncode==0,'JavaScript syntax: '+('OK' if p.returncode==0 else 'FAILED'))
+
+          warn('demo-admin-pin','A public demo admin code is deliberately present. Never use 1234 as a production admin credential; use backend-only secrets and owner/staff sessions.')
+          warn('booking-search-policy','The booking demo page is indexable. Decide whether customer booking pages should be indexed at deployment; separate public sales-demo SEO from customer SEO.')
+          for key,meaning in [
+          ('owner-auth-positive','Authenticated owner session and roles require authorized credentials'),
+          ('staff-auth-positive','Authenticated staff operations and permissions need authorized credentials'),
+          ('member-line-positive','Real LINE/LIFF ID-token validation cannot be proven by static/browser demo'),
+          ('reservation-lifecycle','Positive reservation create/change/cancel requires explicit write authorization'),
+          ('tenant-isolation','Second configured tenant and tenant-boundary verification are not available'),
+          ('google-oauth','Google review approval and real synchronization belong to a separate release gate'),
+          ('customer-domain-line','Customer domain, LINE official, LIFF and owner identity are configured after contract'),
+          ('authenticated-visual','Rendered real-data screens need approved owner/staff/member sessions'),
+          ('human-acceptance','Final PC, Android and iPhone hands-on human acceptance is pending')]:defer(key,meaning)
+
+          if args.public_get:
+              for path in private+public:
+                  result=''
+                  for attempt in range(3):
+                      try:
+                          req=Request(base+path,headers={'User-Agent':'DPRO-PHOTO-R24-Readonly-Acceptance/1.0','Accept':'text/html'},method='GET')
+                          public_requests+=1
+                          with urlopen(req,timeout=13) as res:
+                              status=res.status
+                              result=res.read(280000).decode('utf-8','replace')
+                          if status==200:break
+                      except (HTTPError,URLError,TimeoutError,ValueError) as e:
+                          result=''
+                      if attempt<2: time.sleep(2)
+                  check('live-pages',f'HTTP-200/{path}',bool(result and '<html' in result.lower()),'Public GET returned HTML')
+                  if path in private or path=='demo-guide.html':check('live-pages',f'live-noindex/{path}',noindex(result),'Robots excluded on deployed HTML')
+                  if path=='member.html':check('live-pages','deployed-member-R21', 'DPRO-PHOTO-R21-MEMBER-REQUEST-EDITOR-INFLIGHT-LOCK' in result)
+          else:
+              defer('public-pages-GET','The GitHub Actions run will verify actual live page GET responses; local rehearsal has no outbound internet access')
+
+          failed=[c for c in checks if c['result']=='FAIL']
+          report={'gate':'DPRO PHOTO R24 Demo/Production Release Boundary',
+                  'source_sha':os.getenv('GITHUB_SHA') or 'LOCAL_REHEARSAL',
+                  'tested_at_utc':datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                  'status':'FAIL' if failed else 'PASS_WITH_RELEASE_BLOCKERS',
+                  'checks':checks,
+                  'counts':{'passed':len(checks)-len(failed),'failed':len(failed),'warnings':len(warnings),'deferred':len(deferred)},
+                  'warnings':warnings,'deferred':deferred,
+                  'requests':{'publicPageGetAttempts':public_requests,'mutatingRequests':mutation_requests},
+                  'release_decision':{'productionReady':False,'humanAcceptance':False,'commercialDemoOnly':True,'automaticPromotionAllowed':False,
+                                      'reason':'A demo with documented PIN and missing live auth/tenant tests must never become a customer production release'},
+                  'sourceChanges':[]}
+          Path(args.out).write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          Path('DPRO_PHOTO_R24_RELEASE_SUMMARY.md').write_text('\n'.join([
+          '# DPRO PHOTO R24 — Product release boundary', '',
+          '**Result:** '+report['status'],
+          '**Checks:** '+str(report['counts']),
+          '**Public GET attempts:** '+str(public_requests)+' / **data writes:** 0',
+          '**Deployment:** demo only; productionReady=false; humanAcceptance=false',
+          '', '## Warnings (deliberate deployment decisions)',
+          *[f"- {x['id']}: {x['reason']}" for x in warnings],
+          '', '## Unverified release requirements',
+          *[f"- {x['id']}: {x['reason']}" for x in deferred],
+          '', '## Critical scope distinction',
+          'Public source/GET/JS checks prove neither authentication authorization nor production readiness.',
+          'The published sample PIN is not a secret. Real customer credentials must be created on a protected backend.',
+          '', '## Outcome',
+          'Do not promote demo source into customer production. Complete customer-specific secure configuration and human acceptance first.',
+          ''])+'\n',encoding='utf-8')
+          print('R24 '+report['status']+' '+json.dumps(report['counts'])+' public GET '+str(public_requests)+' writes 0')
+          if failed:
+              print('Failures: '+', '.join(x['id'] for x in failed),file=sys.stderr)
+              raise SystemExit(1)
+          PY_R24_RELEASE_GATE
+          python _dpro_photo_r24_gate.py --public-get --base "${R24_PUBLIC_PAGE_BASE:-https://dpromstk2000-lab.github.io/dpro-photo-studio-line/}"
+          python - <<'PY_R24_VALIDATE'
+          from pathlib import Path
+          import json,os,sys
+          p=Path('DPRO_PHOTO_R24_RELEASE_GATE.json')
+          r=json.loads(p.read_text())
+          c=r['counts']
+          if c['passed']<75 or c['failed']!=0 or c['warnings']!=2 or c['deferred']!=9:raise SystemExit('R24 release gate unexpected counts: '+str(c))
+          if r['requests']['publicPageGetAttempts']<7 or r['requests']['mutatingRequests']!=0:raise SystemExit('R24 unsafe or incomplete network activity')
+          if r['release_decision']['productionReady'] or r['release_decision']['humanAcceptance'] or r['release_decision']['automaticPromotionAllowed']:
+            raise SystemExit('R24 unsafe production approval')
+          if os.getenv('GITHUB_REF') and os.getenv('GITHUB_REF')!='refs/heads/main':raise SystemExit('R24 wrong branch')
+          print(f"R24 VERIFIED: {c['passed']} PASS, 0 FAIL, 2 WARN, 9 DEFERRED; live public pages GET only; production BLOCKED")
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:
+           f.write(f"## R24 release safety\n{c['passed']} PASS / 0 FAIL / 2 WARN / 9 DEFERRED. Public GET only; no writes. Production approval BLOCKED.\n")
+          PY_R24_VALIDATE
+          rm -f _dpro_photo_r24_gate.py
+          git diff --exit-code -- .
+
+      - name: Preserve R24 read-only release gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPRO_PHOTO_RELEASE_BOUNDARY_R24
+          path: |
+            DPRO_PHOTO_R24_RELEASE_GATE.json
+            DPRO_PHOTO_R24_RELEASE_SUMMARY.md
+          if-no-files-found: warn
