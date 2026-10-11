@@ -1,0 +1,307 @@
+name: DPRO PHOTO R32J Gateway Auth Review-Only QA (NO DEPLOY)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  r32j-isolated-gateway-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Local-only credential bridge and replay checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          qa_dir="$(mktemp -d)"
+          trap 'rm -rf "$qa_dir"' EXIT
+          cd "$qa_dir"
+          node --version
+          cat > R32J_GATEWAY_BRIDGE_REVIEW_ONLY.mjs <<'__DPRO_PHOTO_R32J_R32J_GATEWAY_BRIDGE_REVIEW_ONLY_MJS__'
+          /**
+           * DPRO PHOTO R32J — REVIEW ONLY. Not connected to production and not a deployed Gateway.
+           * An internal Gateway is expected to validate ORIGINAL X-Owner/Staff/Member-Session
+           * server-side (hashed DB sessions, revocation, expiry, tenant, role/capabilities),
+           * THEN call issueInternalAssertion. This module DOES NOT perform that DB verification.
+           * Guest challenge, LINE ID token verification, and durable cross-instance nonce store
+           * must be implemented and tested separately. Never use it as a client-side script.
+           */
+          const ISS='dpro-photo-internal-gateway', AUD='dpro-photo-internal-worker';
+          const te=new TextEncoder();
+          const LIMIT=256*1024;
+          export class BoundaryError extends Error {constructor(status,code){super(code);this.status=status;this.code=code;}}
+          function demand(ok,status,code){if(!ok) throw new BoundaryError(status,code);}
+          function b64(bytes){let s='';for(const b of bytes)s+=String.fromCharCode(b);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
+          function unb64(s){demand(typeof s==='string'&&/^[A-Za-z0-9_-]+$/.test(s)&&s.length<8192,401,'INVALID_BASE64');try {return Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));} catch {throw new BoundaryError(401,'INVALID_BASE64');}}
+          const enc=v=>b64(te.encode(JSON.stringify(v)));
+          const dec=s=>{try{return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(unb64(s)));}catch{throw new BoundaryError(401,'INVALID_JSON');}};
+          async function digest(bytes){return b64(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)));}
+          async function hmacKey(secret){demand(typeof secret==='string'&&secret.length>=32&&secret!=='1234',503,'MISSING_STRONG_GATEWAY_SECRET');return crypto.subtle.importKey('raw',te.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign','verify']);}
+          async function bodyDigest(request){let bytes=new Uint8Array(await request.clone().arrayBuffer());demand(bytes.length<=LIMIT,413,'BODY_TOO_LARGE');return digest(bytes);}
+          function pathFromRequest(request){let u;try{u=new URL(request.url)}catch{throw new BoundaryError(400,'INVALID_URL');}demand(!/%2f|%5c|\\|\/\//i.test(u.pathname),400,'AMBIGUOUS_PATH');return u.pathname;}
+          const STAFF_ACCESS={
+           'GET /api/staff/today':'schedule_read',
+           'GET /api/ipad/today':'schedule_read',
+           'GET /api/admin/settings':'staff_reference_read',
+           'GET /api/admin/search':'customer_search',
+           'GET /api/admin/customer-detail':'customer_detail_read',
+           'GET /api/admin/reservation-detail':'reservation_detail_read',
+           'POST /api/admin/reservations/manual-create':'manual_reservation_create',
+           'POST /api/staff/reservations/status':'reservation_status_write',
+           'POST /api/ipad/reservations/status':'reservation_status_write',
+           'POST /api/staff/shooting-records/save':'shooting_records_write',
+           'POST /api/staff/tasks/status':'tasks_write',
+           'POST /api/staff/messages/log-copy':'messages_write',
+           'POST /api/ipad/messages/log-copy':'messages_write',
+          };
+          const MEMBER_ACCESS=new Set(['GET /api/member/profile','GET /api/member/reservations','POST /api/public/change-request','POST /api/public/cancel-request','POST /api/public/reorder-request']);
+          const GUEST_ACCESS=new Set(['POST /api/public/reservations','POST /api/public/contact']);
+          const OWNER_ROUTES=new Set([
+           'POST /api/admin/verify','GET /api/admin/phone-normalize-check','GET /api/admin/dashboard','GET /api/admin/day',
+           'GET /api/admin/reservations','GET /api/admin/search','GET /api/admin/customer-detail','GET /api/admin/reservation-detail',
+           'GET /api/admin/settings','POST /api/admin/reservations/manual-create','POST /api/admin/reservations/status',
+           'POST /api/admin/reservations/assign-staff','POST /api/admin/shooting-records/save','POST /api/admin/selection-guides/save',
+           'POST /api/admin/selection-guides/status','POST /api/admin/delivery/save','POST /api/admin/delivery/status',
+           'POST /api/admin/reorder/status','POST /api/admin/tasks/status','POST /api/admin/messages/log-copy',
+          ]);
+          function permission(p,request){
+           const route=request.method.toUpperCase()+' '+pathFromRequest(request);
+           if (p.role==='owner') return OWNER_ROUTES.has(route);
+           if (p.role==='staff')return !!STAFF_ACCESS[route]&&Array.isArray(p.capabilities)&&p.capabilities.includes(STAFF_ACCESS[route]);
+           if (p.role==='member')return MEMBER_ACCESS.has(route)&&p.proof==='verified_member_session';
+           if (p.role==='guest')return GUEST_ACCESS.has(route)&&p.proof==='verified_anti_abuse_challenge';
+           return false;
+          }
+          function validatePrincipal(p){
+           demand(p&&typeof p==='object',401,'NO_VERIFIED_PRINCIPAL');
+           // Must be supplied only by a separate authenticated server adapter, never browser JSON.
+           demand(p.verified_by==='gateway_server'&&p.verified===true,401,'UNVERIFIED_PRINCIPAL');
+           demand(typeof p.studio_id==='string'&&/^[0-9a-f-]{36}$/i.test(p.studio_id),401,'MISSING_STUDIO_ID');
+           demand(typeof p.studio_code==='string'&&p.studio_code.length>=3&&p.studio_code.length<100,401,'MISSING_STUDIO_CODE');
+           demand(typeof p.actor_id==='string'&&p.actor_id.length>=8&&p.actor_id.length<200,401,'MISSING_ACTOR');
+           demand(['owner','staff','member','guest'].includes(p.role),403,'INVALID_ROLE');
+           demand(p.credential_validated===true&&p.revocation_checked===true&&p.tenant_checked===true,401,'UNVERIFIED_SESSION_STATE');
+           if(p.role==='guest')demand(p.proof==='verified_anti_abuse_challenge',403,'GUEST_CHALLENGE_REQUIRED');
+           if(p.role==='member')demand(p.proof==='verified_member_session',403,'MEMBER_SESSION_REQUIRED');
+          }
+          export async function issueInternalAssertion({principal,request,secret,nonce,now=Math.floor(Date.now()/1000)}){
+           validatePrincipal(principal); demand(request instanceof Request,400,'MISSING_REQUEST');
+           demand(permission(principal,request),403,'OPERATION_NOT_ALLOWED');
+           demand(typeof nonce==='string'&&/^[a-zA-Z0-9_-]{24,100}$/.test(nonce),400,'INVALID_NONCE');
+           demand(Number.isInteger(now),400,'INVALID_CLOCK');
+           const payload={iss:ISS,aud:AUD,sub:principal.actor_id,studio_id:principal.studio_id,studio_code:principal.studio_code,
+            role:principal.role,capabilities:principal.role==='staff'?principal.capabilities:[],proof:principal.proof||null,
+            method:request.method.toUpperCase(),path:pathFromRequest(request),body_sha256:await bodyDigest(request),query_sha256:await digest(te.encode(new URL(request.url).search)),nonce,
+            iat:now,nbf:now,exp:now+60};
+           const input=enc({typ:'JWT',alg:'HS256'})+'.'+enc(payload);const sig=new Uint8Array(await crypto.subtle.sign('HMAC',await hmacKey(secret),te.encode(input)));
+           return input+'.'+b64(sig);
+          }
+          export async function verifyInternalAssertion({token,request,secret,expectedStudioId,expectedStudioCode,nonceStore,now=Math.floor(Date.now()/1000)}){
+           demand(typeof token==='string'&&token.length<8192,401,'INVALID_ASSERTION');
+           const parts=token.split('.');demand(parts.length===3,401,'INVALID_ASSERTION');
+           const header=dec(parts[0]);demand(header&&Object.keys(header).length===2&&header.typ==='JWT'&&header.alg==='HS256',401,'BAD_HEADER');
+           const key=await hmacKey(secret);const ok=await crypto.subtle.verify('HMAC',key,unb64(parts[2]),te.encode(parts[0]+'.'+parts[1]));
+           demand(ok,401,'BAD_SIGNATURE');const claims=dec(parts[1]);
+           demand(claims.iss===ISS&&claims.aud===AUD,401,'BAD_ISSUER_AUDIENCE');
+           demand(typeof expectedStudioId==='string'&&expectedStudioId===claims.studio_id&&typeof expectedStudioCode==='string'&&expectedStudioCode===claims.studio_code,403,'TENANT_MISMATCH');
+           demand(Number.isInteger(now)&&Number.isInteger(claims.exp)&&Number.isInteger(claims.iat)&&Number.isInteger(claims.nbf)
+            &&claims.exp-claims.iat===60&&claims.iat<=now+10&&claims.iat>=now-70&&claims.nbf<=now&&claims.exp>now,401,'EXPIRED_OR_INVALID_ASSERTION');
+           demand(claims.method===request.method.toUpperCase()&&claims.path===pathFromRequest(request),403,'OPERATION_MISMATCH');
+           demand(claims.body_sha256===await bodyDigest(request),403,'BODY_MISMATCH');
+           demand(claims.query_sha256===await digest(te.encode(new URL(request.url).search)),403,'QUERY_MISMATCH');
+           // Reconstruct only internally verified principal attributes after HMAC verification.
+           const p={...claims,actor_id:claims.sub};
+           demand(permission(p,request),403,'CAPABILITY_DENIED');
+           demand(typeof claims.nonce==='string'&&/^[a-zA-Z0-9_-]{24,100}$/.test(claims.nonce),401,'INVALID_NONCE');
+           demand(nonceStore&&typeof nonceStore.consumeOnce==='function',503,'DURABLE_NONCE_STORE_REQUIRED');
+           const consumed=await nonceStore.consumeOnce(claims.studio_id,claims.nonce,claims.exp);
+           demand(consumed===true,409,'ASSERTION_REPLAY');
+           return {studio_id:claims.studio_id,studio_code:claims.studio_code,actor_id:claims.sub,role:claims.role,capabilities:claims.capabilities,
+            method:claims.method,path:claims.path};
+          }
+          export const CONTRACT=Object.freeze({issuer:ISS,audience:AUD,ttl_seconds:60,max_body_bytes:LIMIT,staff_routes:Object.keys(STAFF_ACCESS),owner_routes:[...OWNER_ROUTES],member_routes:[...MEMBER_ACCESS],guest_routes:[...GUEST_ACCESS]});
+          __DPRO_PHOTO_R32J_R32J_GATEWAY_BRIDGE_REVIEW_ONLY_MJS__
+          cat > R32J_GATEWAY_BRIDGE_TESTS.mjs <<'__DPRO_PHOTO_R32J_R32J_GATEWAY_BRIDGE_TESTS_MJS__'
+          import assert from 'node:assert/strict';
+          import {webcrypto} from 'node:crypto';
+          import {issueInternalAssertion as issue, verifyInternalAssertion as verify, CONTRACT} from './R32J_GATEWAY_BRIDGE_REVIEW_ONLY.mjs';
+          globalThis.crypto ??=webcrypto;
+          const secret='R32J_ISOLATED_FAKE_SECRET_'+'Z'.repeat(64), otherSecret='R32J_SECOND_FAKE_SECRET_'+'X'.repeat(64);
+          const studio='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', studio2='bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
+          const base='https://internal-worker.invalid';
+          const verified={verified_by:'gateway_server',verified:true,credential_validated:true,revocation_checked:true,tenant_checked:true,
+           studio_id:studio,studio_code:'dpro_photo_demo',actor_id:'test-actor-aabbccdd',role:'owner',capabilities:[]};
+          const req=(method,path,body)=>new Request(base+path,{method,headers:body!==undefined?{'Content-Type':'application/json'}:{},body:body===undefined?undefined:JSON.stringify(body)});
+          let counter=0;const nonce=()=>`review-only-nonce-${String(++counter).padStart(18,'0')}`;
+          class Store {constructor(shared){this.map=shared||new Map()} async consumeOnce(s,n,e){let k=s+'|'+n;if(this.map.has(k))return false;this.map.set(k,e);return true}}
+          const fresh=()=>new Store();
+          let outcomes=[];
+          async function test(label,fn){try{await fn();outcomes.push({label,result:'PASS'})}catch(e){outcomes.push({label,result:'FAIL',message:String(e)})}}
+          async function denied(label,expected,fn){await test(label,async()=>{try{await fn()}catch(e){assert.equal(e.code,expected,`${label}: ${e.stack}`);return;}throw Error('Expected '+expected)})}
+          const defaults=({token,request,nonceStore=fresh(),secret:sec=secret,expectedStudioId=studio,expectedStudioCode='dpro_photo_demo',now=500000})=>verify({token,request,nonceStore,secret:sec,expectedStudioId,expectedStudioCode,now});
+          const tokenFor=async(principal,request,now=500000)=>issue({principal,request,secret,nonce:nonce(),now});
+          let owner=req('GET','/api/admin/customer-detail?customer_id=00000001');
+          let owntoken=await tokenFor(verified,owner);
+          await test('owner valid signed narrow GET',async()=>{const p=await defaults({token:owntoken,request:owner});assert.equal(p.role,'owner');assert.equal(p.studio_id,studio)});
+          // Replay fixture separate from first test's store; show exact same token rejected on second reuse.
+          const sharedStore=new Store();
+          await test('first use of durable-store model',async()=>{await defaults({token:owntoken,request:owner,nonceStore:sharedStore})});
+          await denied('second use across service instance model','ASSERTION_REPLAY',()=>defaults({token:owntoken,request:owner,nonceStore:new Store(sharedStore.map)}));
+          await denied('studio id cross-tenant','TENANT_MISMATCH',()=>defaults({token:owntoken,request:owner,expectedStudioId:studio2}));
+          await denied('studio code cross-tenant','TENANT_MISMATCH',()=>defaults({token:owntoken,request:owner,expectedStudioCode:'another_studio'}));
+          await denied('different method','OPERATION_MISMATCH',()=>defaults({token:owntoken,request:req('POST','/api/admin/customer-detail',{})}));
+          await denied('different path','OPERATION_MISMATCH',()=>defaults({token:owntoken,request:req('GET','/api/admin/search?customer_id=00000001')}));
+          await denied('different query','QUERY_MISMATCH',()=>defaults({token:owntoken,request:req('GET','/api/admin/customer-detail?customer_id=00000002')}));
+          await denied('wrong signature secret','BAD_SIGNATURE',()=>defaults({token:owntoken,request:owner,secret:otherSecret}));
+          await denied('missing replay store','DURABLE_NONCE_STORE_REQUIRED',()=>defaults({token:owntoken,request:owner,nonceStore:null}));
+          await denied('token expired','EXPIRED_OR_INVALID_ASSERTION',()=>defaults({token:owntoken,request:owner,now:500062}));
+          await denied('token issued too far into future','EXPIRED_OR_INVALID_ASSERTION',()=>defaults({token:owntoken,request:owner,now:499980}));
+          await denied('missing strong secret','MISSING_STRONG_GATEWAY_SECRET',()=>issue({principal:verified,request:owner,secret:'1234',nonce:nonce(),now:500000}));
+          await denied('unknown role','INVALID_ROLE',()=>issue({principal:{...verified,role:'observer'},request:owner,secret,nonce:nonce(),now:500000}));
+          await denied('unverified principal','UNVERIFIED_PRINCIPAL',()=>issue({principal:{...verified,verified:false},request:owner,secret,nonce:nonce(),now:500000}));
+          await denied('revocation unchecked','UNVERIFIED_SESSION_STATE',()=>issue({principal:{...verified,revocation_checked:false},request:owner,secret,nonce:nonce(),now:500000}));
+          await denied('tenant scope unchecked','UNVERIFIED_SESSION_STATE',()=>issue({principal:{...verified,tenant_checked:false},request:owner,secret,nonce:nonce(),now:500000}));
+          await denied('client claimed role cannot mint token','UNVERIFIED_PRINCIPAL',()=>issue({principal:{role:'owner',studio_id:studio},request:owner,secret,nonce:nonce(),now:500000}));
+          await denied('unknown owner route fail closed','OPERATION_NOT_ALLOWED',()=>tokenFor(verified,req('POST','/api/admin/future-unknown',{})));
+          await denied('demo init not exposed','OPERATION_NOT_ALLOWED',()=>tokenFor(verified,req('POST','/api/admin/demo/prepare',{})));
+          let write=req('POST','/api/admin/reservations/status',{reservation_id:'one',status:'done'}),wtoken=await tokenFor(verified,write);
+          await test('authorized owner write exact bytes',async()=>{let p=await defaults({token:wtoken,request:write});assert.equal(p.path,'/api/admin/reservations/status')});
+          await denied('write body mismatch','BODY_MISMATCH',()=>defaults({token:wtoken,request:req('POST','/api/admin/reservations/status',{reservation_id:'two',status:'done'})}));
+          await denied('unknown HMAC alg header','BAD_HEADER',async()=>{let ps=owntoken.split('.');ps[0]=btoa(JSON.stringify({typ:'JWT',alg:'none'})).replace(/=+$/,'');await defaults({token:ps.join('.'),request:owner})});
+          await denied('malformed token','INVALID_ASSERTION',()=>defaults({token:'broken',request:owner}));
+          const staff={...verified,role:'staff',capabilities:['customer_search','schedule_read']};
+          await test('staff with customer_search permission allowed',async()=>{const r=req('GET','/api/admin/search?q=x');const t=await tokenFor(staff,r);assert.equal((await defaults({token:t,request:r})).role,'staff')});
+          await test('staff with schedule_read allowed',async()=>{const r=req('GET','/api/staff/today?date=2026-10-11');const t=await tokenFor(staff,r);assert.equal((await defaults({token:t,request:r})).role,'staff')});
+          await denied('staff missing customer detail permission','OPERATION_NOT_ALLOWED',()=>tokenFor(staff,req('GET','/api/admin/customer-detail?id=1')));
+          await denied('staff denied owner settings save','OPERATION_NOT_ALLOWED',()=>tokenFor(staff,req('POST','/api/admin/settings/save',{})));
+          await denied('staff cannot fake owner capabilities','OPERATION_NOT_ALLOWED',()=>tokenFor({...staff,capabilities:['owner']},req('POST','/api/admin/reservations/status',{})));
+          await denied('staff denied unknown route','OPERATION_NOT_ALLOWED',()=>tokenFor(staff,req('GET','/api/staff/unknown')));
+          const member={...verified,role:'member',proof:'verified_member_session'};
+          await test('member with verified session may read own lookup contract',async()=>{let r=req('GET','/api/member/profile');let t=await tokenFor(member,r);assert.equal((await defaults({token:t,request:r})).role,'member')});
+          await denied('member without verified proof','MEMBER_SESSION_REQUIRED',()=>tokenFor({...member,proof:null},req('GET','/api/member/profile')));
+          await denied('member cannot access admin reads','OPERATION_NOT_ALLOWED',()=>tokenFor(member,owner));
+          await test('member verified cancel request contract',async()=>{let r=req('POST','/api/public/cancel-request',{id:'a'});let t=await tokenFor(member,r);assert.equal((await defaults({token:t,request:r})).role,'member')});
+          const guest={...verified,role:'guest',proof:'verified_anti_abuse_challenge'};
+          await test('verified guest booking path contract',async()=>{let r=req('POST','/api/public/reservations',{test:true});let t=await tokenFor(guest,r);assert.equal((await defaults({token:t,request:r})).role,'guest')});
+          await test('verified guest contact path contract',async()=>{let r=req('POST','/api/public/contact',{test:true});let t=await tokenFor(guest,r);assert.equal((await defaults({token:t,request:r})).role,'guest')});
+          await denied('guest cannot cancel without ownership proof','OPERATION_NOT_ALLOWED',()=>tokenFor(guest,req('POST','/api/public/cancel-request',{test:true})));
+          await denied('guest cannot read member history','OPERATION_NOT_ALLOWED',()=>tokenFor(guest,req('GET','/api/member/reservations')));
+          await denied('guest no challenge','GUEST_CHALLENGE_REQUIRED',()=>tokenFor({...guest,proof:null},req('POST','/api/public/contact',{})));
+          await denied('guest cannot admin','OPERATION_NOT_ALLOWED',()=>tokenFor(guest,owner));
+          await denied('invalid nonce','INVALID_NONCE',()=>issue({principal:verified,request:owner,secret,nonce:'weak',now:500000}));
+          await denied('invalid studio identity','MISSING_STUDIO_ID',()=>issue({principal:{...verified,studio_id:'demo'},request:owner,secret,nonce:nonce(),now:500000}));
+          await denied('invalid tenant from caller','MISSING_STUDIO_CODE',()=>issue({principal:{...verified,studio_code:''},request:owner,secret,nonce:nonce(),now:500000}));
+          await denied('oversized body rejected','BODY_TOO_LARGE',()=>tokenFor(verified,req('POST','/api/admin/reservations/status',{text:'A'.repeat(300000)})));
+          await test('staff route map fixed size and no implicit wildcard',async()=>{assert.ok(CONTRACT.staff_routes.length>5);assert.ok(CONTRACT.owner_routes.length>15);assert.ok(!CONTRACT.owner_routes.some(s=>s.endsWith('*')))});
+          const passed=outcomes.filter(x=>x.result==='PASS').length;
+          const result={step:'R32J',suite:'gateway assertion reference only',passed,failed:outcomes.length-passed,tests:outcomes,network_calls:0,production_modified:false,sql_executed:false,release:'HOLD',
+           cautions:['Token issuer must use independently verified database sessions','cross-instance atomic nonceStore not implemented','real Gateway integration not implemented','not actual PostgreSQL QA','guest challenge and ownership checks not implemented']};
+          if(!process.env.R32J_SKIP_FILE)await import('node:fs/promises').then(fs=>fs.writeFile(new URL('./R32J_GATEWAY_BRIDGE_RESULTS.json',import.meta.url),JSON.stringify(result,null,2)+'\n'));
+          console.log(JSON.stringify({passed,failed:result.failed,release:result.release}));
+          if(result.failed) {console.error(outcomes.filter(x=>x.result==='FAIL'));process.exitCode=1;}
+          __DPRO_PHOTO_R32J_R32J_GATEWAY_BRIDGE_TESTS_MJS__
+          cat > R32J_EXISTING_SESSION_ADAPTER_REVIEW_ONLY.mjs <<'__DPRO_PHOTO_R32J_R32J_EXISTING_SESSION_ADAPTER_REVIEW_ONLY_MJS__'
+          /**
+           * DPRO PHOTO R32J. REVIEW ONLY — verifies legacy Gateway X-* session headers
+           * against a *synthetic* abstract directory. Not connected to production DB.
+           * In production the 'directory' MUST be implemented server-side with validated
+           * hashed photo_auth_sessions, live revocation and tenant membership checks.
+           * This file is not deployable without that adapter + request ownership guards.
+           */
+          import {issueInternalAssertion,BoundaryError} from './R32J_GATEWAY_BRIDGE_REVIEW_ONLY.mjs';
+          const clean=v=>typeof v==='string'?v.trim():'';
+          const ascii=new TextEncoder();
+          function requireOk(ok,status,code){if(!ok)throw new BoundaryError(status,code)}
+          const NAMES={owner:'X-Owner-Session',staff:'X-Staff-Session',member:'X-Member-Session'};
+          async function tokenHash(token){let bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',ascii.encode(token)));return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
+          function headerType(req){const matches=Object.entries(NAMES).filter(([,h])=>clean(req.headers.get(h)));
+           requireOk(matches.length===1,401,'EXACTLY_ONE_SESSION_HEADER_REQUIRED');return matches[0][0];}
+          export async function authenticateExistingGatewaySession({request,directory,expectedStudioId,now=Date.now()}){
+           requireOk(request instanceof Request,400,'REQUEST_REQUIRED');
+           requireOk(directory&&typeof directory.findByHash==='function'&&typeof directory.isStudioActive==='function',503,'LIVE_SESSION_STORE_REQUIRED');
+           const type=headerType(request),token=clean(request.headers.get(NAMES[type]));
+           requireOk(token.length>=24&&token.length<=300,401,'MALFORMED_SESSION');
+           const entry=await directory.findByHash({session_type:type,token_hash:await tokenHash(token)});
+           requireOk(entry&&entry.session_type===type&&entry.revoked_at==null&&Date.parse(entry.expires_at)>now,401,'SESSION_REVOKED_OR_EXPIRED');
+           requireOk(entry.studio_id===expectedStudioId,403,'STUDIO_MISMATCH');
+           requireOk(await directory.isStudioActive(entry.studio_id),403,'STUDIO_INACTIVE');
+           requireOk(typeof entry.actor_ref==='string'&&entry.actor_ref.length>=8,401,'INVALID_ACTOR');
+           // Roles are established by directory membership, not caller JSON or URL values.
+           const role=type;
+           requireOk(entry.role===role,403,'ROLE_MISMATCH');
+           requireOk(Array.isArray(entry.permissions),401,'MISSING_CAPABILITIES');
+           // Member claims do not imply that any requested customer_id/public_token belongs to the member.
+           // That row ownership must be checked by Gateway for each member/business endpoint.
+           return {
+            verified_by:'gateway_server',verified:true,credential_validated:true,revocation_checked:true,tenant_checked:true,
+            studio_id:entry.studio_id,studio_code:entry.studio_code,actor_id:entry.actor_ref,role,
+            capabilities:entry.permissions,proof:role==='member'?'verified_member_session':null,
+           };
+          }
+          export async function forwardAsGatewayAssertion({request,directory,expectedStudioId,secret,nonce,now=Date.now()}){
+           const p=await authenticateExistingGatewaySession({request,directory,expectedStudioId,now});
+           const result=await issueInternalAssertion({principal:p,request,secret,nonce,now:Math.floor(now/1000)});
+           // Strip ALL caller-supplied session and Authorization before internally forwarding.
+           const headers=new Headers(request.headers);for(const h of [...Object.values(NAMES),'Authorization','X-Admin-Code','X-Staff-Code'])headers.delete(h);
+           headers.set('Authorization','Bearer '+result);
+           return {principal:p,request:new Request(request,{headers})};
+          }
+          __DPRO_PHOTO_R32J_R32J_EXISTING_SESSION_ADAPTER_REVIEW_ONLY_MJS__
+          cat > R32J_EXISTING_SESSION_ADAPTER_TESTS.mjs <<'__DPRO_PHOTO_R32J_R32J_EXISTING_SESSION_ADAPTER_TESTS_MJS__'
+          import assert from 'node:assert/strict';import {webcrypto} from 'node:crypto';
+          import {authenticateExistingGatewaySession,forwardAsGatewayAssertion} from './R32J_EXISTING_SESSION_ADAPTER_REVIEW_ONLY.mjs';
+          import {verifyInternalAssertion} from './R32J_GATEWAY_BRIDGE_REVIEW_ONLY.mjs';
+          globalThis.crypto??=webcrypto;
+          const studio='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',second='bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
+          const secret='R32J_ISOLATED_FAKE_SECRET_'+'Z'.repeat(64);
+          const token='synthetic-server-session-0123456789abcdef',now=1800000000000;
+          const hs=async(v)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v))),x=>x.toString(16).padStart(2,'0')).join('');
+          const hash=await hs(token),entry={session_type:'owner',token_hash:hash,revoked_at:null,expires_at:new Date(now+60000).toISOString(),studio_id:studio,
+           studio_code:'dpro_photo_demo',actor_ref:'synthetic-owner-1234',role:'owner',permissions:[]};
+          const req=(h={},path='/api/admin/verify',method='POST')=>new Request('https://isolated-worker.invalid'+path,{method,headers:{'Content-Type':'application/json',...h},body:method==='GET'?undefined:'{}'});
+          let calls=0;const store={async findByHash({session_type,token_hash}){calls++;return session_type===entry.session_type&&token_hash===entry.token_hash?entry:null},async isStudioActive(){return true}};
+          let results=[];async function t(name,fn){try{await fn();results.push({name,result:'PASS'})}catch(e){results.push({name,result:'FAIL',detail:String(e)})}}
+          async function bad(name,code,fn){await t(name,async()=>{try{await fn()}catch(e){assert.equal(e.code,code);return}throw Error('expected '+code)})}
+          const owner=req({'X-Owner-Session':token});
+          await t('original owner session hash verified',async()=>{let p=await authenticateExistingGatewaySession({request:owner,directory:store,expectedStudioId:studio,now});assert.equal(p.role,'owner');assert.equal(p.actor_id,entry.actor_ref)});
+          await t('verified legacy owner forwards narrowly signed internal assertion',async()=>{let out=await forwardAsGatewayAssertion({request:owner,directory:store,expectedStudioId:studio,secret,nonce:'test-nonce-000000000000012345',now});
+           assert.equal(out.request.headers.get('X-Owner-Session'),null);assert.ok(out.request.headers.get('Authorization').startsWith('Bearer '));
+           let v=await verifyInternalAssertion({token:out.request.headers.get('Authorization').slice(7),request:out.request,secret,
+           expectedStudioId:studio,expectedStudioCode:'dpro_photo_demo',nonceStore:{consumeOnce:async()=>true},now:Math.floor(now/1000)});assert.equal(v.role,'owner');});
+          await bad('missing session header','EXACTLY_ONE_SESSION_HEADER_REQUIRED',()=>authenticateExistingGatewaySession({request:req(),directory:store,expectedStudioId:studio,now}));
+          await bad('multiple session headers','EXACTLY_ONE_SESSION_HEADER_REQUIRED',()=>authenticateExistingGatewaySession({request:req({'X-Owner-Session':token,'X-Member-Session':token}),directory:store,expectedStudioId:studio,now}));
+          await bad('malformed short session','MALFORMED_SESSION',()=>authenticateExistingGatewaySession({request:req({'X-Owner-Session':'1234'}),directory:store,expectedStudioId:studio,now}));
+          await bad('wrong opaque session cannot be used','SESSION_REVOKED_OR_EXPIRED',()=>authenticateExistingGatewaySession({request:req({'X-Owner-Session':'another-session-123456789012345'}),directory:store,expectedStudioId:studio,now}));
+          await bad('wrong tenant','STUDIO_MISMATCH',()=>authenticateExistingGatewaySession({request:owner,directory:store,expectedStudioId:second,now}));
+          await bad('revoked session','SESSION_REVOKED_OR_EXPIRED',()=>authenticateExistingGatewaySession({request:owner,directory:{...store,findByHash:async()=>({...entry,revoked_at:new Date(now).toISOString()})},expectedStudioId:studio,now}));
+          await bad('expired session','SESSION_REVOKED_OR_EXPIRED',()=>authenticateExistingGatewaySession({request:owner,directory:{...store,findByHash:async()=>({...entry,expires_at:new Date(now-1000).toISOString()})},expectedStudioId:studio,now}));
+          await bad('session role mismatch','ROLE_MISMATCH',()=>authenticateExistingGatewaySession({request:owner,directory:{...store,findByHash:async()=>({...entry,role:'staff'})},expectedStudioId:studio,now}));
+          await bad('studio inactive','STUDIO_INACTIVE',()=>authenticateExistingGatewaySession({request:owner,directory:{...store,isStudioActive:async()=>false},expectedStudioId:studio,now}));
+          await bad('missing live DB adapter','LIVE_SESSION_STORE_REQUIRED',()=>authenticateExistingGatewaySession({request:owner,directory:null,expectedStudioId:studio,now}));
+          await bad('malformed actor','INVALID_ACTOR',()=>authenticateExistingGatewaySession({request:owner,directory:{...store,findByHash:async()=>({...entry,actor_ref:'x'})},expectedStudioId:studio,now}));
+          await bad('missing capability list','MISSING_CAPABILITIES',()=>authenticateExistingGatewaySession({request:owner,directory:{...store,findByHash:async()=>({...entry,permissions:null})},expectedStudioId:studio,now}));
+          await bad('staff may not present owner token','SESSION_REVOKED_OR_EXPIRED',()=>authenticateExistingGatewaySession({request:req({'X-Staff-Session':token}),directory:store,expectedStudioId:studio,now}));
+          await bad('member may not present owner token','SESSION_REVOKED_OR_EXPIRED',()=>authenticateExistingGatewaySession({request:req({'X-Member-Session':token}),directory:store,expectedStudioId:studio,now}));
+          await bad('browser claims do not replace verified session','EXACTLY_ONE_SESSION_HEADER_REQUIRED',()=>authenticateExistingGatewaySession({request:req({'Authorization':'Bearer untrusted'}),directory:store,expectedStudioId:studio,now}));
+          await bad('URL studio id cannot change session tenant','STUDIO_MISMATCH',()=>authenticateExistingGatewaySession({request:req({'X-Owner-Session':token},'/api/admin/verify?studio_id='+second),directory:store,expectedStudioId:second,now}));
+          await t('owner bearer removed during gateway forwarding',async()=>{let r=req({'X-Owner-Session':token,'Authorization':'Bearer spoof','X-Admin-Code':'1234'});let out=await forwardAsGatewayAssertion({request:r,directory:store,expectedStudioId:studio,secret,nonce:'test-nonce-000000000000098765',now});assert.equal(out.request.headers.get('X-Admin-Code'),null);assert.notEqual(out.request.headers.get('Authorization'),'Bearer spoof')});
+          await t('session lookup uses sha256 hash not plain token',async()=>{assert.ok(calls>0);assert.equal(hash.length,64);assert.notEqual(hash,token)});
+          const passed=results.filter(x=>x.result==='PASS').length;let report={step:'R32J',suite:'Legacy Gateway synthetic session adapter',passed,failed:results.length-passed,tests:results,
+           network_calls:0,db_connected:false,production_modified:false,release:'HOLD',warning:'The directory adapter is entirely synthetic; requires real Gateway DB integration'};
+          await import('node:fs/promises').then(fs=>fs.writeFile(new URL('./R32J_EXISTING_SESSION_ADAPTER_RESULTS.json',import.meta.url),JSON.stringify(report,null,2)+'\n'));
+          console.log(JSON.stringify({passed,failed:report.failed}));if(report.failed){console.error(results.filter(x=>x.result==='FAIL'));process.exitCode=1}
+          __DPRO_PHOTO_R32J_R32J_EXISTING_SESSION_ADAPTER_TESTS_MJS__
+          node --check R32J_GATEWAY_BRIDGE_REVIEW_ONLY.mjs
+          node --check R32J_GATEWAY_BRIDGE_TESTS.mjs
+          node --check R32J_EXISTING_SESSION_ADAPTER_REVIEW_ONLY.mjs
+          node --check R32J_EXISTING_SESSION_ADAPTER_TESTS.mjs
+          node R32J_GATEWAY_BRIDGE_TESTS.mjs
+          node R32J_EXISTING_SESSION_ADAPTER_TESTS.mjs
+          echo "R32J Gateway assertions and synthetic legacy sessions: 65/65 PASS (REVIEW ONLY)"
+      - name: Record review-only release gate
+        if: always()
+        shell: bash
+        run: |
+          echo '## DPRO PHOTO R32J — Gateway Auth isolated QA' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Synthetic fixtures only: 45 assertion tests + 20 legacy session adapter tests.' >> "$GITHUB_STEP_SUMMARY"
+          echo '**RELEASE: HOLD** — actual Gateway issuer, live revocation, durable nonce, guest proof and atomic PostgreSQL are NOT certified.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No checkout, secrets, APIs, SQL, deploys, database changes, or LINE sends.' >> "$GITHUB_STEP_SUMMARY"
