@@ -723,7 +723,7 @@
           <section class="panel">
             <div class="panel-head">
               <div>
-                <h3>今日の注意事項</h3>
+                <h3>表示日の注意事項</h3>
                 <p>撮影前に確認する内容です。</p>
               </div>
             </div>
@@ -1109,6 +1109,17 @@
       ).length;
     }
 
+    // DPRO-PHOTO-R29-FUTURE-BOOKING-PROGRESS-GUARD-20261011
+    // Clinic/studio progress must not advance before the appointment date.
+    // Pre-shoot preparation notes and checklists are intentionally still editable.
+    function canAdvanceVisit(row) {
+      const day = row?.start_at ? C.toDateInputValue(row.start_at) : "";
+      return Boolean(day && day <= C.todayYmd());
+    }
+    function warnFutureProgress() {
+      toast("撮影日前の予約は当日進行を変更できません。事前メモや撮影準備は保存できます。", "error", 5200);
+    }
+
     function renderSchedule() {
       if (!state.rows.length) {
         $("scheduleList").innerHTML =
@@ -1143,8 +1154,9 @@
               <div class="reservation-actions">
                 <button class="btn btn-primary btn-small" type="button"
                   data-open-reservation="${esc(row.id)}">詳細・カルテ</button>
-                ${nextStatus ? `<button class="btn btn-secondary btn-small" type="button"
-                  data-next-status="${esc(row.id)}" data-status="${esc(nextStatus)}">次へ：${esc(nextLabel)}</button>` : ""}
+                ${nextStatus ? (canAdvanceVisit(row) ? `<button class="btn btn-secondary btn-small" type="button"
+                  data-next-status="${esc(row.id)}" data-status="${esc(nextStatus)}">次へ：${esc(nextLabel)}</button>`
+                  : '<button class="btn btn-secondary btn-small" type="button" disabled title="撮影日当日以降に操作できます">撮影当日に進行</button>') : ""}
               </div>
             </div>
             <div class="progress-strip">
@@ -1209,6 +1221,7 @@
     async function quickAdvance(reservationId, status) {
       const row = state.rows.find((item) => item.id === reservationId);
       if (!row) return;
+      if (!canAdvanceVisit(row)) { warnFutureProgress(); return; }
       await runBusy(`${visitLabels[status] || status}へ更新しています...`, () =>
         C.adminPost(C.ENDPOINTS.STAFF_RESERVATION_STATUS, {
           reservation_id: reservationId,
@@ -1294,6 +1307,10 @@
       state.shootingStartedAt = record.started_at || null;
       state.shootingCompletedAt = record.completed_at || null;
       renderShootingTimeMeta();
+      $("startShootingBtn").disabled = !canAdvanceVisit(r);
+      $("completeShootingBtn").disabled = !canAdvanceVisit(r);
+      $("startShootingBtn").title = $("completeShootingBtn").title = canAdvanceVisit(r)
+        ? "撮影時刻を記録" : "撮影日当日以降に操作できます";
 
       renderTasks(d.tasks || []);
       renderMessageBody();
@@ -1305,9 +1322,14 @@
     }
 
     function renderQuickStatusButtons() {
-      $("quickStatusButtons").innerHTML = visitFlow.map((status) => `
+      const reservation = state.selected?.reservation;
+      const future = !canAdvanceVisit(reservation);
+      $("quickStatusButtons").innerHTML = (future
+        ? '<p class="field-note" style="grid-column:1/-1">撮影日前のため、当日進行の変更はできません。内部メモは保存できます。</p>' : '')
+        + visitFlow.map((status) => `
         <button class="status-btn ${state.selectedVisitStatus === status ? "active" : ""}"
-          type="button" data-choose-status="${esc(status)}">${esc(shortVisitLabel(status))}</button>
+          type="button" data-choose-status="${esc(status)}"
+          ${future && status !== (reservation?.visit_status || 'scheduled') ? 'disabled' : ''}>${esc(shortVisitLabel(status))}</button>
       `).join("");
     }
 
@@ -1361,6 +1383,9 @@
     async function saveProgress() {
       const r = state.selected?.reservation;
       if (!r) return;
+      if (!canAdvanceVisit(r) && state.selectedVisitStatus !== (r.visit_status || "scheduled")) {
+        warnFutureProgress(); return;
+      }
       await runBusy("進行状態を保存しています...", () =>
         C.adminPost(C.ENDPOINTS.STAFF_RESERVATION_STATUS, {
           reservation_id: r.id,
@@ -1385,6 +1410,11 @@
     async function saveShooting() {
       const r = state.selected?.reservation;
       if (!r) return;
+      const record = state.selected?.shooting_record || {};
+      if (!canAdvanceVisit(r) && (
+        (state.shootingStartedAt && state.shootingStartedAt !== (record.started_at || null)) ||
+        (state.shootingCompletedAt && state.shootingCompletedAt !== (record.completed_at || null))
+      )) { warnFutureProgress(); return; }
       const staff = selectedStaff();
       await runBusy("撮影カルテを保存しています...", () =>
         C.adminPost(C.ENDPOINTS.STAFF_SHOOTING_RECORD_SAVE, {
@@ -1540,6 +1570,7 @@
       $("saveShootingBtn").addEventListener("click", saveShooting);
 
       $("startShootingBtn").addEventListener("click", () => {
+        if (!canAdvanceVisit(state.selected?.reservation)) { warnFutureProgress(); return; }
         state.shootingStartedAt = nowIso();
         state.selectedVisitStatus = "shooting";
         renderShootingTimeMeta();
@@ -1547,6 +1578,7 @@
         toast("撮影開始時刻を記録しました。保存すると確定します。", "info");
       });
       $("completeShootingBtn").addEventListener("click", () => {
+        if (!canAdvanceVisit(state.selected?.reservation)) { warnFutureProgress(); return; }
         state.shootingCompletedAt = nowIso();
         renderShootingTimeMeta();
         toast("撮影完了時刻を記録しました。保存すると確定します。", "info");

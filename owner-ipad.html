@@ -919,7 +919,7 @@
       </div>
 
       <section class="summary-grid">
-        <div class="summary-card"><span>本日の予約</span><strong id="countAll">0</strong><small>予約件数</small></div>
+        <div class="summary-card"><span>表示日の予約</span><strong id="countAll">0</strong><small>予約件数</small></div>
         <div class="summary-card"><span>来店待ち</span><strong id="countWaiting">0</strong><small>まだ来店前</small></div>
         <div class="summary-card"><span>受付・準備</span><strong id="countPreparing">0</strong><small>受付〜準備中</small></div>
         <div class="summary-card"><span>撮影中</span><strong id="countShooting">0</strong><small>現在撮影中</small></div>
@@ -2604,7 +2604,7 @@
       const date = $("workDate").value || C.todayYmd();
       const silent = options.silent === true;
 
-      if (!silent) showLoading("本日の予約を読み込んでいます...");
+      if (!silent) showLoading("指定日の予約を読み込んでいます...");
       try {
         const result = await C.adminGet(C.ENDPOINTS.IPAD_TODAY, { date });
         state.reservations = result.reservations || [];
@@ -2663,6 +2663,16 @@
       });
     }
 
+    // DPRO-PHOTO-R29-FUTURE-BOOKING-PROGRESS-GUARD-20261011
+    // Protect reception progress; pre-shoot notes remain available.
+    function canAdvanceVisit(row) {
+      const day = row?.start_at ? C.toDateInputValue(row.start_at) : "";
+      return Boolean(day && day <= C.todayYmd());
+    }
+    function warnFutureProgress() {
+      toast("撮影日前の予約は当日進行を変更できません。事前の確認・メモは継続できます。", "error", 5200);
+    }
+
     function renderCard(row) {
       const subjects = (row.subjects || [])
         .map((subject) => subject.subject_name_snapshot || subject.subject_name)
@@ -2692,12 +2702,12 @@
           <div class="card-actions">
             <button class="btn btn-neutral btn-small" type="button"
               data-open-id="${esc(row.id)}">予約確認</button>
-            ${nextStatus ? `
+            ${nextStatus ? (canAdvanceVisit(row) ? `
               <button class="btn btn-primary btn-small" type="button"
                 data-next-id="${esc(row.id)}" data-next-status="${esc(nextStatus)}">
                 ${esc(nextActionLabel(nextStatus))}
               </button>
-            ` : ""}
+            ` : '<button class="btn btn-primary btn-small" type="button" disabled title="撮影日当日以降に操作できます">撮影当日に受付</button>') : ""}
           </div>
         </article>
       `;
@@ -2718,6 +2728,7 @@
     async function quickNext(reservationId, visitStatus) {
       const row = state.reservations.find((item) => item.id === reservationId);
       if (!row) return;
+      if (!canAdvanceVisit(row)) { warnFutureProgress(); return; }
       if (visitStatus === "completed" && !confirm("この撮影・来店対応を完了にしますか？")) return;
 
       await runBusy(`${nextActionLabel(visitStatus)}へ更新しています...`, () =>
@@ -2839,9 +2850,14 @@
     }
 
     function renderStatusButtons() {
-      $("statusButtons").innerHTML = C.VISIT_STATUS_FLOW.map((status) => `
+      const reservation = state.selected?.reservation;
+      const future = !canAdvanceVisit(reservation);
+      $("statusButtons").innerHTML = (future
+        ? '<p class="field-note" style="grid-column:1/-1">撮影日前のため、当日進行の変更はできません。内部メモは保存できます。</p>' : '')
+        + C.VISIT_STATUS_FLOW.map((status) => `
         <button class="status-btn ${state.selectedVisitStatus === status ? "active" : ""}"
-          type="button" data-choose-status="${esc(status)}">
+          type="button" data-choose-status="${esc(status)}"
+          ${future && status !== (reservation?.visit_status || 'scheduled') ? 'disabled' : ''}>
           ${esc(shortStatus(status))}
         </button>
       `).join("");
@@ -2891,6 +2907,9 @@
     async function saveStatus() {
       const reservation = state.selected?.reservation;
       if (!reservation) return;
+      if (!canAdvanceVisit(reservation) && state.selectedVisitStatus !== (reservation.visit_status || "scheduled")) {
+        warnFutureProgress(); return;
+      }
 
       await runBusy("進行状態を保存しています...", () =>
         C.adminPost(C.ENDPOINTS.IPAD_RESERVATION_STATUS, {
