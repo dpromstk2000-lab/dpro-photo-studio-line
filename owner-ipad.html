@@ -1160,6 +1160,8 @@
   </div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
+  <!-- DPRO-PHOTO-R27-IPAD-JAPANESE-CALENDAR-20261011 -->
+  <script src="./photo-ipad-calendar-ja-r27.js?v=DPRO-PHOTO-R27-IPAD-JA-DATE-20261011"></script>
   <script>
   (() => {
     "use strict";
@@ -1407,6 +1409,8 @@
     }
 
     function openNativeDatePicker(input) {
+      // R27: always prefer DPRO Japanese calendar, retain native as asset fallback.
+      if (window.DPRO_PHOTO_IPAD_CALENDAR_JA_R27?.open(input)) return;
       try {
         if (typeof input.showPicker === "function") input.showPicker();
         else input.click();
