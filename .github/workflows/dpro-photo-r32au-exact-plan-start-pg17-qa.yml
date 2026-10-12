@@ -1,0 +1,157 @@
+# R32AU: read-only modeling in fresh container PostgreSQL17; NO REAL SUPABASE, WORKER OR USER ROWS.
+name: DPRO PHOTO R32AU Plan Start Exact Function PG17 QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-plan-start:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: qa_disposable_only
+          POSTGRES_DB: dpro_photo_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qa -d dpro_photo_qa"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Build exact-source review-only disposable SQL
+        shell: bash
+        run: |
+          cat > /tmp/r32au_disposable.sql <<'R32AU_DISPOSABLE_EOF'
+          -- ONLY FOR DISPOSABLE GITHUB PG17 QA. No production connections or table data.
+          \set ON_ERROR_STOP on
+          CREATE SCHEMA r32au_qa;
+          CREATE FUNCTION r32au_qa.original_plan_start_allowed(
+            p_mode text, p_interval integer, p_anchor time without time zone,
+            p_times time without time zone[], p_start time without time zone
+          ) RETURNS boolean LANGUAGE plpgsql AS $R32AU_ORIGINAL$
+          declare
+            v_start_minutes integer;
+            v_anchor_minutes integer;
+          begin
+            if p_start is null then
+              return false;
+            end if;
+
+            if extract(second from p_start)::integer <> 0
+               or extract(minute from p_start)::integer not in (0,30) then
+              return false;
+            end if;
+
+            if coalesce(p_mode,'interval')='fixed_times' then
+              return p_start = any(coalesce(p_times,'{}'::time without time zone[]));
+            end if;
+
+            v_start_minutes :=
+              extract(hour from p_start)::integer*60
+              + extract(minute from p_start)::integer;
+
+            v_anchor_minutes :=
+              extract(hour from coalesce(p_anchor,'00:00'::time))::integer*60
+              + extract(minute from coalesce(p_anchor,'00:00'::time))::integer;
+
+            return mod(
+              (v_start_minutes - v_anchor_minutes + 1440),
+              greatest(30,coalesce(p_interval,30))
+            ) = 0;
+          end;
+          $R32AU_ORIGINAL$;
+          CREATE FUNCTION r32au_qa.candidate_plan_start_allowed(
+            p_mode text, p_interval integer, p_anchor time without time zone,
+            p_times time without time zone[], p_start time without time zone
+          ) RETURNS boolean LANGUAGE plpgsql AS $R32AU_CANDIDATE$
+          DECLARE v_start_minutes integer;v_anchor_minutes integer;v_interval integer;
+          BEGIN
+           IF p_start IS NULL THEN RETURN false; END IF;
+           IF extract(second FROM p_start)::integer<>0 OR extract(minute FROM p_start)::integer NOT IN (0,30) THEN RETURN false; END IF;
+           IF coalesce(p_mode,'interval')='fixed_times' THEN RETURN p_start=any(coalesce(p_times,'{}'::time without time zone[])); END IF;
+           v_start_minutes:=extract(hour FROM p_start)::integer*60+extract(minute FROM p_start)::integer;
+           v_anchor_minutes:=extract(hour FROM coalesce(p_anchor,'00:00'::time))::integer*60+extract(minute FROM coalesce(p_anchor,'00:00'::time))::integer;
+           v_interval:=greatest(30,coalesce(p_interval,30));
+           -- Double-mod normalizes negative offsets without hard-coding a 1440-minute shift.
+           RETURN mod(mod(v_start_minutes-v_anchor_minutes,v_interval)+v_interval,v_interval)=0;
+          END;
+          $R32AU_CANDIDATE$;
+          DO $R32AU_ASSERT$
+          DECLARE
+           iv integer; k integer; t time without time zone; anchor time without time zone;
+           old_ok boolean; new_ok boolean; affected integer:=0; grid_count integer:=0; drift_pairs integer:=0; saw_diff boolean;
+          BEGIN
+           IF r32au_qa.original_plan_start_allowed('interval',150,'09:00','{}','09:00') IS DISTINCT FROM false
+           THEN RAISE EXCEPTION 'FAILED: expected source to reject own anchor with interval 150'; END IF;
+           RAISE NOTICE 'PASS: original function wrongly rejects 09:00 anchor when interval=150';
+           IF r32au_qa.original_plan_start_allowed('interval',150,'09:00','{}','10:00') IS DISTINCT FROM true
+           THEN RAISE EXCEPTION 'FAILED: expected source to wrongly accept 10:00 with interval 150'; END IF;
+           RAISE NOTICE 'PASS: original function wrongly accepts 10:00 when anchor=09:00 interval=150';
+           IF r32au_qa.original_plan_start_allowed('interval',150,'09:00','{}','11:30') IS DISTINCT FROM false
+           THEN RAISE EXCEPTION 'FAILED: expected source to wrongly reject 11:30 with interval 150'; END IF;
+           RAISE NOTICE 'PASS: original function wrongly rejects 11:30 when anchor=09:00 interval=150';
+           IF r32au_qa.candidate_plan_start_allowed('interval',150,'09:00','{}','09:00') IS DISTINCT FROM true
+           OR r32au_qa.candidate_plan_start_allowed('interval',150,'09:00','{}','10:00') IS DISTINCT FROM false
+           OR r32au_qa.candidate_plan_start_allowed('interval',150,'09:00','{}','11:30') IS DISTINCT FROM true
+           THEN RAISE EXCEPTION 'FAILED: candidate fails correct anchor schedule'; END IF;
+           RAISE NOTICE 'PASS: normalized candidate corrects anchor and 150-minute interval';
+           IF r32au_qa.original_plan_start_allowed('fixed_times',150,'09:00',array['09:00'::time,'10:30'::time],'10:30') IS DISTINCT FROM true
+           OR r32au_qa.original_plan_start_allowed('fixed_times',150,'09:00',array['09:00'::time,'10:30'::time],'09:30') IS DISTINCT FROM false
+           OR r32au_qa.candidate_plan_start_allowed('fixed_times',150,'09:00',array['09:00'::time,'10:30'::time],'10:30') IS DISTINCT FROM true
+           THEN RAISE EXCEPTION 'FAILED: fixed times'; END IF;
+           RAISE NOTICE 'PASS: fixed_times membership unchanged';
+           IF r32au_qa.original_plan_start_allowed('interval',30,'09:00','{}',null) IS DISTINCT FROM false
+           OR r32au_qa.original_plan_start_allowed('interval',30,'09:00','{}','09:15') IS DISTINCT FROM false
+           OR r32au_qa.original_plan_start_allowed('interval',30,'09:00','{}','09:00:01') IS DISTINCT FROM false
+           THEN RAISE EXCEPTION 'FAILED: invalid time acceptance'; END IF;
+           RAISE NOTICE 'PASS: null, off-grid and nonzero-second start rejected';
+           IF r32au_qa.original_plan_start_allowed('interval',30,'09:00','{}','09:00') IS DISTINCT FROM true
+           OR r32au_qa.original_plan_start_allowed('interval',60,'09:00','{}','09:30') IS DISTINCT FROM false
+           OR r32au_qa.original_plan_start_allowed('interval',60,'09:00','{}','10:00') IS DISTINCT FROM true
+           THEN RAISE EXCEPTION 'FAILED: legacy 30/60 behavior'; END IF;
+           RAISE NOTICE 'PASS: standard 30-minute/60-minute behavior remains correct';
+           IF r32au_qa.original_plan_start_allowed(null,null,null,null,'00:30') IS DISTINCT FROM true
+           THEN RAISE EXCEPTION 'FAILED: null defaults'; END IF;
+           RAISE NOTICE 'PASS: null input defaults in function';
+           FOR iv IN 30..720 BY 30 LOOP
+             saw_diff:=false;
+             FOREACH anchor IN ARRAY array['00:00'::time,'09:00'::time,'23:30'::time] LOOP
+               FOR k IN 0..47 LOOP
+                 t:='00:00'::time+make_interval(mins=>k*30);
+                 old_ok:=r32au_qa.original_plan_start_allowed('interval',iv,anchor,'{}',t);
+                 new_ok:=r32au_qa.candidate_plan_start_allowed('interval',iv,anchor,'{}',t);
+                 grid_count:=grid_count+1;
+                 IF old_ok IS DISTINCT FROM new_ok THEN drift_pairs:=drift_pairs+1;saw_diff:=true; END IF;
+                 IF mod(1440,iv)=0 AND old_ok IS DISTINCT FROM new_ok
+                 THEN RAISE EXCEPTION 'FAILED: regression interval %,anchor %,start %',iv,anchor,t; END IF;
+               END LOOP;
+               IF r32au_qa.original_plan_start_allowed('interval',iv,anchor,'{}',anchor) IS DISTINCT FROM (mod(1440,iv)=0)
+               THEN RAISE EXCEPTION 'FAILED: original own anchor expected %,interval %',anchor,iv; END IF;
+               IF r32au_qa.candidate_plan_start_allowed('interval',iv,anchor,'{}',anchor) IS DISTINCT FROM true
+               THEN RAISE EXCEPTION 'FAILED: corrected own anchor %,interval %',anchor,iv; END IF;
+             END LOOP;
+             IF saw_diff THEN affected:=affected+1; END IF;
+             IF saw_diff IS DISTINCT FROM (mod(1440,iv)<>0)
+             THEN RAISE EXCEPTION 'FAILED: interval % disparity property',iv; END IF;
+           END LOOP;
+           IF affected<>15 OR grid_count<>3456 OR drift_pairs<=0
+           THEN RAISE EXCEPTION 'FAILED: interval matrix affected %,checked %,differing %',affected,grid_count,drift_pairs; END IF;
+           RAISE NOTICE 'PASS: actual PG17 formula reproduces discrepancies in 15 permitted intervals out of 24';
+           RAISE NOTICE 'PASS: candidate matches all grid cases where interval divides 1440';
+           RAISE NOTICE 'PASS: 3456 real PostgreSQL grid checks across 24 allowed intervals and 3 anchors';
+           RAISE NOTICE 'PASS: no real DPRO tables or production connections used';
+          END;
+          $R32AU_ASSERT$;
+          SELECT 'R32AU DISPOSABLE PG17 ORIGINAL FUNCTION VS CANDIDATE QA PASS (PRODUCTION UNCHANGED)' AS outcome;
+          R32AU_DISPOSABLE_EOF
+      - name: Run actual PostgreSQL 17 original vs corrected schedule verification
+        env:
+          PGPASSWORD: qa_disposable_only
+        run: psql -h localhost -U qa -d dpro_photo_qa -v ON_ERROR_STOP=1 -f /tmp/r32au_disposable.sql
