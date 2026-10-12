@@ -1,0 +1,138 @@
+name: DPRO PHOTO R32AO Idempotent Booking PG17 QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-idempotency-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    services:
+      postgres17:
+        image: postgres:17
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: local_disposable_only
+          POSTGRES_DB: dpro_photo_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qa -d dpro_photo_qa"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - name: Install isolated PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -qq -y postgresql-client
+      - name: Generate disposable schema and checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/r32ao.sql <<'R32AO_SQL_EOF'
+          -- DPRO PHOTO R32AO — Disposable synthetic PostgreSQL 17 QA ONLY.
+          -- NEVER RUN THIS IN THE SHARED SUPABASE PRODUCTION PROJECT.
+          -- Synthetic qa_* fixtures are NOT the real DPRO schema / production RPC.
+          CREATE EXTENSION IF NOT EXISTS pgcrypto;
+          CREATE TABLE qa_bookings (
+           id uuid PRIMARY KEY, studio_id text NOT NULL, customer_id text NOT NULL,
+           digest text NOT NULL, created_at timestamptz DEFAULT now()
+          );
+          CREATE TABLE qa_booking_replays (
+           studio_id text NOT NULL, customer_id text NOT NULL, request_key text NOT NULL,
+           digest text NOT NULL, reservation_id uuid NOT NULL UNIQUE,
+           PRIMARY KEY (studio_id,customer_id,request_key),
+           CONSTRAINT qa_link_fk FOREIGN KEY (reservation_id) REFERENCES qa_bookings(id) DEFERRABLE INITIALLY DEFERRED
+          );
+          CREATE OR REPLACE FUNCTION qa_book(
+           p_studio text,p_customer text,p_key text,p_digest text,p_trusted boolean,
+           p_fail boolean DEFAULT false,p_delay numeric DEFAULT 0
+          ) RETURNS uuid LANGUAGE plpgsql AS $$
+          DECLARE v_id uuid;v_old_digest text;v_old_id uuid;
+          BEGIN
+           IF p_trusted IS DISTINCT FROM TRUE THEN RAISE EXCEPTION 'UNVERIFIED_PRINCIPAL'; END IF;
+           IF p_studio IS NULL OR p_customer IS NULL OR p_key IS NULL OR length(p_key)<20 OR p_digest IS NULL THEN RAISE EXCEPTION 'INVALID_REQUEST'; END IF;
+           v_id:=gen_random_uuid();
+           INSERT INTO qa_booking_replays(studio_id,customer_id,request_key,digest,reservation_id)
+           VALUES(p_studio,p_customer,p_key,p_digest,v_id)
+           ON CONFLICT (studio_id,customer_id,request_key) DO NOTHING
+           RETURNING reservation_id INTO v_id;
+           IF v_id IS NOT NULL THEN
+             IF p_delay>0 THEN PERFORM pg_sleep(p_delay); END IF;
+             IF p_fail THEN RAISE EXCEPTION 'INJECTED_RESERVATION_WRITE_FAILURE'; END IF;
+             INSERT INTO qa_bookings(id,studio_id,customer_id,digest) VALUES(v_id,p_studio,p_customer,p_digest);
+             RETURN v_id;
+           END IF;
+           -- Concurrent requests wait for the unique key owner to commit/rollback before this SELECT.
+           SELECT digest,reservation_id INTO v_old_digest,v_old_id
+           FROM qa_booking_replays WHERE studio_id=p_studio AND customer_id=p_customer AND request_key=p_key FOR UPDATE;
+           IF NOT FOUND THEN RAISE EXCEPTION 'UNEXPECTED_REPLAY_STATE'; END IF;
+           IF v_old_digest<>p_digest THEN RAISE EXCEPTION 'IDEMPOTENCY_CONFLICT'; END IF;
+           RETURN v_old_id;
+          END;$$;
+          -- These isolated checks are not evidence of a real server-validated actor.
+          DO $$
+          DECLARE a uuid;b uuid;c uuid; d uuid; n integer;
+          BEGIN
+           a:=qa_book('studio-A','customer-A','test_request_aaaaaaaaaaaaaa','digest-1',true);
+           b:=qa_book('studio-A','customer-A','test_request_aaaaaaaaaaaaaa','digest-1',true);
+           IF a<>b THEN RAISE EXCEPTION 'FAIL replay changed reservation'; END IF;
+           SELECT count(*) INTO n FROM qa_bookings; IF n<>1 THEN RAISE EXCEPTION 'FAIL duplicate reservation'; END IF;
+           RAISE NOTICE 'PASS: same principal + same request key + same digest replays same reservation';
+           BEGIN
+            PERFORM qa_book('studio-A','customer-A','test_request_aaaaaaaaaaaaaa','tampered-digest',true);
+            RAISE EXCEPTION 'FAIL digest mismatch accepted';
+           EXCEPTION WHEN raise_exception THEN
+            IF SQLERRM='FAIL digest mismatch accepted' THEN RAISE; END IF;
+            IF SQLERRM<>'IDEMPOTENCY_CONFLICT' THEN RAISE; END IF;
+           END;
+           RAISE NOTICE 'PASS: same key with altered booking body rejected';
+           c:=qa_book('studio-A','customer-B','test_request_aaaaaaaaaaaaaa','digest-1',true);
+           d:=qa_book('studio-B','customer-A','test_request_aaaaaaaaaaaaaa','digest-1',true);
+           IF a=c OR a=d OR c=d THEN RAISE EXCEPTION 'FAIL cross scope replay'; END IF;
+           RAISE NOTICE 'PASS: dedupe scoped by tenant and verified customer';
+           BEGIN
+            PERFORM qa_book('studio-A','customer-C','test_request_bbbbbbbbbbbbbb','digest-1',false);
+            RAISE EXCEPTION 'FAIL untrusted principal was accepted';
+           EXCEPTION WHEN raise_exception THEN
+            IF SQLERRM='FAIL untrusted principal was accepted' THEN RAISE; END IF;
+            IF SQLERRM<>'UNVERIFIED_PRINCIPAL' THEN RAISE; END IF;
+           END;
+           SELECT count(*) INTO n FROM qa_bookings WHERE customer_id='customer-C';
+           IF n<>0 THEN RAISE EXCEPTION 'FAIL untrusted principal wrote booking'; END IF;
+           RAISE NOTICE 'PASS: unverified principal rejected with zero writes';
+           BEGIN
+            PERFORM qa_book('studio-A','customer-A','test_request_cccccccccccccc','digest-1',true,true);
+            RAISE EXCEPTION 'FAIL injected writer failure not triggered';
+           EXCEPTION WHEN raise_exception THEN
+            IF SQLERRM='FAIL injected writer failure not triggered' THEN RAISE; END IF;
+            IF SQLERRM<>'INJECTED_RESERVATION_WRITE_FAILURE' THEN RAISE; END IF;
+           END;
+           SELECT count(*) INTO n FROM qa_booking_replays WHERE request_key='test_request_cccccccccccccc';
+           IF n<>0 THEN RAISE EXCEPTION 'FAIL failed transaction held the replay key'; END IF;
+           c:=qa_book('studio-A','customer-A','test_request_cccccccccccccc','digest-1',true);
+           IF c IS NULL THEN RAISE EXCEPTION 'FAIL legitimate retry blocked after rollback'; END IF;
+           RAISE NOTICE 'PASS: failure rolls back BOTH replay key and reservation, retry succeeds';
+          END;$$;
+          SELECT 'R32AO DISPOSABLE PG17 IDEMPOTENCY BASELINE PASS (NOT PRODUCTION)' as outcome;
+          R32AO_SQL_EOF
+      - name: PostgreSQL 17 disposable idempotency QA
+        shell: bash
+        env:
+          PGPASSWORD: local_disposable_only
+        run: |
+          set -euo pipefail
+          conn="-h 127.0.0.1 -p 5432 -U qa -d dpro_photo_qa -X -v ON_ERROR_STOP=1"
+          psql $conn -f /tmp/r32ao.sql
+          # Two independent DB sessions compete for one scoped unique key; the second must replay.
+          psql $conn -At -c "BEGIN; SELECT qa_book('studio-A','customer-A','test_concurrent_key_aaaaaaaaaaaaaaa','digest-concurrent',true,false,2); COMMIT;" >/tmp/workerA.log 2>&1 &
+          pid=$!
+          sleep 0.45
+          psql $conn -At -c "SELECT qa_book('studio-A','customer-A','test_concurrent_key_aaaaaaaaaaaaaaa','digest-concurrent',true);" >/tmp/workerB.log 2>&1
+          wait "$pid"
+          a=$(grep -Eo '[0-9a-f]{8}-[0-9a-f-]{27,}' /tmp/workerA.log | head -1)
+          b=$(grep -Eo '[0-9a-f]{8}-[0-9a-f-]{27,}' /tmp/workerB.log | head -1)
+          test -n "$a" && test "$a" = "$b"
+          count=$(psql $conn -At -c "SELECT count(*) FROM qa_bookings WHERE studio_id='studio-A' AND customer_id='customer-A' AND digest='digest-concurrent';")
+          test "$count" = 1
+          echo 'PASS: real PostgreSQL concurrent requests both resolve to ONE reservation'
+          echo 'R32AO DISPOSABLE PG17 IDEMPOTENCY CONCURRENCY PASS (not production)'
