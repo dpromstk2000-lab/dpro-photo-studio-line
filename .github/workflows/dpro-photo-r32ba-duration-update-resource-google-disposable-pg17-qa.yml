@@ -1,0 +1,262 @@
+name: DPRO PHOTO R32BA Duration Update Resource and Google Disposable PG17 QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-postgresql17:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: qauser
+          POSTGRES_PASSWORD: qa-local-only
+          POSTGRES_DB: qa_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qauser -d qa_disposable"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 15
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+      - name: Reproduce original trigger gap and validate source-body candidate in disposable PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: qauser
+          PGPASSWORD: qa-local-only
+          PGDATABASE: qa_disposable
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'R32BA_SQL'
+          -- R32BA: disposable PostgreSQL 17 QA only. Creates synthetic public tables inside the test container.
+          -- NEVER execute against real Supabase: this SQL intentionally creates/drops synthetic tables and triggers.
+          \set ON_ERROR_STOP on
+          BEGIN;
+          CREATE TABLE public.photo_resources(id text PRIMARY KEY,studio_id text NOT NULL,capacity integer NOT NULL,is_active boolean NOT NULL);
+          CREATE TABLE public.photo_studio_settings(studio_id text PRIMARY KEY,feature_flags jsonb NOT NULL);
+          CREATE TABLE public.photo_reservations(id integer PRIMARY KEY,studio_id text NOT NULL,resource_id text NOT NULL,start_at timestamptz NOT NULL,end_at timestamptz,duration_minutes integer NOT NULL,reservation_status text NOT NULL DEFAULT 'confirmed',plan_name_snapshot text,customer_name_snapshot text,assigned_staff_id text);
+          CREATE TABLE public.photo_external_calendar_connections(id text PRIMARY KEY,studio_id text NOT NULL,provider text NOT NULL,calendar_id text,connection_status text NOT NULL,sync_enabled boolean NOT NULL);
+          CREATE TABLE public.photo_calendar_event_links(studio_id text NOT NULL,reservation_id integer NOT NULL,connection_id text NOT NULL,provider text NOT NULL,external_calendar_id text,sync_status text NOT NULL,last_error text,updated_at timestamptz,CONSTRAINT photo_links_unique UNIQUE(connection_id,reservation_id));
+          INSERT INTO public.photo_resources VALUES ('room1','studio1',1,true);
+          INSERT INTO public.photo_studio_settings VALUES ('studio1','{"reservation_event_capacity":false,"reservation_google_calendar":true}'::jsonb);
+          INSERT INTO public.photo_external_calendar_connections VALUES ('conn1','studio1','google_calendar','primary','connected',true);
+          -- Minimal prepare adapter only: reproduces original trigger's unconditional end_at derivation.
+          -- Does not claim complete production photo_prepare_reservation behavior (separately tested in R32AZ).
+          CREATE FUNCTION public.qa_prepare_r32ba() RETURNS trigger LANGUAGE plpgsql AS $qa$
+          BEGIN
+           IF new.duration_minutes IS NULL OR new.duration_minutes<30 OR MOD(new.duration_minutes,30)<>0 THEN
+            RAISE EXCEPTION 'INVALID_DURATION';
+           END IF;
+           new.end_at:=new.start_at+make_interval(mins=>new.duration_minutes);
+           RETURN NEW;
+          END;$qa$;
+          -- Exact user-pasted real capacity FUNCTION BODY, with synthetic table definitions.
+          CREATE FUNCTION public.photo_enforce_resource_capacity() RETURNS trigger LANGUAGE plpgsql AS $r32ba_capacity$
+          declare
+            v_capacity integer;
+            v_configured_capacity integer;
+            v_capacity_enabled boolean := false;
+            v_overlap_count integer;
+            v_lock_key bigint;
+          begin
+            if new.resource_id is null
+               or new.start_at is null
+               or new.end_at is null
+               or new.reservation_status in ('cancelled','no_show') then
+              return new;
+            end if;
+          
+            select r.capacity
+              into v_configured_capacity
+            from public.photo_resources r
+            where r.studio_id = new.studio_id
+              and r.id = new.resource_id
+              and r.is_active = true;
+          
+            if v_configured_capacity is null then
+              raise exception using
+                errcode = 'P0001',
+                message = 'RESOURCE_NOT_AVAILABLE',
+                detail = jsonb_build_object(
+                  'resource_id', new.resource_id,
+                  'reason', 'resource_missing_or_inactive'
+                )::text;
+            end if;
+          
+            select coalesce((s.feature_flags->>'reservation_event_capacity')::boolean, false)
+              into v_capacity_enabled
+            from public.photo_studio_settings s
+            where s.studio_id = new.studio_id;
+          
+            v_capacity := case
+              when v_capacity_enabled then greatest(1, least(100, v_configured_capacity))
+              else 1
+            end;
+          
+            v_lock_key := hashtextextended(
+              coalesce(new.studio_id::text,'') || ':' || coalesce(new.resource_id::text,''),
+              0
+            );
+            perform pg_advisory_xact_lock(v_lock_key);
+          
+            select count(*)::integer
+              into v_overlap_count
+            from public.photo_reservations x
+            where x.studio_id = new.studio_id
+              and x.resource_id = new.resource_id
+              and x.id is distinct from new.id
+              and x.reservation_status not in ('cancelled','no_show')
+              and tstzrange(x.start_at, x.end_at, '[)') &&
+                  tstzrange(new.start_at, new.end_at, '[)');
+          
+            if v_overlap_count >= v_capacity then
+              raise exception using
+                errcode = 'P0001',
+                message = 'RESOURCE_CAPACITY_EXCEEDED',
+                detail = jsonb_build_object(
+                  'resource_id', new.resource_id,
+                  'capacity_enabled', v_capacity_enabled,
+                  'effective_capacity', v_capacity,
+                  'configured_capacity', v_configured_capacity,
+                  'active_overlaps', v_overlap_count,
+                  'start_at', new.start_at,
+                  'end_at', new.end_at
+                )::text;
+            end if;
+          
+            return new;
+          end;
+          $r32ba_capacity$;
+          -- Exact user-pasted Google queue FUNCTION BODY, with synthetic table definitions.
+          CREATE FUNCTION public.photo_queue_google_calendar_sync() RETURNS trigger LANGUAGE plpgsql AS $r32ba_google$
+          begin
+            if exists (
+              select 1
+              from public.photo_studio_settings s
+              where s.studio_id=new.studio_id
+                and coalesce((s.feature_flags->>'reservation_google_calendar')::boolean,false)=true
+            ) then
+              insert into public.photo_calendar_event_links(
+                studio_id,reservation_id,connection_id,provider,external_calendar_id,sync_status,updated_at
+              )
+              select
+                new.studio_id,
+                new.id,
+                c.id,
+                'google_calendar',
+                coalesce(c.calendar_id,'primary'),
+                'pending',
+                now()
+              from public.photo_external_calendar_connections c
+              where c.studio_id=new.studio_id
+                and c.provider='google_calendar'
+                and c.connection_status='connected'
+                and c.sync_enabled=true
+              on conflict(connection_id,reservation_id) do update
+                set sync_status='pending',
+                    last_error=null,
+                    updated_at=now();
+            end if;
+            return new;
+          end;
+          $r32ba_google$;
+          -- Live trigger-column lists as read-only catalog documented in R32AZ receipt.
+          CREATE TRIGGER photo_reservations_prepare_trg BEFORE INSERT OR UPDATE ON public.photo_reservations FOR EACH ROW EXECUTE FUNCTION public.qa_prepare_r32ba();
+          CREATE TRIGGER zz_photo_reservations_resource_capacity_trg BEFORE INSERT OR UPDATE OF studio_id,resource_id,start_at,end_at,reservation_status ON public.photo_reservations FOR EACH ROW EXECUTE FUNCTION public.photo_enforce_resource_capacity();
+          CREATE TRIGGER zz_photo_reservations_google_calendar_queue_trg AFTER INSERT OR UPDATE OF start_at,end_at,reservation_status,plan_name_snapshot,customer_name_snapshot,assigned_staff_id,resource_id ON public.photo_reservations FOR EACH ROW EXECUTE FUNCTION public.photo_queue_google_calendar_sync();
+          -- BASELINE: valid adjacent bookings, pending queue after insert.
+          INSERT INTO public.photo_reservations(id,studio_id,resource_id,start_at,duration_minutes)
+          VALUES (1,'studio1','room1','2026-10-15 09:00+09',60);
+          INSERT INTO public.photo_reservations(id,studio_id,resource_id,start_at,duration_minutes) VALUES (2,'studio1','room1','2026-10-15 10:00+09',60);
+          DO $qa$
+          BEGIN
+           IF (SELECT COUNT(*) FROM public.photo_calendar_event_links WHERE sync_status='pending')<>2 THEN
+            RAISE EXCEPTION 'BASELINE_INSERT_QUEUE_FAILED'; END IF;
+          END;$qa$;
+          UPDATE public.photo_calendar_event_links SET sync_status='synced';
+          -- Duration-only update: original UPDATE OF trigger lists fail to fire even though BEFORE trigger changed end_at.
+          UPDATE public.photo_reservations SET duration_minutes=120 WHERE id=1;
+          DO $qa$
+          DECLARE n integer;
+          BEGIN
+           IF (SELECT end_at FROM public.photo_reservations WHERE id=1) IS DISTINCT FROM '2026-10-15 11:00+09'::timestamptz THEN
+            RAISE EXCEPTION 'ORIGINAL_PREPARE_DID_NOT_RECOMPUTE'; END IF;
+           SELECT COUNT(*) INTO n FROM public.photo_reservations a JOIN public.photo_reservations b
+            ON a.id=1 AND b.id=2 AND tstzrange(a.start_at,a.end_at,'[)') && tstzrange(b.start_at,b.end_at,'[)');
+           IF n<>1 THEN RAISE EXCEPTION 'ORIGINAL_HOLE_NOT_REPRODUCED'; END IF;
+           IF (SELECT sync_status FROM public.photo_calendar_event_links WHERE reservation_id=1)<>'synced' THEN
+            RAISE EXCEPTION 'ORIGINAL_GOOGLE_HOLE_NOT_REPRODUCED'; END IF;
+           RAISE NOTICE 'BASELINE REPRODUCED: duration-only edit bypassed original resource and Google triggers';
+          END;$qa$;
+          -- Control: explicitly touching an UPDATE OF column does invoke original capacity check.
+          DO $qa$
+          BEGIN
+           BEGIN
+            UPDATE public.photo_reservations SET start_at=start_at WHERE id=1;
+            RAISE EXCEPTION 'CONTROL_CAPACITY_NOT_TRIGGERED';
+           EXCEPTION WHEN raise_exception THEN
+            IF SQLERRM<>'RESOURCE_CAPACITY_EXCEEDED' THEN RAISE; END IF;
+           END;
+           RAISE NOTICE 'CONTROL: same resource function denies the over-capacity row when trigger is invoked';
+          END;$qa$;
+          -- Switch trigger definitions in test container ONLY, preserving the exact source of both functions.
+          DROP TRIGGER zz_photo_reservations_resource_capacity_trg ON public.photo_reservations;
+          DROP TRIGGER zz_photo_reservations_google_calendar_queue_trg ON public.photo_reservations;
+          
+          CREATE TRIGGER zz_photo_reservations_resource_capacity_trg BEFORE INSERT OR UPDATE OF studio_id,resource_id,start_at,end_at,reservation_status,duration_minutes ON public.photo_reservations FOR EACH ROW EXECUTE FUNCTION public.photo_enforce_resource_capacity();
+          CREATE TRIGGER zz_photo_reservations_google_calendar_queue_trg AFTER INSERT OR UPDATE OF start_at,end_at,reservation_status,plan_name_snapshot,customer_name_snapshot,assigned_staff_id,resource_id,duration_minutes ON public.photo_reservations FOR EACH ROW EXECUTE FUNCTION public.photo_queue_google_calendar_sync();
+          -- Remove disposable bookings; queue rows for assertions are reset. No real data involved.
+          TRUNCATE public.photo_reservations,public.photo_calendar_event_links;
+          INSERT INTO public.photo_reservations(id,studio_id,resource_id,start_at,duration_minutes)
+          VALUES (1,'studio1','room1','2026-10-15 09:00+09',60);
+          INSERT INTO public.photo_reservations(id,studio_id,resource_id,start_at,duration_minutes) VALUES (2,'studio1','room1','2026-10-15 10:00+09',60);
+          UPDATE public.photo_calendar_event_links SET sync_status='synced';
+          -- Candidate column lists MUST reject conflicting duration-only expansion atomically.
+          DO $qa$
+          BEGIN
+           BEGIN
+            UPDATE public.photo_reservations SET duration_minutes=120 WHERE id=1;
+            RAISE EXCEPTION 'CANDIDATE_CONFLICT_FALSE_PASS';
+           EXCEPTION WHEN raise_exception THEN
+            IF SQLERRM<>'RESOURCE_CAPACITY_EXCEEDED' THEN RAISE; END IF;
+           END;
+           IF (SELECT duration_minutes FROM public.photo_reservations WHERE id=1)<>60 THEN
+            RAISE EXCEPTION 'FAILED_UPDATE_NOT_ROLLED_BACK'; END IF;
+           IF (SELECT end_at FROM public.photo_reservations WHERE id=1) IS DISTINCT FROM '2026-10-15 10:00+09'::timestamptz THEN
+            RAISE EXCEPTION 'ROLLBACK_DERIVED_END_FAILED'; END IF;
+           IF (SELECT sync_status FROM public.photo_calendar_event_links WHERE reservation_id=1)<>'synced' THEN
+            RAISE EXCEPTION 'REJECTED_UPDATE_QUEUED'; END IF;
+           RAISE NOTICE 'CANDIDATE PASS: conflicting duration-only edit rejected and rolled back';
+          END;$qa$;
+          -- A legitimate duration-only reduction must requeue Google outbox from synced to pending.
+          UPDATE public.photo_reservations SET duration_minutes=30 WHERE id=1;
+          DO $qa$
+          BEGIN
+           IF (SELECT end_at FROM public.photo_reservations WHERE id=1) IS DISTINCT FROM '2026-10-15 09:30+09'::timestamptz THEN
+            RAISE EXCEPTION 'ALLOWED_DURATION_NOT_APPLIED'; END IF;
+           IF (SELECT sync_status FROM public.photo_calendar_event_links WHERE reservation_id=1) IS DISTINCT FROM 'pending' THEN
+            RAISE EXCEPTION 'ALLOWED_DURATION_NOT_REQUEUED'; END IF;
+           IF (SELECT sync_status FROM public.photo_calendar_event_links WHERE reservation_id=2)<>'synced' THEN
+            RAISE EXCEPTION 'UNRELATED_EVENT_REQUEUED'; END IF;
+           RAISE NOTICE 'CANDIDATE PASS: valid duration-only edit queues Google sync';
+          END;$qa$;
+          -- Cross-calendar field regression: status cancel with no duration edit still queues.
+          UPDATE public.photo_calendar_event_links SET sync_status='synced' WHERE reservation_id=2;
+          UPDATE public.photo_reservations SET reservation_status='cancelled' WHERE id=2;
+          DO $qa$
+          BEGIN
+           IF (SELECT sync_status FROM public.photo_calendar_event_links WHERE reservation_id=2) IS DISTINCT FROM 'pending' THEN
+            RAISE EXCEPTION 'CANCEL_NOT_QUEUED'; END IF;
+           RAISE NOTICE 'CANDIDATE PASS: cancelled booking remains queued';
+          END;$qa$;
+          -- Intentionally rolled back: even the temporary PG container receives no durable fixture changes.
+          ROLLBACK;
+          SELECT 'R32BA disposable PG17 UPDATE OF duration capacity+Google queue source-body parity PASS (not production)' AS outcome;
+          R32BA_SQL
