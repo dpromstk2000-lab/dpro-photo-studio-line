@@ -1,0 +1,172 @@
+name: DPRO PHOTO R32AX Fixed Time NULL and Subsecond Disposable PG17 QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-postgresql17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: qauser
+          POSTGRES_PASSWORD: qa-local-only
+          POSTGRES_DB: qa_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qauser -d qa_disposable"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+      - name: Execute disposable fixed time and start policy regression
+        env:
+          PGPASSWORD: qa-local-only
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: qauser
+          PGDATABASE: qa_disposable
+        run: |
+          set -euo pipefail
+          # No checkout, no DPRO credentials, no network connection to production resources.
+          cat > /tmp/r32ax_disposable.sql <<'R32AX_EOF'
+          -- R32AX QA COPY. ONLY disposable postgres17, NEVER execute on production.
+          CREATE SCHEMA qa_r32ax;
+          CREATE FUNCTION qa_r32ax.source_validator(p_times time[]) RETURNS boolean
+          LANGUAGE sql IMMUTABLE AS $func$
+            SELECT coalesce(bool_and(
+              extract(second from t)::integer = 0 AND
+              extract(minute from t)::integer IN (0,30)
+            ),true) FROM unnest(coalesce(p_times,'{}'::time[])) as t;
+          $func$;
+          CREATE FUNCTION qa_r32ax.strict_validator(p_times time[]) RETURNS boolean
+          LANGUAGE sql IMMUTABLE AS $func$
+            SELECT CASE WHEN p_times IS NULL THEN false
+              WHEN cardinality(p_times)=0 THEN true
+              WHEN array_ndims(p_times) <> 1 THEN false
+              ELSE coalesce(bool_and(t IS NOT NULL AND extract(second from t)=0
+                                   AND extract(minute from t) IN (0,30)),false) END
+            FROM unnest(coalesce(p_times,'{}'::time[])) AS t;
+          $func$;
+          CREATE FUNCTION qa_r32ax.source_start_allowed(p_mode text, p_interval integer, p_anchor time, p_times time[], p_start time) RETURNS boolean LANGUAGE plpgsql AS $source$
+          declare
+            v_start_minutes integer;
+            v_anchor_minutes integer;
+          begin
+            if p_start is null then
+              return false;
+            end if;
+          
+            if extract(second from p_start)::integer <> 0
+               or extract(minute from p_start)::integer not in (0,30) then
+              return false;
+            end if;
+          
+            if coalesce(p_mode,'interval')='fixed_times' then
+              return p_start = any(coalesce(p_times,'{}'::time without time zone[]));
+            end if;
+          
+            v_start_minutes :=
+              extract(hour from p_start)::integer*60
+              + extract(minute from p_start)::integer;
+          
+            v_anchor_minutes :=
+              extract(hour from coalesce(p_anchor,'00:00'::time))::integer*60
+              + extract(minute from coalesce(p_anchor,'00:00'::time))::integer;
+          
+            return mod(
+              (v_start_minutes - v_anchor_minutes + 1440),
+              greatest(30,coalesce(p_interval,30))
+            ) = 0;
+          end;
+          
+          $source$;
+          CREATE FUNCTION qa_r32ax.strict_start_allowed(p_mode text, p_interval integer, p_anchor time, p_times time[], p_start time)
+          RETURNS boolean LANGUAGE plpgsql AS $safe$
+          DECLARE v_start integer; v_anchor integer; v_interval integer;
+          BEGIN
+            IF p_start IS NULL OR extract(second from p_start) <> 0
+               OR extract(minute from p_start) NOT IN (0,30) THEN RETURN false; END IF;
+            IF COALESCE(p_mode,'interval')='fixed_times' THEN
+              IF cardinality(coalesce(p_times,'{}'::time[]))=0
+                 OR NOT qa_r32ax.strict_validator(p_times) THEN RETURN false; END IF;
+              RETURN COALESCE(p_start = ANY(p_times),false);
+            END IF;
+            IF COALESCE(p_mode,'interval') <> 'interval' THEN RETURN false; END IF;
+            IF p_interval IS NULL OR p_interval<30 OR p_interval>720
+               OR mod(p_interval,30)<>0 THEN RETURN false; END IF;
+            IF p_anchor IS NULL OR extract(second from p_anchor)<>0
+               OR extract(minute from p_anchor) NOT IN (0,30) THEN RETURN false; END IF;
+            v_start := extract(hour from p_start)::integer * 60+ extract(minute from p_start)::integer;
+            v_anchor := extract(hour from p_anchor)::integer * 60+ extract(minute from p_anchor)::integer;
+            v_interval := p_interval;
+            RETURN mod(mod(v_start-v_anchor,v_interval)+v_interval,v_interval)=0;
+          END;
+          $safe$;
+          DO $test$
+          DECLARE test_count integer:=0; n integer; iv integer; k integer; a time; t time;
+          BEGIN
+            IF qa_r32ax.source_validator(ARRAY[NULL]::time[]) IS DISTINCT FROM true THEN RAISE EXCEPTION 'source null-only'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.source_validator(ARRAY['09:00'::time,NULL]) IS DISTINCT FROM true THEN RAISE EXCEPTION 'source mixed null'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_validator(ARRAY[NULL]::time[]) IS DISTINCT FROM false THEN RAISE EXCEPTION 'strict null-only'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_validator(ARRAY['09:00'::time,NULL]) IS DISTINCT FROM false THEN RAISE EXCEPTION 'strict mixed null'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_validator(ARRAY['09:00'::time,'11:30'::time]) IS DISTINCT FROM true THEN RAISE EXCEPTION 'strict legitimate'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.source_validator('{}'::time[]) IS DISTINCT FROM true OR qa_r32ax.strict_validator('{}'::time[]) IS DISTINCT FROM true THEN RAISE EXCEPTION 'empty interval array'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_validator(NULL::time[]) IS DISTINCT FROM false THEN RAISE EXCEPTION 'null entire array'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_validator(ARRAY['09:15'::time]) IS DISTINCT FROM false THEN RAISE EXCEPTION '15min'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_validator(ARRAY['09:00:30'::time]) IS DISTINCT FROM false THEN RAISE EXCEPTION '30seconds'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.source_validator(ARRAY['09:00:00.2'::time]) IS DISTINCT FROM true THEN RAISE EXCEPTION 'source fractional seconds reproduction'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_validator(ARRAY['09:00:00.2'::time]) IS DISTINCT FROM false THEN RAISE EXCEPTION 'strict fractional seconds'; END IF;test_count:=test_count+1;
+            IF ('10:00'::time = ANY(ARRAY['09:00'::time,NULL])) IS NOT NULL THEN RAISE EXCEPTION 'ANY UNKNOWN'; END IF;test_count:=test_count+1;
+            IF (NOT ('10:00'::time = ANY(ARRAY['09:00'::time,NULL]))) IS NOT NULL THEN RAISE EXCEPTION 'NOT UNKNOWN'; END IF;test_count:=test_count+1;
+            IF COALESCE('10:00'::time = ANY(ARRAY['09:00'::time,NULL]),false) IS DISTINCT FROM false THEN RAISE EXCEPTION 'ANY fail closed'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.source_start_allowed('fixed_times',30,'09:00',ARRAY['09:00'::time,NULL],'10:00') IS NOT NULL THEN RAISE EXCEPTION 'original function leaked unknown'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('fixed_times',30,'09:00',ARRAY['09:00'::time,NULL],'10:00') IS DISTINCT FROM false THEN RAISE EXCEPTION 'strict membership fail closed'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('fixed_times',30,'09:00',ARRAY['09:00'::time],'09:00') IS DISTINCT FROM true THEN RAISE EXCEPTION 'strict legitimate membership'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('fixed_times',30,'09:00',ARRAY['09:00'::time],'10:00') IS DISTINCT FROM false THEN RAISE EXCEPTION 'strict unmatched'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('fixed_times',30,'09:00','{}'::time[],'09:00') IS DISTINCT FROM false THEN RAISE EXCEPTION 'strict empty fixed'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.source_start_allowed('interval',150,'09:00','{}'::time[],'09:00') IS DISTINCT FROM false THEN RAISE EXCEPTION 'source 150 bug'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('interval',150,'09:00','{}'::time[],'09:00') IS DISTINCT FROM true THEN RAISE EXCEPTION '150 anchor'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('interval',150,'09:00','{}'::time[],'10:00') IS DISTINCT FROM false THEN RAISE EXCEPTION '150 nonmember'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('interval',150,'09:00','{}'::time[],'11:30') IS DISTINCT FROM true THEN RAISE EXCEPTION '150 member'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('interval',60,'09:00','{}'::time[],'09:30') IS DISTINCT FROM false THEN RAISE EXCEPTION '60 gap'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('interval',60,'09:00','{}'::time[],'10:00') IS DISTINCT FROM true THEN RAISE EXCEPTION '60 member'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('interval',30,'09:00','{}'::time[],'09:00:00.2') IS DISTINCT FROM false THEN RAISE EXCEPTION 'subsecond start'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.source_start_allowed('interval',30,'09:00','{}'::time[],'09:00:00.2') IS DISTINCT FROM true THEN RAISE EXCEPTION 'source accepted subsecond'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('interval',30,'09:00','{}'::time[],'09:15') IS DISTINCT FROM false THEN RAISE EXCEPTION '15 minute start'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('interval',0,'09:00','{}'::time[],'09:00') IS DISTINCT FROM false THEN RAISE EXCEPTION 'bad interval'; END IF;test_count:=test_count+1;
+            IF qa_r32ax.strict_start_allowed('nonsense',30,'09:00','{}'::time[],'09:00') IS DISTINCT FROM false THEN RAISE EXCEPTION 'bad mode'; END IF;test_count:=test_count+1;
+            -- PL/pgSQL IF executes only for TRUE. Original NOT UNKNOWN does NOT execute guard.
+            IF NOT qa_r32ax.source_start_allowed('fixed_times',30,'09:00',ARRAY['09:00'::time,NULL],'10:00') THEN
+              RAISE EXCEPTION 'unexpected original trigger RAISE';
+            END IF; test_count:=test_count+1;
+            IF NOT COALESCE(qa_r32ax.strict_start_allowed('fixed_times',30,'09:00',ARRAY['09:00'::time,NULL],'10:00'),false) THEN
+              test_count:=test_count+1;
+            ELSE RAISE EXCEPTION 'strict trigger fails to reject'; END IF;
+            -- Count rows that should be protected by schedule logic, using each daily 30-min slot.
+            n:=0;
+            FOR iv IN 30..720 BY 30 LOOP
+              FOREACH a IN ARRAY ARRAY['00:00'::time,'09:00'::time,'23:30'::time] LOOP
+                FOR k IN 0..47 LOOP
+                  t := '00:00'::time+make_interval(mins=>k*30);
+                  IF qa_r32ax.strict_start_allowed('interval',iv,a,'{}'::time[],t)
+                       IS DISTINCT FROM (mod(mod((k*30)-(extract(hour from a)::int*60+extract(minute from a)::int),iv)+iv,iv)=0)
+                  THEN RAISE EXCEPTION 'interval grid: %, %, %',iv,a,t; END IF;
+                  n:=n+1;
+                END LOOP;
+              END LOOP;
+            END LOOP;
+            IF n<>3456 THEN RAISE EXCEPTION 'missing interval matrix'; END IF;
+            RAISE NOTICE 'R32AX % standalone PostgreSQL assertions + % plan grids PASS; production DB untouched',test_count,n;
+          END;
+          $test$;
+          SELECT 'R32AX_DISPOSABLE_PG17_PASS_NO_LIVE_DATA' AS result;
+          R32AX_EOF
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/r32ax_disposable.sql
