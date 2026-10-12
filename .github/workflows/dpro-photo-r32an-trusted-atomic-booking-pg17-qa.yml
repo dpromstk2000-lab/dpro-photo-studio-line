@@ -1,0 +1,141 @@
+name: DPRO PHOTO R32AN Trusted Atomic Booking PG17 QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-booking-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres17:
+        image: postgres:17
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: qa_local_only
+          POSTGRES_DB: dpro_photo_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qa -d dpro_photo_qa"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      PGPASSWORD: qa_local_only
+    steps:
+      - name: Install isolated PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+      - name: Build synthetic SQL from workflow fixture
+        run: |
+          cat > /tmp/r32an.sql <<'R32AN_SQL_EOF'
+          -- R32AN DISPOSABLE PG17 QA. Synthetic qa_* objects ONLY. NEVER RUN IN SHARED/PRODUCTION SUPABASE.
+          \set ON_ERROR_STOP on
+          CREATE TABLE qa_principals(principal_id text PRIMARY KEY,studio_id text NOT NULL,customer_id text NOT NULL,verified bool NOT NULL,channel text NOT NULL);
+          CREATE TABLE qa_plans(studio_id text NOT NULL,code text NOT NULL,active bool NOT NULL,duration_minutes int NOT NULL,PRIMARY KEY(studio_id,code));
+          CREATE TABLE qa_customers(studio_id text NOT NULL,id text NOT NULL,PRIMARY KEY(studio_id,id));
+          CREATE TABLE qa_subjects(studio_id text NOT NULL,id text NOT NULL,customer_id text NOT NULL,active bool NOT NULL,PRIMARY KEY(studio_id,id),FOREIGN KEY(studio_id,customer_id) REFERENCES qa_customers(studio_id,id));
+          CREATE TABLE qa_option_catalog(studio_id text NOT NULL,code text NOT NULL,name text NOT NULL,price numeric(12,2) NOT NULL CHECK(price>=0),active bool NOT NULL,PRIMARY KEY(studio_id,code));
+          CREATE TABLE qa_reservations(studio_id text NOT NULL,id text NOT NULL,customer_id text NOT NULL,plan_code text NOT NULL,source text NOT NULL,start_at timestamptz NOT NULL,PRIMARY KEY(studio_id,id),FOREIGN KEY(studio_id,customer_id) REFERENCES qa_customers(studio_id,id),FOREIGN KEY(studio_id,plan_code) REFERENCES qa_plans(studio_id,code));
+          CREATE TABLE qa_reservation_subjects(studio_id text NOT NULL,reservation_id text NOT NULL,subject_id text NOT NULL,PRIMARY KEY(studio_id,reservation_id,subject_id),FOREIGN KEY(studio_id,reservation_id) REFERENCES qa_reservations(studio_id,id),FOREIGN KEY(studio_id,subject_id) REFERENCES qa_subjects(studio_id,id));
+          CREATE TABLE qa_reservation_options(studio_id text NOT NULL,reservation_id text NOT NULL,option_code text NOT NULL,option_name_snapshot text NOT NULL,price_display numeric(12,2) NOT NULL,quantity int NOT NULL CHECK(quantity BETWEEN 1 AND 99),PRIMARY KEY(studio_id,reservation_id,option_code),FOREIGN KEY(studio_id,reservation_id) REFERENCES qa_reservations(studio_id,id));
+          CREATE TABLE qa_intake_answers(studio_id text NOT NULL,reservation_id text NOT NULL,confirmed_at timestamptz NULL,PRIMARY KEY(studio_id,reservation_id),FOREIGN KEY(studio_id,reservation_id) REFERENCES qa_reservations(studio_id,id));
+          CREATE TABLE qa_tasks(studio_id text NOT NULL,reservation_id text NOT NULL,task_key text NOT NULL,PRIMARY KEY(studio_id,reservation_id,task_key),FOREIGN KEY(studio_id,reservation_id) REFERENCES qa_reservations(studio_id,id));
+          INSERT INTO qa_customers VALUES ('studio-A','customer-A'),('studio-A','customer-A2'),('studio-B','customer-B');
+          INSERT INTO qa_principals VALUES ('line-A','studio-A','customer-A',true,'verified_line'),('owner-A','studio-A','customer-A',true,'verified_owner'),('line-B','studio-B','customer-B',true,'verified_line'),('guest-A','studio-A','customer-A',false,'guest');
+          INSERT INTO qa_plans VALUES ('studio-A','plan-A',true,60),('studio-B','plan-B',true,60),('studio-A','plan-inactive',false,60);
+          INSERT INTO qa_subjects VALUES ('studio-A','subject-A','customer-A',true),('studio-A','subject-A2','customer-A2',true),('studio-B','subject-B','customer-B',true);
+          INSERT INTO qa_option_catalog VALUES ('studio-A','option-A','店舗設定オプション',350.00,true),('studio-B','option-B','別店舗オプション',999.00,true),('studio-A','option-off','無効なオプション',100.00,false);
+          
+          -- Synthetic trusted caller. In real production, verified principal must be server-bound; this SQL function is NOT a deployable public RPC.
+          CREATE FUNCTION qa_book(
+            p_principal_id text,p_studio text,p_reservation text,p_plan text,p_subject text,
+            p_option text,p_quantity int,p_client_price numeric,p_claimed_customer text DEFAULT NULL,p_inject_fail text DEFAULT NULL
+          ) RETURNS text LANGUAGE plpgsql AS $$
+          DECLARE a qa_principals%ROWTYPE; c qa_option_catalog%ROWTYPE; src text;
+          BEGIN
+            SELECT * INTO a FROM qa_principals WHERE principal_id=p_principal_id AND verified=true AND studio_id=p_studio;
+            IF NOT FOUND OR a.channel NOT IN ('verified_line','verified_owner') THEN RAISE EXCEPTION 'UNVERIFIED_PRINCIPAL_OR_STUDIO'; END IF;
+            IF p_claimed_customer IS NOT NULL THEN RAISE EXCEPTION 'UNTRUSTED_CUSTOMER_ID_DENIED'; END IF;
+            IF NOT EXISTS(SELECT 1 FROM qa_plans WHERE studio_id=p_studio AND code=p_plan AND active) THEN RAISE EXCEPTION 'PLAN_UNAUTHORIZED'; END IF;
+            IF NOT EXISTS(SELECT 1 FROM qa_subjects WHERE studio_id=p_studio AND id=p_subject AND customer_id=a.customer_id AND active) THEN RAISE EXCEPTION 'SUBJECT_CUSTOMER_MISMATCH'; END IF;
+            SELECT * INTO c FROM qa_option_catalog WHERE studio_id=p_studio AND code=p_option AND active;
+            IF NOT FOUND THEN RAISE EXCEPTION 'OPTION_CATALOG_UNAUTHORIZED'; END IF;
+            IF p_quantity IS NULL OR p_quantity NOT BETWEEN 1 AND 99 THEN RAISE EXCEPTION 'QUANTITY_INVALID'; END IF;
+            src := CASE WHEN a.channel='verified_line' THEN 'line' ELSE 'admin' END;
+            INSERT INTO qa_reservations VALUES(p_studio,p_reservation,a.customer_id,p_plan,src,'2026-10-15 10:00:00+09');
+            IF p_inject_fail='reservation' THEN RAISE EXCEPTION 'INJECTED_FAIL_RESERVATION'; END IF;
+            INSERT INTO qa_reservation_subjects VALUES(p_studio,p_reservation,p_subject);
+            IF p_inject_fail='subjects' THEN RAISE EXCEPTION 'INJECTED_FAIL_SUBJECTS'; END IF;
+            INSERT INTO qa_reservation_options VALUES(p_studio,p_reservation,c.code,c.name,c.price,p_quantity);
+            IF p_inject_fail='options' THEN RAISE EXCEPTION 'INJECTED_FAIL_OPTIONS'; END IF;
+            INSERT INTO qa_intake_answers VALUES(p_studio,p_reservation,NULL);
+            IF p_inject_fail='intake' THEN RAISE EXCEPTION 'INJECTED_FAIL_INTAKE'; END IF;
+            INSERT INTO qa_tasks VALUES(p_studio,p_reservation,'confirm');
+            IF p_inject_fail='tasks' THEN RAISE EXCEPTION 'INJECTED_FAIL_TASKS'; END IF;
+            RETURN p_reservation;
+          END $$;
+          
+          -- Positive case: catalog-owned price 350 is used even when requester submits 1.
+          SELECT qa_book('line-A','studio-A','booking-ok','plan-A','subject-A','option-A',2,1,NULL,NULL) AS successful_booking;
+          DO $$BEGIN
+           IF (SELECT count(*) FROM qa_reservations WHERE id='booking-ok')<>1 THEN RAISE EXCEPTION 'FAIL successful reservation missing'; END IF;
+           IF (SELECT customer_id FROM qa_reservations WHERE id='booking-ok')<>'customer-A' THEN RAISE EXCEPTION 'FAIL principal customer not authoritative'; END IF;
+           IF (SELECT source FROM qa_reservations WHERE id='booking-ok')<>'line' THEN RAISE EXCEPTION 'FAIL source incorrect'; END IF;
+           IF (SELECT price_display FROM qa_reservation_options WHERE reservation_id='booking-ok')<>350 THEN RAISE EXCEPTION 'FAIL client-supplied price used'; END IF;
+           IF (SELECT option_name_snapshot FROM qa_reservation_options WHERE reservation_id='booking-ok')<>'店舗設定オプション' THEN RAISE EXCEPTION 'FAIL client option name used'; END IF;
+           IF (SELECT count(*) FROM qa_reservation_subjects WHERE reservation_id='booking-ok')<>1 OR (SELECT count(*) FROM qa_reservation_options WHERE reservation_id='booking-ok')<>1 OR (SELECT count(*) FROM qa_intake_answers WHERE reservation_id='booking-ok')<>1 OR (SELECT count(*) FROM qa_tasks WHERE reservation_id='booking-ok')<>1 THEN RAISE EXCEPTION 'FAIL partial booking'; END IF;
+           IF (SELECT confirmed_at FROM qa_intake_answers WHERE reservation_id='booking-ok') IS NOT NULL THEN RAISE EXCEPTION 'FAIL unverified confirmation'; END IF;
+           RAISE NOTICE 'PASS: trusted principal, server catalog price and name, entire booking record, unconfirmed intake';
+          END$$;
+          -- Negative tests: catch each expected rejection inside a PLpgSQL subtransaction, preserving previous successful booking.
+          CREATE FUNCTION qa_expect_reject(p_case text,p_principal text,p_studio text,p_reservation text,p_plan text,p_subject text,p_option text,p_qty int,p_claimed text DEFAULT NULL,p_fail text DEFAULT NULL)
+          RETURNS void LANGUAGE plpgsql AS $$
+          DECLARE msg text;
+          BEGIN
+            BEGIN
+              PERFORM qa_book(p_principal,p_studio,p_reservation,p_plan,p_subject,p_option,p_qty,0,p_claimed,p_fail);
+              RAISE EXCEPTION 'TEST_UNEXPECTED_ACCEPT_%', p_case;
+            EXCEPTION WHEN OTHERS THEN
+              GET STACKED DIAGNOSTICS msg=MESSAGE_TEXT;
+              IF msg LIKE 'TEST_UNEXPECTED_ACCEPT_%' THEN RAISE; END IF;
+            END;
+            IF EXISTS(SELECT 1 FROM qa_reservations WHERE id=p_reservation)
+            OR EXISTS(SELECT 1 FROM qa_reservation_subjects WHERE reservation_id=p_reservation)
+            OR EXISTS(SELECT 1 FROM qa_reservation_options WHERE reservation_id=p_reservation)
+            OR EXISTS(SELECT 1 FROM qa_intake_answers WHERE reservation_id=p_reservation)
+            OR EXISTS(SELECT 1 FROM qa_tasks WHERE reservation_id=p_reservation) THEN
+              RAISE EXCEPTION 'FAIL partial write persisted: %',p_case;
+            END IF;
+            RAISE NOTICE 'PASS: % rejected without partial writes',p_case;
+          END$$;
+          SELECT qa_expect_reject('guest principal','guest-A','studio-A','booking-guest','plan-A','subject-A','option-A',1);
+          SELECT qa_expect_reject('other tenant principal','line-A','studio-B','booking-tenant','plan-B','subject-B','option-B',1);
+          SELECT qa_expect_reject('wrong customer from body','line-A','studio-A','booking-claimed','plan-A','subject-A','option-A',1,'customer-A2');
+          SELECT qa_expect_reject('cross customer subject same studio','line-A','studio-A','booking-cross-customer','plan-A','subject-A2','option-A',1);
+          SELECT qa_expect_reject('cross studio subject','line-A','studio-A','booking-cross-studio','plan-A','subject-B','option-A',1);
+          SELECT qa_expect_reject('foreign plan','line-A','studio-A','booking-plan','plan-B','subject-A','option-A',1);
+          SELECT qa_expect_reject('inactive plan','line-A','studio-A','booking-inactive-plan','plan-inactive','subject-A','option-A',1);
+          SELECT qa_expect_reject('foreign option','line-A','studio-A','booking-option','plan-A','subject-A','option-B',1);
+          SELECT qa_expect_reject('inactive option','line-A','studio-A','booking-inactive-option','plan-A','subject-A','option-off',1);
+          SELECT qa_expect_reject('zero quantity','line-A','studio-A','booking-qty','plan-A','subject-A','option-A',0);
+          SELECT qa_expect_reject('stage reservation rollback','line-A','studio-A','booking-rollback-res','plan-A','subject-A','option-A',1,NULL,'reservation');
+          SELECT qa_expect_reject('stage subjects rollback','line-A','studio-A','booking-rollback-sub','plan-A','subject-A','option-A',1,NULL,'subjects');
+          SELECT qa_expect_reject('stage options rollback','line-A','studio-A','booking-rollback-opt','plan-A','subject-A','option-A',1,NULL,'options');
+          SELECT qa_expect_reject('stage intake rollback','line-A','studio-A','booking-rollback-intake','plan-A','subject-A','option-A',1,NULL,'intake');
+          SELECT qa_expect_reject('stage tasks rollback','line-A','studio-A','booking-rollback-tasks','plan-A','subject-A','option-A',1,NULL,'tasks');
+          -- owner path retained in same trusted scope
+          SELECT qa_book('owner-A','studio-A','booking-owner','plan-A','subject-A','option-A',1,1,NULL,NULL) AS owner_booking;
+          DO $$BEGIN
+           IF (SELECT source FROM qa_reservations WHERE id='booking-owner')<>'admin' THEN RAISE EXCEPTION 'FAIL owner booking channel'; END IF;
+           RAISE NOTICE 'PASS: verified owner creates admin-source reservation in own studio';
+          END$$;
+          -- Validation is synthetically testable, but this is not an actual photo_* schema or production authentication boundary.
+          SELECT 'R32AN DISPOSABLE PG17 TRUSTED ATOMIC BOOKING CONTRACT PASS (NOT PRODUCTION)' AS outcome;
+          R32AN_SQL_EOF
+      - name: PostgreSQL 17 disposable trusted booking atomicity QA
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -p 5432 -U qa -d dpro_photo_qa -v ON_ERROR_STOP=1 -f /tmp/r32an.sql
