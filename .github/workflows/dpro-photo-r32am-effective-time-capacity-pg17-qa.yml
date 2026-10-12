@@ -1,0 +1,156 @@
+# No production systems. Synthetic disposable PostgreSQL17 only. Never use this SQL against Supabase.
+name: DPRO PHOTO R32AM Effective Time Capacity PG17 QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-effective-time:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: qa_disposable_only
+          POSTGRES_DB: dpro_photo_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qa -d dpro_photo_qa"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Build synthetic disposable SQL
+        shell: bash
+        run: |
+          cat > /tmp/r32am.sql <<'R32AM_PG17_DISPOSABLE_ONLY'
+          -- REVIEW ONLY: disposable ephemeral PostgreSQL 17 for GitHub QA. NOT real DPRO tables. NEVER production.
+          \set ON_ERROR_STOP on
+          CREATE TABLE qa_studio_resource (studio_id text NOT NULL,resource_id text NOT NULL,capacity int NOT NULL,PRIMARY KEY(studio_id,resource_id));
+          INSERT INTO qa_studio_resource VALUES ('A','multi',2),('A','single',1),('B','single',1);
+          CREATE TABLE qa_reservations (
+            id integer PRIMARY KEY,studio_id text NOT NULL,resource_id text NOT NULL,
+            start_at timestamptz NOT NULL,end_at timestamptz, duration_minutes int NOT NULL,
+            reservation_status text NOT NULL DEFAULT 'confirmed'
+          );
+          CREATE TABLE qa_queues(id int PRIMARY KEY,revision int NOT NULL DEFAULT 0);
+          CREATE FUNCTION qa_prepare() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            NEW.end_at:=NEW.start_at+make_interval(mins=>NEW.duration_minutes);
+            IF NEW.duration_minutes <=0 OR NEW.duration_minutes%30<>0 THEN RAISE EXCEPTION 'INVALID_DURATION'; END IF;
+            RETURN NEW;
+          END $$;
+          CREATE TRIGGER qa_prepare_insert_update BEFORE INSERT OR UPDATE ON qa_reservations FOR EACH ROW EXECUTE FUNCTION qa_prepare();
+          CREATE FUNCTION qa_capacity() RETURNS trigger LANGUAGE plpgsql AS $$
+          DECLARE c int; peak int; 
+          BEGIN
+           IF NEW.reservation_status IN ('cancelled','no_show') THEN RETURN NEW; END IF;
+           SELECT capacity INTO c FROM qa_studio_resource WHERE studio_id=NEW.studio_id AND resource_id=NEW.resource_id;
+           IF c IS NULL THEN RAISE EXCEPTION 'RESOURCE_UNAVAILABLE'; END IF;
+           PERFORM pg_advisory_xact_lock(hashtextextended(NEW.studio_id||':'||NEW.resource_id,0));
+           WITH existing AS (
+            SELECT x.start_at,x.end_at FROM qa_reservations x
+            WHERE x.studio_id=NEW.studio_id AND x.resource_id=NEW.resource_id AND x.id<>NEW.id
+              AND x.reservation_status NOT IN ('cancelled','no_show')
+              AND tstzrange(x.start_at,x.end_at,'[)') && tstzrange(NEW.start_at,NEW.end_at,'[)')
+           ), starts AS (
+            SELECT NEW.start_at AS t
+            UNION
+            SELECT greatest(x.start_at,NEW.start_at) AS t FROM existing x
+           )
+           SELECT coalesce(max((SELECT count(*) FROM existing y WHERE y.start_at<=s.t AND y.end_at>s.t)),0)::integer INTO peak
+           FROM starts s;
+           IF peak >= c THEN RAISE EXCEPTION 'RESOURCE_CAPACITY_EXCEEDED'; END IF;
+           RETURN NEW;
+          END $$;
+          CREATE TRIGGER qa_capacity_insert AFTER INSERT ON qa_reservations FOR EACH ROW EXECUTE FUNCTION qa_capacity();
+          -- Critical difference: no "UPDATE OF start_at,end_at..." column filter.
+          CREATE TRIGGER qa_capacity_update AFTER UPDATE ON qa_reservations FOR EACH ROW WHEN (
+           OLD.start_at IS DISTINCT FROM NEW.start_at OR OLD.end_at IS DISTINCT FROM NEW.end_at OR
+           OLD.resource_id IS DISTINCT FROM NEW.resource_id OR OLD.studio_id IS DISTINCT FROM NEW.studio_id OR
+           OLD.reservation_status IS DISTINCT FROM NEW.reservation_status
+          ) EXECUTE FUNCTION qa_capacity();
+          CREATE FUNCTION qa_enqueue() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+           INSERT INTO qa_queues(id,revision) VALUES(NEW.id,1)
+           ON CONFLICT(id) DO UPDATE SET revision=qa_queues.revision+1;
+           RETURN NEW;
+          END $$;
+          CREATE TRIGGER qa_enqueue_insert AFTER INSERT ON qa_reservations FOR EACH ROW EXECUTE FUNCTION qa_enqueue();
+          CREATE TRIGGER qa_enqueue_update AFTER UPDATE ON qa_reservations FOR EACH ROW WHEN(
+           OLD.start_at IS DISTINCT FROM NEW.start_at OR OLD.end_at IS DISTINCT FROM NEW.end_at OR
+           OLD.reservation_status IS DISTINCT FROM NEW.reservation_status OR OLD.resource_id IS DISTINCT FROM NEW.resource_id
+          ) EXECUTE FUNCTION qa_enqueue();
+          -- 1. Back-to-back existing overlaps should NOT cause false capacity exceed.
+          INSERT INTO qa_reservations(id,studio_id,resource_id,start_at,duration_minutes) VALUES
+           (1,'A','multi','2026-10-12 09:00+09',60),(2,'A','multi','2026-10-12 10:00+09',60);
+          DO $$ DECLARE n int; BEGIN
+           SELECT count(*) INTO n FROM qa_reservations WHERE studio_id='A' AND resource_id='multi' AND id IN (1,2)
+           AND tstzrange(start_at,end_at,'[)') && tstzrange('2026-10-12 09:00+09'::timestamptz,'2026-10-12 11:00+09'::timestamptz,'[)');
+           IF n<>2 THEN RAISE EXCEPTION 'SETUP_FALSE_REJECTION'; END IF;
+           RAISE NOTICE 'PASS: naive whole-window overlap count is 2 despite peak concurrent usage 1'; END $$;
+          INSERT INTO qa_reservations(id,studio_id,resource_id,start_at,duration_minutes) VALUES (3,'A','multi','2026-10-12 09:00+09',120);
+          DO $$ BEGIN IF (SELECT count(*) FROM qa_reservations WHERE id=3)<>1 THEN RAISE EXCEPTION 'EXPECTED_BOOKING_MISSING';END IF;
+           RAISE NOTICE 'PASS: candidate fits actual capacity 2 across consecutive bookings'; END $$;
+          -- 2. Candidate peaking 3 at one instant must be rejected.
+          DO $$ BEGIN
+           BEGIN INSERT INTO qa_reservations(id,studio_id,resource_id,start_at,duration_minutes)
+           VALUES(4,'A','multi','2026-10-12 09:30+09',60);
+           RAISE EXCEPTION 'FALSE_PASS_OVER_CAP';
+           EXCEPTION WHEN raise_exception THEN
+            IF SQLERRM<>'RESOURCE_CAPACITY_EXCEEDED' THEN RAISE; END IF;
+            RAISE NOTICE 'PASS: overlapping third group correctly rejected';
+           END;
+          END $$;
+          -- 3. Single-capacity case and duration-only update DB-derived end.
+          INSERT INTO qa_reservations(id,studio_id,resource_id,start_at,duration_minutes) VALUES
+           (5,'A','single','2026-10-12 11:00+09',60),(6,'A','single','2026-10-12 10:00+09',60);
+          DO $$BEGIN
+           BEGIN UPDATE qa_reservations SET duration_minutes=120 WHERE id=6;
+           RAISE EXCEPTION 'FALSE_PASS_DURATION_GAP';
+           EXCEPTION WHEN raise_exception THEN
+            IF SQLERRM<>'RESOURCE_CAPACITY_EXCEEDED' THEN RAISE;END IF;
+            RAISE NOTICE 'PASS: duration-only update invokes capacity check for calculated end_at';
+           END;
+          END $$;
+          DO $$ BEGIN
+           IF (SELECT duration_minutes FROM qa_reservations WHERE id=6)<>60 THEN RAISE EXCEPTION 'FAILED_UPDATE_NOT_ROLLED_BACK';END IF;
+           RAISE NOTICE 'PASS: rejected duration-only update leaves prior booking intact';END $$;
+          -- 4. Legitimate duration extension queues once even though caller did not name end_at.
+          UPDATE qa_reservations SET duration_minutes=90 WHERE id=5;
+          DO $$ BEGIN
+           IF (SELECT revision FROM qa_queues WHERE id=5)<>2 THEN RAISE EXCEPTION 'NO_REQUEUE_DERIVED_END';END IF;
+           IF (SELECT end_at FROM qa_reservations WHERE id=5)<>'2026-10-12 12:30+09'::timestamptz THEN RAISE EXCEPTION 'DERIVED_END_BAD';END IF;
+           RAISE NOTICE 'PASS: duration-only update requeues calendar after BEFORE-derived end_at';END $$;
+          -- 5. Cancellation frees capacity and still requeues to delete remote event.
+          UPDATE qa_reservations SET reservation_status='cancelled' WHERE id=5;
+          DO $$ BEGIN
+           IF (SELECT revision FROM qa_queues WHERE id=5)<>3 THEN RAISE EXCEPTION 'CANCEL_NO_QUEUE';END IF;
+           RAISE NOTICE 'PASS: cancelled booking requeued';END $$;
+          INSERT INTO qa_reservations(id,studio_id,resource_id,start_at,duration_minutes) VALUES (7,'A','single','2026-10-12 11:00+09',60);
+          DO $$ BEGIN
+           BEGIN UPDATE qa_reservations SET reservation_status='confirmed' WHERE id=5;
+           RAISE EXCEPTION 'FALSE_PASS_REACTIVATION';
+           EXCEPTION WHEN raise_exception THEN
+            IF SQLERRM<>'RESOURCE_CAPACITY_EXCEEDED' THEN RAISE;END IF;
+            RAISE NOTICE 'PASS: cancelled booking reactivation blocked when capacity filled';
+           END;
+          END $$;
+          -- 6. Strict studio partition, same time in studio B unaffected.
+          INSERT INTO qa_reservations(id,studio_id,resource_id,start_at,duration_minutes) VALUES (8,'B','single','2026-10-12 11:00+09',60);
+          DO $$BEGIN IF (SELECT count(*) FROM qa_reservations WHERE id=8)<>1 THEN RAISE EXCEPTION 'CROSS_STUDIO_FALSE_CONFLICT';END IF;
+           RAISE NOTICE 'PASS: capacity scoped per studio and resource';END $$;
+          SELECT 'R32AM DISPOSABLE PG17 EFFECTIVE ROW CAPACITY+QUEUE CONTRACT PASS (not production)' AS outcome;
+          R32AM_PG17_DISPOSABLE_ONLY
+      - name: PostgreSQL 17 effective-row capacity and queue QA
+        shell: bash
+        env:
+          PGPASSWORD: qa_disposable_only
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -p 5432 -U qa -d dpro_photo_qa -X -v ON_ERROR_STOP=1 -f /tmp/r32am.sql
