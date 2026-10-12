@@ -1,0 +1,346 @@
+name: DPRO PHOTO R32AZ Exact Live-Definition Parity Disposable PG17 QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-postgresql17:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: qauser
+          POSTGRES_PASSWORD: qa-local-only
+          POSTGRES_DB: qa_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qauser -d qa_disposable"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: qauser
+      PGPASSWORD: qa-local-only
+      PGDATABASE: qa_disposable
+    steps:
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+      - name: Exact original and candidate real PostgreSQL17 checks (only disposable DB)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/r32az_disposable.sql <<'DPRO_PHOTO_R32AZ_SQL'
+          \set ON_ERROR_STOP on
+          \echo === R32AZ disposable PostgreSQL17: exact original SQL vs candidate ===
+          SET client_min_messages = notice;
+          SET TIME ZONE 'UTC';
+          -- TRUE BASELINE: exact two original function bodies, copied from actual catalog (read only).
+          CREATE OR REPLACE FUNCTION public.photo_booking_start_times_valid(p_times time without time zone[])
+           RETURNS boolean
+           LANGUAGE sql
+           IMMUTABLE
+          AS $function$
+            select coalesce(bool_and(
+              extract(second from t)::integer = 0
+              and extract(minute from t)::integer in (0,30)
+            ), true)
+            from unnest(coalesce(p_times, '{}'::time without time zone[])) as t
+          $function$;
+          
+          CREATE OR REPLACE FUNCTION public.photo_plan_start_allowed(p_mode text, p_interval integer, p_anchor time without time zone, p_times time without time zone[], p_start time without time zone)
+           RETURNS boolean
+           LANGUAGE plpgsql
+           IMMUTABLE
+          AS $function$
+          declare
+            v_start_minutes integer;
+            v_anchor_minutes integer;
+          begin
+            if p_start is null then
+              return false;
+            end if;
+          
+            if extract(second from p_start)::integer <> 0
+               or extract(minute from p_start)::integer not in (0,30) then
+              return false;
+            end if;
+          
+            if coalesce(p_mode,'interval')='fixed_times' then
+              return p_start = any(coalesce(p_times,'{}'::time without time zone[]));
+            end if;
+          
+            v_start_minutes :=
+              extract(hour from p_start)::integer*60
+              + extract(minute from p_start)::integer;
+          
+            v_anchor_minutes :=
+              extract(hour from coalesce(p_anchor,'00:00'::time))::integer*60
+              + extract(minute from coalesce(p_anchor,'00:00'::time))::integer;
+          
+            return mod(
+              (v_start_minutes - v_anchor_minutes + 1440),
+              greatest(30,coalesce(p_interval,30))
+            ) = 0;
+          end;
+          $function$;
+          
+          DO $baseline$
+          DECLARE z boolean;
+          BEGIN
+           IF public.photo_booking_start_times_valid(ARRAY[NULL::time]) IS DISTINCT FROM TRUE THEN
+             RAISE EXCEPTION 'baseline NULL array reproduction failed';
+           END IF;
+           IF public.photo_booking_start_times_valid(ARRAY[time '09:00', NULL::time]) IS DISTINCT FROM TRUE THEN
+             RAISE EXCEPTION 'baseline mixed NULL reproduction failed';
+           END IF;
+           z := public.photo_plan_start_allowed('fixed_times',30,time '09:00', ARRAY[time '09:00',NULL::time],time '09:30');
+           IF z IS NOT NULL THEN RAISE EXCEPTION 'baseline tri-valued-logic reproduction failed: %',z; END IF;
+           IF public.photo_plan_start_allowed('interval',150,time '09:00','{}'::time[],time '09:00') IS DISTINCT FROM FALSE THEN
+             RAISE EXCEPTION 'baseline +1440 drift not reproduced';
+           END IF;
+           IF public.photo_booking_start_times_valid(ARRAY[time '09:00:00.20']) IS DISTINCT FROM TRUE THEN
+             RAISE EXCEPTION 'baseline fractional-second bypass not reproduced';
+           END IF;
+           RAISE NOTICE 'BASELINE 5/5 original defects reproduced';
+          END;
+          $baseline$;
+          
+          -- CANDIDATE: same real function names/signatures, inside disposable PostgreSQL only.
+          CREATE OR REPLACE FUNCTION public.photo_booking_start_times_valid(p_times time without time zone[])
+          RETURNS boolean
+          LANGUAGE sql
+          IMMUTABLE
+          AS $r32az$
+            SELECT CASE
+              WHEN p_times IS NULL THEN FALSE
+              ELSE COALESCE((
+                SELECT bool_and(
+                  t IS NOT NULL
+                  AND EXTRACT(second FROM t) = 0
+                  AND EXTRACT(minute FROM t) IN (0,30)
+                )
+                FROM unnest(p_times) AS q(t)
+              ), TRUE)
+            END
+          $r32az$;
+          
+          CREATE OR REPLACE FUNCTION public.photo_plan_start_allowed(
+            p_mode text, p_interval integer, p_anchor time without time zone,
+            p_times time without time zone[], p_start time without time zone)
+          RETURNS boolean
+          LANGUAGE plpgsql
+          IMMUTABLE
+          AS $r32az$
+          DECLARE
+            v_interval integer;
+            v_anchor time without time zone;
+            v_start_minutes integer;
+            v_anchor_minutes integer;
+          BEGIN
+            IF p_start IS NULL OR EXTRACT(second FROM p_start) <> 0
+               OR EXTRACT(minute FROM p_start) NOT IN (0,30) THEN
+              RETURN FALSE;
+            END IF;
+          
+            IF COALESCE(p_mode,'interval') = 'fixed_times' THEN
+              RETURN COALESCE(
+                p_times IS NOT NULL
+                AND array_ndims(p_times) = 1
+                AND cardinality(p_times) BETWEEN 1 AND 48
+                AND public.photo_booking_start_times_valid(p_times) IS TRUE
+                AND p_start = ANY(p_times), FALSE
+              );
+            END IF;
+          
+            IF COALESCE(p_mode,'interval') <> 'interval' THEN
+              RETURN FALSE;
+            END IF;
+          
+            v_interval := COALESCE(p_interval, 30);
+            v_anchor := COALESCE(p_anchor, time '00:00');
+            IF v_interval NOT BETWEEN 30 AND 720 OR mod(v_interval,30) <> 0
+               OR EXTRACT(second FROM v_anchor) <> 0
+               OR EXTRACT(minute FROM v_anchor) NOT IN (0,30) THEN
+              RETURN FALSE;
+            END IF;
+          
+            v_start_minutes := EXTRACT(hour FROM p_start)::integer * 60
+              + EXTRACT(minute FROM p_start)::integer;
+            v_anchor_minutes := EXTRACT(hour FROM v_anchor)::integer * 60
+              + EXTRACT(minute FROM v_anchor)::integer;
+            RETURN mod(v_start_minutes - v_anchor_minutes, v_interval) = 0;
+          END;
+          $r32az$;
+          
+          DO $candidate$
+          DECLARE
+            invalids integer := 0;
+            cases_total integer := 0;
+            expected boolean;
+            observed boolean;
+            k record;
+          BEGIN
+           IF public.photo_booking_start_times_valid(ARRAY[NULL::time]) IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'NULL only not blocked'; END IF;
+           IF public.photo_booking_start_times_valid(ARRAY[time '09:00',NULL::time]) IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'mixed NULL not blocked'; END IF;
+           IF public.photo_booking_start_times_valid(ARRAY[time '09:00:00.20']) IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'fractional .20 not blocked'; END IF;
+           IF public.photo_booking_start_times_valid(ARRAY[time '09:00:00.51']) IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'fractional .51 not blocked'; END IF;
+           IF public.photo_booking_start_times_valid(ARRAY[time '09:00:00.000001']) IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'microsecond not blocked'; END IF;
+           IF public.photo_booking_start_times_valid(NULL::time[]) IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'NULL array not blocked'; END IF;
+           IF public.photo_booking_start_times_valid('{}'::time[]) IS DISTINCT FROM TRUE THEN RAISE EXCEPTION 'empty interval-mode array broke'; END IF;
+           IF public.photo_booking_start_times_valid(ARRAY[time '09:00',time '09:30']) IS DISTINCT FROM TRUE THEN RAISE EXCEPTION 'valid array broke'; END IF;
+           IF public.photo_booking_start_times_valid(ARRAY[time '09:15']) IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'quarter hour not blocked'; END IF;
+           IF public.photo_plan_start_allowed('fixed_times',30,time '09:00',ARRAY[time '09:00',NULL::time],time '09:30') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION '3VL fail-closed broken'; END IF;
+           IF public.photo_plan_start_allowed('fixed_times',30,time '09:00',ARRAY[time '09:00',NULL::time],time '09:00') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'invalid mixed NULL array accepted'; END IF;
+           IF public.photo_plan_start_allowed('fixed_times',30,time '09:00',ARRAY[time '09:00'],time '09:00') IS DISTINCT FROM TRUE THEN RAISE EXCEPTION 'valid exact fixed time blocked'; END IF;
+           IF public.photo_plan_start_allowed('fixed_times',30,time '09:00',ARRAY[time '09:00'],time '09:30') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'off-list fixed time accepted'; END IF;
+           IF public.photo_plan_start_allowed('fixed_times',30,time '09:00',ARRAY[[time '09:00',time '09:30']],time '09:00') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'multidim fixed times accepted'; END IF;
+           IF public.photo_plan_start_allowed('fixed_times',30,time '09:00','{}'::time[],time '09:00') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'empty fixed times accepted'; END IF;
+           IF public.photo_plan_start_allowed('fixed_times',30,time '09:00',ARRAY[time '09:00'],time '09:00:00.2') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'fractional start accepted'; END IF;
+           IF public.photo_plan_start_allowed('interval',150,time '09:00','{}'::time[],time '09:00') IS DISTINCT FROM TRUE THEN RAISE EXCEPTION 'interval anchor incorrectly blocked'; END IF;
+           IF public.photo_plan_start_allowed('interval',150,time '09:00','{}'::time[],time '10:00') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'interval off-grid accepted'; END IF;
+           IF public.photo_plan_start_allowed('interval',150,time '09:00','{}'::time[],time '11:30') IS DISTINCT FROM TRUE THEN RAISE EXCEPTION 'interval +150 blocked'; END IF;
+           IF public.photo_plan_start_allowed('interval',29,time '09:00','{}'::time[],time '09:00') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'invalid interval 29 accepted'; END IF;
+           IF public.photo_plan_start_allowed('interval',45,time '09:00','{}'::time[],time '09:00') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'invalid interval 45 accepted'; END IF;
+           IF public.photo_plan_start_allowed('interval',750,time '09:00','{}'::time[],time '09:00') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'invalid interval 750 accepted'; END IF;
+           IF public.photo_plan_start_allowed('interval',60,time '09:00:00.25','{}'::time[],time '09:00') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'fractional anchor accepted'; END IF;
+           IF public.photo_plan_start_allowed('unexpected',30,time '09:00','{}'::time[],time '09:00') IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'unknown mode accepted'; END IF;
+           IF public.photo_plan_start_allowed('interval',30,time '09:00','{}'::time[],NULL::time) IS DISTINCT FROM FALSE THEN RAISE EXCEPTION 'NULL start accepted'; END IF;
+           FOR k IN
+             SELECT gap_minutes, anch, start_tm,
+                 mod(EXTRACT(hour FROM start_tm)::int*60+EXTRACT(minute FROM start_tm)::int
+                   -EXTRACT(hour FROM anch)::int*60-EXTRACT(minute FROM anch)::int, gap_minutes)=0 AS should_allow
+             FROM (
+               SELECT g.gap_minutes,
+                 make_time(a.hr,(a.idx % 2)*30,0) AS anch,
+                 make_time(s.n / 2, (s.n % 2)*30,0) AS start_tm
+               FROM generate_series(30,720,30) AS g(gap_minutes)
+               CROSS JOIN (VALUES(0,0),(1,9),(2,13),(3,17),(4,23)) AS a(idx,hr)
+               CROSS JOIN generate_series(0,47) AS s(n)
+             ) q
+           LOOP
+             observed := public.photo_plan_start_allowed('interval',k.gap_minutes,k.anch,'{}'::time[],k.start_tm);
+             IF observed IS DISTINCT FROM k.should_allow THEN invalids:=invalids+1; END IF;
+             cases_total:=cases_total+1;
+           END LOOP;
+           IF cases_total <> 5760 OR invalids <> 0 THEN RAISE EXCEPTION '5760 grid failed: checked %, mismatch %',cases_total,invalids; END IF;
+           RAISE NOTICE 'CANDIDATE 25 boundary asserts + 5760 real PostgreSQL grid PASS';
+          END;
+          $candidate$;
+          
+          -- Minimal disposable schema to test INSERT/UPDATE and studio-local time gate.
+          CREATE TABLE qa_photo_plan (
+            id int PRIMARY KEY, mode text NOT NULL,
+            gap_minutes int NOT NULL, anchor_tm time NOT NULL,
+            fixed_times time[] NOT NULL, tz text NOT NULL,
+            CONSTRAINT qa_fixed_chk CHECK (
+              cardinality(fixed_times) <= 48
+              AND public.photo_booking_start_times_valid(fixed_times)
+              AND (mode <> 'fixed_times' OR cardinality(fixed_times) > 0)
+            )
+          );
+          CREATE TABLE qa_photo_reservation(
+            id int PRIMARY KEY, plan_id int NOT NULL REFERENCES qa_photo_plan(id),
+            start_at timestamptz NOT NULL
+          );
+          CREATE FUNCTION public.qa_photo_reservation_enforce() RETURNS trigger
+          LANGUAGE plpgsql AS $trigger$
+          DECLARE
+            v_plan qa_photo_plan%rowtype;
+            v_local_tm time without time zone;
+          BEGIN
+           SELECT * INTO STRICT v_plan FROM qa_photo_plan WHERE id=NEW.plan_id;
+           v_local_tm := (NEW.start_at AT TIME ZONE v_plan.tz)::time;
+           IF EXTRACT(second FROM v_local_tm) <> 0 OR EXTRACT(minute FROM v_local_tm) NOT IN (0,30) THEN
+             RAISE EXCEPTION 'R32AZ invalid precision';
+           END IF;
+           IF (TG_OP = 'INSERT' OR NEW.start_at IS DISTINCT FROM OLD.start_at OR NEW.plan_id IS DISTINCT FROM OLD.plan_id)
+              AND public.photo_plan_start_allowed(v_plan.mode,v_plan.gap_minutes,v_plan.anchor_tm,v_plan.fixed_times,v_local_tm) IS NOT TRUE THEN
+             RAISE EXCEPTION 'R32AZ disallowed start';
+           END IF;
+           RETURN NEW;
+          END;
+          $trigger$;
+          CREATE TRIGGER qa_photo_reservation_prepare
+          BEFORE INSERT OR UPDATE ON qa_photo_reservation
+          FOR EACH ROW EXECUTE FUNCTION public.qa_photo_reservation_enforce();
+          
+          DO $triggers$
+          DECLARE blocked boolean;
+          BEGIN
+           INSERT INTO qa_photo_plan VALUES (1,'fixed_times',30,time '09:00',ARRAY[time '09:00'],'Asia/Tokyo');
+           INSERT INTO qa_photo_plan VALUES (2,'interval',150,time '09:00','{}'::time[],'Asia/Tokyo');
+           INSERT INTO qa_photo_plan VALUES (3,'fixed_times',30,time '09:00',ARRAY[time '09:00'],'Asia/Singapore');
+           INSERT INTO qa_photo_plan VALUES (4,'fixed_times',30,time '09:00',ARRAY[time '09:00'],'Asia/Kathmandu');
+           INSERT INTO qa_photo_plan VALUES (5,'fixed_times',30,time '09:00',ARRAY[time '09:00'],'America/New_York');
+           -- 09:00 JST and 09:00 Singapore / Kathmandu / NYC each preserved despite UTC DB session.
+           INSERT INTO qa_photo_reservation VALUES (1,1,timestamptz '2026-10-13 00:00:00+00');
+           INSERT INTO qa_photo_reservation VALUES (2,2,timestamptz '2026-10-13 00:00:00+00');
+           INSERT INTO qa_photo_reservation VALUES (3,3,timestamptz '2026-10-13 01:00:00+00');
+           INSERT INTO qa_photo_reservation VALUES (4,4,timestamptz '2026-10-13 03:15:00+00');
+           INSERT INTO qa_photo_reservation VALUES (5,5,timestamptz '2026-11-02 14:00:00+00');
+           -- CHECK rejects NULL-bearing fixed-times arrays before any reservation creation.
+           blocked:=false;
+           BEGIN
+             INSERT INTO qa_photo_plan VALUES(6,'fixed_times',30,time '09:00',ARRAY[time '09:00',NULL::time],'Asia/Tokyo');
+           EXCEPTION WHEN check_violation THEN blocked:=true;
+           END;
+           IF NOT blocked THEN RAISE EXCEPTION 'CHECK admitted NULL array'; END IF;
+           -- Trigger rejects .2 seconds rather than rounding it away.
+           blocked:=false;
+           BEGIN
+             INSERT INTO qa_photo_reservation VALUES(6,1,timestamptz '2026-10-13 00:00:00.2+00');
+           EXCEPTION WHEN raise_exception THEN blocked:=true;
+           END;
+           IF NOT blocked THEN RAISE EXCEPTION 'INSERT accepted .2 seconds'; END IF;
+           -- Trigger rejects off-list start on INSERT and on UPDATE.
+           blocked:=false;
+           BEGIN
+             INSERT INTO qa_photo_reservation VALUES(7,1,timestamptz '2026-10-13 00:30:00+00');
+           EXCEPTION WHEN raise_exception THEN blocked:=true;
+           END;
+           IF NOT blocked THEN RAISE EXCEPTION 'INSERT accepted off-list time'; END IF;
+           blocked:=false;
+           BEGIN
+             UPDATE qa_photo_reservation SET start_at=timestamptz '2026-10-13 00:30:00+00' WHERE id=1;
+           EXCEPTION WHEN raise_exception THEN blocked:=true;
+           END;
+           IF NOT blocked THEN RAISE EXCEPTION 'UPDATE accepted off-list time'; END IF;
+           -- Ensure rejected UPDATE didn't mutate prior row.
+           IF (SELECT start_at FROM qa_photo_reservation WHERE id=1) IS DISTINCT FROM timestamptz '2026-10-13 00:00:00+00' THEN
+             RAISE EXCEPTION 'failed UPDATE changed row';
+           END IF;
+           -- Interval off-grid scenario and fixed times for Singapore/New York.
+           blocked:=false;
+           BEGIN
+             INSERT INTO qa_photo_reservation VALUES (8,2,timestamptz '2026-10-13 01:00:00+00');
+           EXCEPTION WHEN raise_exception THEN blocked:=true;
+           END;
+           IF NOT blocked THEN RAISE EXCEPTION '150-min interval off grid admitted'; END IF;
+           blocked:=false;
+           BEGIN
+             INSERT INTO qa_photo_reservation VALUES (9,3,timestamptz '2026-10-13 00:00:00+00');
+           EXCEPTION WHEN raise_exception THEN blocked:=true;
+           END;
+           IF NOT blocked THEN RAISE EXCEPTION 'Singapore 08:00 local admitted'; END IF;
+           blocked:=false;
+           BEGIN
+             INSERT INTO qa_photo_reservation VALUES (10,5,timestamptz '2026-11-02 13:00:00+00');
+           EXCEPTION WHEN raise_exception THEN blocked:=true;
+           END;
+           IF NOT blocked THEN RAISE EXCEPTION 'NYC 08:00 local admitted'; END IF;
+           IF (SELECT count(*) FROM qa_photo_reservation) <> 5 THEN RAISE EXCEPTION 'unexpected persisted rows'; END IF;
+           RAISE NOTICE 'CANDIDATE disposable INSERT/UPDATE/precision/timezone trigger tests PASS';
+          END;
+          $triggers$;
+          \echo === R32AZ SQL PASS (only disposable PostgreSQL17 used) ===
+          DPRO_PHOTO_R32AZ_SQL
+          psql -v ON_ERROR_STOP=1 -f /tmp/r32az_disposable.sql
+          echo 'R32AZ DISPOSABLE POSTGRESQL17 PASS – zero production access'
