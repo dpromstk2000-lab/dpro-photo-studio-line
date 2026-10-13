@@ -1,0 +1,63 @@
+name: DPRO PHOTO R32BO Reminder Queue OFF and ACL Disposable PG17 QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-postgresql17:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: r32bo-qa-local-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: r32bo-qa-local-only
+      PGDATABASE: r32bo_disposable_only
+      R32BO_DISPOSABLE_ONLY: "YES"
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+      - name: Create a fresh disposable DB
+        run: |
+          test "$R32BO_DISPOSABLE_ONLY" = "YES"
+          psql -d postgres -X -v ON_ERROR_STOP=1 -c "CREATE DATABASE r32bo_disposable_only"
+      - name: Restore SHA-256 verified fixture
+        run: |
+          python - <<'PYIN'
+          import base64,gzip,hashlib,pathlib
+          payload = 'H4sIAAAAAAAC/9Va63LbxhX+z6c4o7oDMgFVU1Zsh7I0Q1GQzIYGFICMm2lazhJYkUhAgMFFiptxpw/RJ+yT9NvFnXc7Vi7QmIaI3XPbc75zgb6LeEyGPtFM0zAn1si4pcBvtNtkPju5NMiNAo/F3KHbIIpnIbe+HlLnBX3dwyrv3THp/J6HxH/idhJzfEfLMHASO3YD/7jRN7XeSCOr/1p706PBNenGiLS/DayRRctk6rn2Wb7GNIYahc9OpsGE+SCjG0PjZqBvfJ7Ec+7Hri3l2rEw4uG9a/NJGHh8bd2od4mFqRTHy3kQY32cOG4QUbNBrkNJgo9bc/CmZ35LX2nfqrDFhEGze07TACSZL/XRx8MhXWnXvfFwRCNzrDVa+5lAtjh2/Zlkln21gSeZ2rVmanpfszaK2nSdltqgO87iJOSTO4+B4vdR4E/XRVN+fq9gbeKWvHes3K1EyIVtmTjl7eZaUatgc5hOdhLFwYKHa/tVqnCf+AHF/Ke4fCrMycJ4wmKK3QXHL4tl/K8tu/E0TqI6hYM1x/3C9R0e5iaYujM8dJlXs0NjmyHwpEptw+PtNhBbU+aT+N2Sr9vAnnMn8bgzuQvCzYYA+Tnzfe5tMuCaVfD1gsfMYTHb42BjffD1WGvWVVNr4qo18VrC4gAc7SdEF02TyPV5FJEXzFyb4pD5kR26U4T6XRgsCLEPu4QhEAA2YE5b4BABCxg2kMPvXN9N0Qck9aCCR2QHDkcQ0yJw3DsXBKfvJLkYxinAyjDhoLfDXl+j67HeHw0Mve4B08T1nMm9G7lx4QGTHxOe8Gargb2jsalb5Poxn/GwQcOefjPu3cCNvOUs+tFrkKX1x+Zg9K0w3EDXTPHNiCLOQns+WbJ4TiODlJSn0uhZ9OQu8aUGTxoOtz0W8gaBAewLAJzYQQJTZPyoe05PzxpTPnP9YpF4GBzoxrgKd1VXzrDijrvOU838Sk39SM39BsRhICjqcTuWnMLjCq9j+VHlodSNLJwr25QFeDuTmHC0zOORzZt+4nnuXTM6ruLcny4u4J1VbZBDgoW8LTWZB0kYTaYcKnB4MilKS1VOTpVWt5tb9zNpZxDxSOmQ2KBIAVqpaJ9Cisx4hQAeokHJ6CtL7jugpagyBDNXDKbfw6BNZcZ9HoqcOJm+U1Rln7diSR1IFZi//o04Lhl028EfHk7fB66/O8lFojKIytOm8+rZg8TDnIe8tB8sV8tp7YsLZdVwpV/ggLKErNId8yLeAv04TLg0GvOdqs9ckB88iEgtHm1ICH4ggoaais18m3twbFjLh0Lz4EEp9zZ/l77YolfnqZL0eXXNFwTiqNIisU7CoX+HI4vpQ7CanEBYZw5dzkBmhuLRcdnMR3Xo2tEqKuGYg4f0XqwOOY7UX1l01oBTnzVKkJPJ4LaAbSVCebmEoG5MzLZFalgG+PWdgHIUnymUR3zJhPMjFzy4gND11GBpQ60/Om6Y2jfGVxr1kLkA7R+O8XRtGm/odnw5HPTPGjdmTxc1LTBdJI+PIgi4Xy9YzxrfcXsekIJSezlnEadOl4KpWAJ1g9AFwuNYc6spjSuDnjxpXGn9Yc/UYGyWlgxICArLrrb8OC3uWOVSxAFNyz3T7GrLj9Piblq55B673GNnV1t+nBZ3duWSe/w8X501LjVU5fhqoFuaOcJ/sMa2spC+6Q3HKBubrKU2p/hnt872by1ir1lmmxq6qJX4zHnIUGoyVfn5aCvwHHUFyMjwXF+VRvRRVzzZENRH3ZNT9WgV9Y+6RwLvj96/zyG/Od0jggS8R5bBVmVtJz52G7yaGnBgamnweu1QTTJqDqHqOhDXT0N5ml1t+XEqPl7mv2ZXR1EZfpRe29AVVaLg5yUGnpxKoIyoxMI8CwLic3UP4XOiqFP8KJdt4/r6MRk9U1QbP0q//WZgWQP95jGZnRbW6/fQoA2H2tWB7MpE+SH8vij4jQyjfd0zN3B7nnL7WJWeFyx0o229Nt4eqFCR7SVedc8PhnMZINfkv7ro0Oi1ppPZG1gaUkRfu5WJQZGTlfbTjshrqNwEnPtc5I6clEozFCB/hqRnpOlXIJcRTWcnzTSVUSdNRQcU9m9fo+MuC/tXF6y1W7YTgltjA1CCpF5kI6NCVGVFolwWmcqbn7UOFam11zzPyElE2gfXv7g+DgpJJi1cV0Q4+GReXTzdzfIUpY3vOnyxDOK0v1xC6Ro/2ae6kcgVVNoXdwz1IruDSwnLdYujPRMNqCha0IYvgIFYinrK/oFE5qEUh7EY+0Q2j1AKHYPL+PZK9KI7a2rRNNbS2PlBiWLVF87ZwYhepN9D4u5FEXfW28Go/1q7+iik/ORn/AX5/KE4utSjnPLkVp2rnFh+fNSJTHZe9G7UA/2K+fdE4vMSJXjueBmpUgsx5BG+0xaTHpolLKwHakocugz6WgV/4nkYJLM5Faxue5aFAk1sfII6vFZSbizargml6SQvQifL0L13PaxpKuUsV/Sihx4f1ma1tLLHLi9IzokLjqsHt0eu6gz5cQR8SfVB9VZJhYvtlrbaFzyOsF9SxoPksBzZXLTA2Vh/vyu9WHWlL1ddCbhp5D2LeIfgRtKbfKEw89Cm/QBg8CkO0MG7nmhPF8yDWy9gOT9B4ShmgcDJYxpxoGg8R8stVgL9BC0gtWwYOeAz9drcRR8DSrOyXxYhld7h/GNK8KMpGlUgYSIrbklyFaEP799ypYluNfPaMN/QB5UttM0/Ok8rtUp+jHlSdv1lUh6Gg2+E7wS2nYRSqJLaW+GC2baJOM2JODdYzI+lmaSPVuSoexmEKHgXztFOk0fIZ6ATCRqlK6Tc9avSC1db6pMult+7/CEdFcyBm9yHjvB/6IGwFbOKmIm6VrhmPIerOW60DCI2RZhcXSp/jLFxDuE7h8Z7O/GNWe5XmRlnqfej5sWrE2P7bnZcDcFNg7RWvlUszkUrp6/Zw19vCLuz4kiHsH81Bvq+ISx8sjKEPa+PYIHQ/R6CDl1PGJPthnbixvn73yh978IAvXIgjNRbQ2Xs75uGZaViDBERZm+YTUSzwxtqPWvU7Dx/qd7IkBG/qIJjZk0JDn2jN9SsvvYphqYKkt6/Sfnn35+2v/zHzx312fsnSsaL0mz4CbiUA9mMtDaEDVHUAnJaLUIYVtfnniMNLRX+Ra8IEKMoxuUbAlVZMD9hXjadLlT8RfQLUlKplJEsBaBWtkgEqIiSRpG2Vif3Owb3dE6KyKVKtytjSfIT5fGWeX36aMO8XpRQ0hbb5/V1su01GPhsHQRena82K/UZuiH8Vb8eDvqjDxqho0CBwK8H+o1IUDdA8atB70Y3LGQ7a32EbhpvJ31jrI9k+SUTxdoIXWa56gj9DzPl3ttjAJeKEkm832WJF0ciG5+czglQO0cCQznokx2ySLyXkFAlKktg+8wLpji4dISRdeLHjzTQ6VQGOqv1CZpvb8rQ9kPu7KWsmPmsNnJbBz+/vA2tO+j5YS387q6hc1LqtXCjCHonSztYpBoV7B5tXtOpjIiyDj6Xp8bz15ymHF6rf1JLnMp5nTvzgWTy7xqKUvYeLrDhEH6jth0AWm/b88p9fbL4WzfwnefbGvgtMj+Gmx1l3VJbvOA+2uRvB79z+6T+9qLSnstJJvdFR+QUSPY7HHJ0XpIXoICtTjr2jjY6q1MyUFkZbWRNZfr3kuIZ/e8//y3/cDJEghZTuavLM5QyZCVLNhW9p40SmktbqOL7IXo6eXMTBDOPy1vrx4SFXGn8HyyHXF6kKQAA'
+          data = gzip.decompress(base64.b64decode(payload))
+          expected = '4cee2946c124d96d1cdbe0b21265e784c03df5c5a09de01fd2ef94267d50c0df'
+          actual = hashlib.sha256(data).hexdigest()
+          if actual != expected: raise SystemExit('SQL artifact SHA256 mismatch')
+          pathlib.Path('r32bo_disposable.sql').write_bytes(data)
+          print('R32BO SQL SHA256 OK:',actual)
+          PYIN
+      - name: Run original behavior and hardened candidate in disposable PG17
+        run: |
+          test "$R32BO_DISPOSABLE_ONLY" = "YES"
+          psql -X -v ON_ERROR_STOP=1 -f r32bo_disposable.sql
+      - name: Confirm test had 18 fail-closed assertions
+        run: |
+          python - <<'PYIN'
+          s=open('r32bo_disposable.sql').read()
+          assert all(f'R32BO-{i:02}' in s for i in range(1,19))
+          assert s.count('CREATE OR REPLACE FUNCTION public.photo_build_visit_reminder_queue()')==2
+          print('R32BO static QA complete: 18 assertions present')
+          PYIN
