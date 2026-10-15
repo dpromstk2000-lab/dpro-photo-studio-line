@@ -718,6 +718,14 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f R32CQ_SESSION_BOUND_SINGLE_CALL_DISPOSABLE_PG17.sql
           python3 R32CQ_REAL_SESSION_HTTP_PG17_QA.py
 
+      - name: R32CU1 disposable PG17 synthetic bearer log-statement suppression before R32CR
+        run: |
+          test "$PGDATABASE" = "dpro_photo_r32be_disposable"
+          test "$R32BE_DISPOSABLE_QA" = "YES"
+          psql -X -v ON_ERROR_STOP=1 -d postgres -c "ALTER SYSTEM SET log_min_error_statement = 'panic'"
+          psql -X -v ON_ERROR_STOP=1 -d postgres -c 'SELECT pg_reload_conf()'
+          test "$(psql -X -A -t -c 'SHOW log_min_error_statement')" = 'panic'
+          echo 'PASS R32CU1_DISPOSABLE_LOG_STATEMENT_SUPPRESSION'
       - name: R32CR synthetic opaque-bearer DB authorization over localhost HTTP and disposable PG17
         run: |
           python3 - <<'R32CR_RESTORE'
@@ -778,6 +786,20 @@ jobs:
           python3 R32CT_OFFLINE_BOUNDARY_QA.py
           python3 R32CT_TRANSPORT_UNIT_QA.py
           python3 R32CT_REDACTED_DB_HTTP_PG17_QA.py
+      - name: R32CU1 install isolated PG17 tenant-key concurrency lock fix before unchanged R32CU QA
+        run: |
+          test "$PGDATABASE" = "dpro_photo_r32be_disposable"
+          test "$R32BE_DISPOSABLE_QA" = "YES"
+          python3 - <<'R32CU1_RESTORE'
+          import base64,gzip,hashlib,pathlib
+          raw=gzip.decompress(base64.b64decode('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',validate=True))
+          assert hashlib.sha256(raw).hexdigest()=='fee79790aafe1cd9a8522f1a8982d82078651901a2d69a50d5c3b2f2e66d63b4'
+          pathlib.Path('R32CU1_DISPOSABLE_SINGLE_KEY_RACE_FIX_PG17.sql').write_bytes(raw)
+          print('PASS R32CU1_SQL_SHA256_RESTORED',flush=True)
+          R32CU1_RESTORE
+          psql -X -v ON_ERROR_STOP=1 -f R32CU1_DISPOSABLE_SINGLE_KEY_RACE_FIX_PG17.sql
+          psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT pg_get_functiondef('qa_r32cr.book_opaque_bearer(text,text,jsonb,uuid)'::regprocedure) LIKE '%pg_advisory_xact_lock%'" | grep -Fx t
+          echo 'PASS R32CU1_ONLY_DISPOSABLE_RACE_PATCH_APPLIED'
       - name: R32CU PG17 strict HTTP framing and concurrent replay/revocation isolated QA
         run: |
           python3 - <<'R32CU_RESTORE'
