@@ -650,6 +650,10 @@
             <div class="panel-head"><div><h3>LINEセグメント配信</h3><p>検索結果から対象者を選択し、重複除外と最終確認をしてから安全に配信します。</p></div></div>
             <div id="lineSegmentMount" class="auth-note" style="margin:0;">LINEセグメント配信機能を読み込んでいます...</div>
           </section>
+          <!-- R33Y REGION READONLY V1 candidate: hidden, both feature flags OFF by default. -->
+          <section class="panel" id="r33hRegionPanel" hidden>
+            <div id="r33hRegionMount" aria-label="地域検索・参照のみ"></div>
+          </section>
         </section>
 
         <section id="view-post" class="view">
@@ -1048,6 +1052,7 @@
           $("authGate").hidden = true;
           $("ownerApp").hidden = false;
           await loadBaseData();
+          window.DPRO_PHOTO_R33H?.sync();
         });
         toast("管理画面を開きました。");
       } catch (error) {
@@ -1491,6 +1496,7 @@
       if (view === "today" && !state.dayRows.length) loadToday().catch(() => {});
       if (view === "reservations" && !state.reservationRows.length) searchReservations().catch(() => {});
       if (view === "followup" && followupEnabled() && !state.followupSummary) loadFollowupSummary().catch(() => {});
+      window.DPRO_PHOTO_R33H?.sync();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -2016,8 +2022,8 @@
       $("adminVerifyBtn").addEventListener("click", verifyAndStart);
       $("adminCodeInput").addEventListener("keydown", (e) => { if (e.key === "Enter") verifyAndStart(); });
       $("showAdminCode").addEventListener("change", (e) => { $("adminCodeInput").type = e.target.checked ? "text" : "password"; });
-      $("adminClearBtn").addEventListener("click", () => { C.clearAdminCode(); $("adminCodeInput").value = ""; toast("保存された管理コードを削除しました。"); });
-      $("logoutBtn").addEventListener("click", () => { C.clearAdminCode(); location.reload(); });
+      $("adminClearBtn").addEventListener("click", () => { window.DPRO_PHOTO_R33H?.logout(); C.clearAdminCode(); $("adminCodeInput").value = ""; toast("保存された管理コードを削除しました。"); });
+      $("logoutBtn").addEventListener("click", () => { window.DPRO_PHOTO_R33H?.logout(); C.clearAdminCode(); location.reload(); });
       $("refreshAllBtn").addEventListener("click", () => refreshDashboard().catch(() => {}));
       $("todayLoadBtn").addEventListener("click", () => loadToday().catch(() => {}));
       $("todayRefreshBtn").addEventListener("click", () => loadToday().catch(() => {}));
@@ -2115,5 +2121,9 @@
   <script src="./photo-owner-setup-checklist.js?v=DPRO-PHOTO-OWNER-OPERATIONS-BRUSHUP-9-4-SETUP-CHECKLIST-UI-20260919"></script>
 <script src="./photo-owner-business-calendar.js?v=DPRO-PHOTO-LINKAGE-STANDARD-R1-FIX-20261006"></script>
 <script src="./photo-admin-calendar-ja-r26.js?v=DPRO-PHOTO-R26-ADMIN-JA-DATE-20261011"></script>
+  <!-- R33Y RELEASE CANDIDATE. Deploy only after explicit approval; flags default OFF. -->
+  <script src="./photo-region-r33y-ui.js?v=R33Y-20261017"></script>
+  <script src="./photo-region-r33y-bridge.js?v=R33Y-20261017"></script>
+  <script src="./photo-region-r33y-lifecycle.js?v=R33Y-20261017"></script>
 </body>
 </html>
