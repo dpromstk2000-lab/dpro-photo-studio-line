@@ -146,9 +146,99 @@
     clear.addEventListener('click',()=>{close();input.value='';input.dispatchEvent(new Event('change',{bubbles:true}));refreshButton(input,button,clear);button.focus();});
     refreshButton(input,button,clear);
   }
+  // R35L: Age-at-shoot-date consistency (visual warning only; never blocks booking).
+  // Japanese shichi-go-san can use different age conventions, so do not rewrite data.
+  const R35L_AGE_WARNING_CLASS='dpro-r35l-age-mismatch';
+  const r35lStyle=document.createElement('style');
+  r35lStyle.id='dpro-r35l-age-warning-css';
+  r35lStyle.textContent=`
+    .${R35L_AGE_WARNING_CLASS}{
+      margin:8px 0 3px;padding:10px 12px;border:1px solid #e8c896;
+      background:#fff8ec;border-radius:10px;color:#624713;
+      font-size:13px;line-height:1.65;
+    }
+    .${R35L_AGE_WARNING_CLASS}[hidden]{display:none!important}
+    .${R35L_AGE_WARNING_CLASS} strong{font-weight:700}
+  `;
+  document.head.appendChild(r35lStyle);
+  const r35lParseISO=s=>{
+    const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||''));
+    if(!m)return null;
+    const d={y:+m[1],m:+m[2],d:+m[3]};
+    const test=new Date(d.y,d.m-1,d.d);
+    return test.getFullYear()===d.y&&test.getMonth()===d.m-1&&test.getDate()===d.d ? d : null;
+  };
+  const r35lAgeAt=(dob,target)=>{
+    if(!dob||!target)return null;
+    let years=target.y-dob.y;
+    if(target.m<dob.m||(target.m===dob.m&&target.d<dob.d))years--;
+    return years;
+  };
+  const r35lWarningForCard=(card,bookingDate)=>{
+    const type=card.querySelector('[data-field="subject_type"]')?.value;
+    if(!['person','child','baby'].includes(type))return '';
+    const stated=card.querySelector('[data-field="age_note"]')?.value?.trim()||'';
+    const dob=r35lParseISO(card.querySelector('[data-field="birth_date"]')?.value);
+    const target=r35lParseISO(bookingDate);
+    if(!dob||!target)return '';
+    if(r35lAgeAt(dob,target)<0)return '生年月日が撮影日より後になっています。入力内容を確認してください。';
+    const ageMatch=/^([0-9０-９]{1,3})\s*歳$/.exec(stated);
+    if(!ageMatch)return '';
+    const statedAge=Number(ageMatch[1].replace(/[０-９]/g,ch=>String(ch.charCodeAt(0)-65296)));
+    const actualAge=r35lAgeAt(dob,target);
+    if(actualAge===statedAge)return '';
+    return `撮影日時点の満年齢は${actualAge}歳です。入力した「${statedAge}歳」と一致しません。七五三の数え年なども含めて確認してください。`;
+  };
+  const r35lWarnings=()=>{
+    const cards=[...document.querySelectorAll('#subjectsList .subject-card')];
+    const bookingDate=document.querySelector('#reservationDate')?.value||'';
+    return cards.map(card=>r35lWarningForCard(card,bookingDate));
+  };
+  const r35lSetWarning=(host,message)=>{
+    if(!host)return;
+    let el=host.querySelector(':scope > .'+R35L_AGE_WARNING_CLASS);
+    if(!message){if(el)el.remove();return;}
+    if(!el){el=document.createElement('div');el.className=R35L_AGE_WARNING_CLASS;el.setAttribute('role','status');host.append(el);}
+    if(el.textContent!==message)el.textContent=message;
+  };
+  let r35lRefreshScheduled=false;
+  const r35lRefresh=()=>{
+    r35lRefreshScheduled=false;
+    const date=document.querySelector('#reservationDate')?.value||'';
+    const cards=[...document.querySelectorAll('#subjectsList .subject-card')];
+    cards.forEach(card=>r35lSetWarning(card,r35lWarningForCard(card,date)));
+    const summary=document.querySelector('#summaryList');
+    const errors=r35lWarnings().filter(Boolean);
+    // No new warning if STEP7 is not active, and never alter the form payload.
+    const step7=document.querySelector('.panel[data-step="7"].is-active');
+    r35lSetWarning(summary,step7&&errors.length ? '撮影対象者の年齢を再確認してください。 '+errors.join(' ') : '');
+  };
+  const r35lScheduleRefresh=()=>{
+    if(r35lRefreshScheduled)return;
+    r35lRefreshScheduled=true;
+    queueMicrotask(r35lRefresh);
+  };
+  const r35lStart=()=>{
+    // Handle changes from native inputs and the new Japanese birthday picker.
+    document.addEventListener('input',event=>{
+      if(event.target?.matches?.('#reservationDate, #subjectsList [data-field="age_note"], #subjectsList [data-field="birth_date"]'))r35lScheduleRefresh();
+    });
+    document.addEventListener('change',event=>{
+      if(event.target?.matches?.('#reservationDate, #subjectsList [data-field="age_note"], #subjectsList [data-field="birth_date"], #subjectsList [data-field="subject_type"]'))r35lScheduleRefresh();
+    });
+    const subjectList=document.querySelector('#subjectsList');
+    if(subjectList)new MutationObserver(r35lScheduleRefresh).observe(subjectList,{childList:true,subtree:false});
+    const summary=document.querySelector('#summaryList');
+    if(summary)new MutationObserver(r35lScheduleRefresh).observe(summary,{childList:true,subtree:false});
+    const step7=document.querySelector('.panel[data-step="7"]');
+    if(step7)new MutationObserver(r35lScheduleRefresh).observe(step7,{attributes:true,attributeFilter:['class']});
+    r35lScheduleRefresh();
+  };
+
   const scan=()=>document.querySelectorAll(FIELD).forEach(enhance);
   const boot=()=>{
     scan();
+    r35lStart();
     const root=document.querySelector('#subjectsList')||document.body;
     new MutationObserver(scan).observe(root,{childList:true,subtree:true});
     document.addEventListener('pointerdown',e=>{if(openState&&!openState.panel.contains(e.target)&&!openState.button.contains(e.target))close();});
