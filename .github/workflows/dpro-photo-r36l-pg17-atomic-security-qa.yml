@@ -45,7 +45,7 @@ jobs:
           assert os.environ.get('PGHOST') in ('127.0.0.1','localhost'), 'NO_EXTERNAL_DB'
           SECRET='LOCAL_SYNTHETIC_HMAC_KEY_FOR_PG17_QA_NEVER_PRODUCTION'
           
-          def ident(x): return str(uuid.uuid4())
+          def ident(): return str(uuid.uuid4())
           def dig(x): return hashlib.sha256(json.dumps({k:v for k,v in x.items() if k!='key'},sort_keys=True).encode()).hexdigest()
           def phone(x):
            s=''.join(c for c in x if c.isdigit())
