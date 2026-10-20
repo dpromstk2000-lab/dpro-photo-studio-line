@@ -218,7 +218,7 @@
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
       margin-top: 17px;
     }
@@ -508,7 +508,7 @@
         <div class="demo-buttons">
           <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_001" type="button">佐藤 美咲｜撮影前</button>
           <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_002" type="button">田中 太郎｜セレクト</button>
-          <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_003" type="button">山本 花｜納品・再注文</button>
+          <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_003" type="button">山本 花｜納品状況</button>
           <button class="btn btn-small btn-neutral demo-person" data-line-id="demo_photo_line_999" type="button" disabled title="LINE再紐付け検証済みのため旧IDからは切替できません">テスト顧客｜再紐付け済（切替不可）</button>
         </div>
       </div>
@@ -609,7 +609,7 @@
       </div>
       <div class="modal-actions">
         <button class="btn btn-neutral" data-close-modal type="button">戻る</button>
-        <button id="submitRequestButton" class="btn btn-primary" type="button">送信する</button>
+        <button id="submitRequestButton" class="btn btn-primary" type="button" disabled>送信する</button>
       </div>
     </div>
   </div>
@@ -880,13 +880,31 @@ function actionButtons(reservation) {
         els.profileTags.innerHTML = tags.map((tag) => `<span class="tag">${escape(tag)}</span>`).join("");
       }
 
+      // DPRO-PHOTO-R35Z: summary must use the same public-release eligibility as the selection cards.
+      function selectionPublicReadyForSummary(reservation) {
+        const guide = reservation.selection_guide || {};
+        const status = String(guide.guide_status || "draft");
+        if (!["guided", "selected"].includes(status)) return false;
+        const date = Date.parse(reservation.start_at || "");
+        const beforeShooting = Number.isFinite(date) && date > Date.now()
+          && reservation.visit_status === "scheduled"
+          && ["reserved", "confirmed"].includes(reservation.reservation_status);
+        if (beforeShooting || ["cancelled", "no_show"].includes(reservation.reservation_status)) return false;
+        try {
+          const url = new URL(String(guide.selection_url || "").trim());
+          return url.protocol === "https:" && Boolean(url.hostname);
+        } catch (_) { return false; }
+      }
       function renderSummary() {
         const upcoming = state.reservations.filter(isUpcoming).length;
-        const selection = state.reservations.filter((r) => r.selection_guide && ["ready", "guided", "selected"].includes(r.selection_guide.guide_status)).length;
+        const selectionRows = state.reservations.filter((r) => r.selection_guide || ["selection_pending", "selection_guided", "selected"].includes(r.post_status));
+        const selectionPublished = selectionRows.filter(selectionPublicReadyForSummary).length;
+        const selectionPreparing = selectionRows.length - selectionPublished;
         const delivered = state.reservations.filter((r) => r.delivery?.delivery_status === "delivered").length;
         els.reservationSummary.innerHTML = `
           <div class="summary-box"><span>今後の予約</span><strong>${upcoming}件</strong></div>
-          <div class="summary-box"><span>セレクト案内</span><strong>${selection}件</strong></div>
+          <div class="summary-box"><span>セレクト準備中</span><strong>${selectionPreparing}件</strong></div>
+          <div class="summary-box"><span>セレクト利用可能</span><strong>${selectionPublished}件</strong></div>
           <div class="summary-box"><span>納品済み</span><strong>${delivered}件</strong></div>
         `;
       }
@@ -1024,6 +1042,11 @@ function actionButtons(reservation) {
         const publicMessage = beforeShooting ? "撮影後、写真館で納品準備を進めます。"
           : publiclyAnnounced ? (delivery.customer_message || "納品の詳細は写真館へご確認ください。")
           : "納品のご案内は、写真館で準備ができてから表示されます。";
+        // DPRO-PHOTO-R35Z: compare the Japan-local calendar date, never change delivery data.
+        const deliveryYmd = String(delivery.scheduled_date || "").slice(0, 10);
+        const todayJst = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const overdue = !beforeShooting && !publiclyAnnounced && status !== "delivered"
+          && /^\d{4}-\d{2}-\d{2}$/.test(deliveryYmd) && deliveryYmd < todayJst;
         return `
           <article class="reservation-card open">
             <div class="reservation-head">
@@ -1033,6 +1056,7 @@ function actionButtons(reservation) {
             </div>
             <div class="reservation-detail">
               <div class="info-panel blue"><h4>納品状況</h4><p>${escape(publicMessage)}</p></div>
+              ${overdue ? `<div class="info-panel amber" role="status"><h4>納品予定日を過ぎています</h4><p>最新の状況は写真館へお問い合わせください。納品予定日は変更されていません。</p></div>` : ""}
               <div class="detail-grid">
                 <div class="detail-item"><span>納品内容</span><strong>${escape(C.getLabel("deliveryType", delivery.delivery_type, "写真・商品"))}</strong></div>
                 <div class="detail-item"><span>受取方法</span><strong>${escape(C.getLabel("deliveryMethod", delivery.delivery_method, "写真館からご案内"))}</strong></div>
@@ -1149,6 +1173,8 @@ function actionButtons(reservation) {
         els.requestNote.value = loadRequestDraft(mode, reservation);
         els.requestTypeField.hidden = mode !== "reorder";
         els.submitRequestButton.textContent = config.button;
+        // DPRO-PHOTO-R35Z: empty or whitespace-only consultation is visibly disabled.
+        els.submitRequestButton.disabled = !C.normalizeWhitespace(els.requestNote.value);
         els.requestModal.classList.add("open");
         setTimeout(() => els.requestNote.focus(), 80);
       }
@@ -1330,7 +1356,7 @@ function actionButtons(reservation) {
           state.requestSubmitting = false;
           els.requestNote.readOnly = false;
           if (els.requestTypeSelect) els.requestTypeSelect.disabled = false;
-          if (els.submitRequestButton) els.submitRequestButton.disabled = false;
+          if (els.submitRequestButton) els.submitRequestButton.disabled = !C.normalizeWhitespace(els.requestNote.value);
           setLoading(false);
         }
       }
@@ -1597,6 +1623,7 @@ function actionButtons(reservation) {
         els.submitRequestButton.addEventListener("click", submitRequest);
         els.requestNote.addEventListener("input", () => {
           if (!state.requestSubmitting) saveRequestDraft(state.modalMode, state.modalReservation, els.requestNote.value);
+          els.submitRequestButton.disabled = state.requestSubmitting || !C.normalizeWhitespace(els.requestNote.value);
         });
         document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeRequestModal(); });
       }
