@@ -1,0 +1,190 @@
+name: DPRO PHOTO R36L - Disposable PG17 Atomic QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  r36l-isolated-pg17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: DISPOSABLE_R36L_ONLY
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Prepare Python (disposable QA runner)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install disposable DB driver
+        run: python -m pip install 'psycopg[binary]==3.2.9'
+      - name: Run PostgreSQL 17 atomic booking isolation QA
+        env:
+          PGHOST: 127.0.0.1
+          R36L_DISPOSABLE_PG17: 'TRUE'
+        run: |
+          python - <<'PYR36L'
+          """R36L -- Ephemeral PG17 simulation, never Supabase or any existing DB.
+          DO NOT run with production credentials. Workflow uses a disposable postgres:17 service.
+          """
+          import os, json, uuid, hmac, hashlib, unicodedata, concurrent.futures
+          import psycopg
+          
+          DSN="host=127.0.0.1 port=5432 user=postgres dbname=postgres password=DISPOSABLE_R36L_ONLY connect_timeout=5"
+          assert os.environ.get('R36L_DISPOSABLE_PG17','')=='TRUE', 'DISPOSABLE_GUARD_FAILED'
+          assert os.environ.get('PGHOST') in ('127.0.0.1','localhost'), 'NO_EXTERNAL_DB'
+          SECRET='LOCAL_SYNTHETIC_HMAC_KEY_FOR_PG17_QA_NEVER_PRODUCTION'
+          
+          def ident(x): return str(uuid.uuid4())
+          def dig(x): return hashlib.sha256(json.dumps({k:v for k,v in x.items() if k!='key'},sort_keys=True).encode()).hexdigest()
+          def phone(x):
+           s=''.join(c for c in x if c.isdigit())
+           if s.startswith('81') and len(s) in (11,12):s='0'+s[2:]
+           if not s.startswith('0') or len(s) not in (10,11): raise ValueError('BAD_PHONE')
+           return s
+          def sig(x):
+           v=(phone(x['phone'])+'|'+unicodedata.normalize('NFKC',x['subject']).replace(' ','').casefold()).encode()
+           return hmac.new(SECRET.encode(),v,hashlib.sha256).hexdigest()
+          
+          DDL='''
+          DROP SCHEMA IF EXISTS qa_r36l CASCADE;
+          CREATE SCHEMA qa_r36l;
+          CREATE TABLE qa_r36l.customers (
+           id text primary key,studio text not null,name text not null,phone text not null,line_subject text,
+           unique(studio,line_subject)
+          );
+          CREATE TABLE qa_r36l.reservations (
+           id text primary key,studio text not null,customer_id text not null references qa_r36l.customers(id),
+           day date not null,start_min integer not null,duration integer not null,
+           staff text not null,resource text not null,subject text not null
+          );
+          CREATE INDEX ON qa_r36l.reservations(studio,day);
+          CREATE TABLE qa_r36l.receipts (
+           studio text not null,idem text not null,payload_hash text not null,
+           reservation_id text not null references qa_r36l.reservations(id),day date not null,subject_fingerprint text not null,
+           primary key(studio,idem), unique(studio,day,subject_fingerprint)
+          );
+          '''
+          with psycopg.connect(DSN,autocommit=True) as db:db.execute(DDL)
+          
+          class Reject(Exception):pass
+          
+          def reserve(p, verified_subject=None, fail=False):
+           if 'customer_id' in p or 'selected_customer_id' in p or 'line_user_id' in p:raise Reject('FORGED_IDENTITY')
+           sigval=sig(p)
+           with psycopg.connect(DSN) as db:
+            with db.cursor() as cur:
+             # Short-lived transaction advisory lock, held until commit/rollback.
+             cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,1337))',(p['studio']+'|'+p['day'],))
+             cur.execute('SELECT payload_hash,reservation_id FROM qa_r36l.receipts WHERE studio=%s AND idem=%s',(p['studio'],p['key']))
+             ex=cur.fetchone()
+             if ex:
+              if ex[0]!=dig(p):raise Reject('NONCE_PAYLOAD_CHANGED')
+              return ex[1],True
+             cur.execute('''SELECT 1 FROM qa_r36l.reservations WHERE studio=%s AND day=%s
+                AND start_min < %s AND start_min+duration > %s AND (staff=%s OR resource=%s) LIMIT 1''',
+                (p['studio'],p['day'],p['minute']+p['duration'],p['minute'],p['staff'],p['resource']))
+             if cur.fetchone():raise Reject('SLOT_BUSY')
+             cur.execute('''SELECT 1 FROM qa_r36l.receipts WHERE studio=%s AND day=%s AND subject_fingerprint=%s LIMIT 1''',
+               (p['studio'],p['day'],sigval))
+             if cur.fetchone():raise Reject('SUBJECT_DAY_DUPLICATE')
+             cust=None
+             if verified_subject:
+              cur.execute('SELECT id FROM qa_r36l.customers WHERE studio=%s AND line_subject=%s',(p['studio'],verified_subject))
+              x=cur.fetchone();cust=x[0] if x else None
+             if not cust:
+              cust=ident()
+              cur.execute('INSERT INTO qa_r36l.customers(id,studio,name,phone,line_subject) VALUES(%s,%s,%s,%s,%s)',
+                (cust,p['studio'],p['name'],phone(p['phone']),verified_subject))
+             if fail:raise Reject('SYNTHETIC_ATTACH_FAILURE')
+             rid=ident()
+             cur.execute('''INSERT INTO qa_r36l.reservations(id,studio,customer_id,day,start_min,duration,staff,resource,subject)
+               VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''',(rid,p['studio'],cust,p['day'],p['minute'],p['duration'],p['staff'],p['resource'],p['subject']))
+             cur.execute('''INSERT INTO qa_r36l.receipts(studio,idem,payload_hash,reservation_id,day,subject_fingerprint)
+               VALUES(%s,%s,%s,%s,%s,%s)''',(p['studio'],p['key'],dig(p),rid,p['day'],sigval))
+           return rid,False
+          
+          def specimen(n=0,**kwargs):
+           a=dict(studio='S1',name='Synthetic Parent',phone='09011112222',subject='Synthetic Child',day='2026-11-19',minute=600+30*n,duration=30,staff='S1',resource='R1',key=f'synthetic-nonce-{n:06d}')
+           a.update(kwargs);return a
+          
+          def stats():
+           with psycopg.connect(DSN) as db:
+            return tuple(db.execute('SELECT count(*) FROM qa_r36l.'+t).fetchone()[0] for t in ('customers','reservations','receipts'))
+          
+          count=0
+          def ok(v,why):
+           global count
+           assert v,why
+           count+=1
+          
+          def reject(cb,msg):
+           try:cb()
+           except Reject as e:ok(str(e)==msg,msg);return
+           raise AssertionError('expected '+msg)
+          
+          try:
+           p=specimen();i,r=reserve(p);ok(bool(i) and not r,'first booking');ok(stats()==(1,1,1),'first transaction')
+           x,repeat=reserve(p);ok(x==i and repeat,'replay returns same receipt');ok(stats()==(1,1,1),'replay no side effect')
+           reject(lambda:reserve({**p,'name':'Changed'}),'NONCE_PAYLOAD_CHANGED')
+           reject(lambda:reserve(specimen(1,minute=600,phone='09077778888',subject='Another Child')),'SLOT_BUSY')
+           reject(lambda:reserve(specimen(2,minute=660,resource='R2',staff='S2')),'SUBJECT_DAY_DUPLICATE')
+           ok(stats()==(1,1,1),'rejected none written')
+           reject(lambda:reserve(specimen(4,minute=750,resource='R2',staff='S2',phone='09077778888',subject='Another Child'),fail=True),'SYNTHETIC_ATTACH_FAILURE')
+           ok(stats()==(1,1,1),'simulated failure rollback')
+           reject(lambda:reserve(specimen(4,minute=750,resource='R2',staff='S2',customer_id='VICTIM')),'FORGED_IDENTITY')
+           reject(lambda:reserve(specimen(4,minute=750,resource='R2',staff='S2',selected_customer_id='VICTIM')),'FORGED_IDENTITY')
+           ok(stats()==(1,1,1),'forged body no write')
+           i2,r2=reserve(specimen(4,minute=750,resource='R2',staff='S2',phone='09011112222',subject='Another Child'))
+           ok(i2!=i,'same parent different subject allowed')
+           ok(stats()==(2,2,2),'guest no customer merge')
+           jobs=[specimen(n,minute=840,staff='SHARED',resource='SHARED',phone=f'0901111{n:04}',subject=f'Unique Child {n}') for n in range(12)]
+           with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+            fs=[pool.submit(reserve,q) for q in jobs];good=0;bad=0
+            for f in fs:
+             try:f.result();good+=1
+             except Reject as e:
+              if str(e)=='SLOT_BUSY':bad+=1
+              else:raise
+           ok(good==1 and bad==11,'12-way staff/resource serial booking')
+           ok(stats()==(3,3,3),'no orphan after race')
+           jobs=[specimen(22+n,minute=870+30*n,staff=f'S{n+100}',resource=f'R{n+100}',phone='09099998888',subject='Sibling') for n in range(10)]
+           with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+            fs=[pool.submit(reserve,q) for q in jobs];good=0;bad=0
+            for f in fs:
+             try:f.result();good+=1
+             except Reject as e:
+              if str(e)=='SUBJECT_DAY_DUPLICATE':bad+=1
+              else:raise
+           ok(good==1 and bad==9,'10-way subject/day duplicate between separate guest IDs')
+           ok(stats()==(4,4,4),'only one guest persisted')
+           with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+            fs=[pool.submit(reserve,specimen(100,minute=1080,resource='R100',staff='S100',phone='09033334444',subject='Unique Subject')) for _ in range(10)]
+            r=[f.result() for f in fs]
+           ok(len({x[0] for x in r})==1,'10-way idempotency stable')
+           ok(stats()==(5,5,5),'parallel no duplicate receipts')
+           v1,_=reserve(specimen(110,minute=1200,resource='R110',staff='S110',phone='09012121212',subject='Verified Kid'),verified_subject='UVERIFIED_SYNTHETIC_110')
+           v2,_=reserve(specimen(111,minute=1230,resource='R111',staff='S111',phone='09056565656',subject='Other Kid'),verified_subject='UVERIFIED_SYNTHETIC_110')
+           with psycopg.connect(DSN) as db:
+            customer=db.execute('SELECT customer_id FROM qa_r36l.reservations WHERE id=%s',(v1,)).fetchone()[0]
+            other=db.execute('SELECT customer_id FROM qa_r36l.reservations WHERE id=%s',(v2,)).fetchone()[0]
+            saved=db.execute('SELECT phone FROM qa_r36l.customers WHERE id=%s',(customer,)).fetchone()[0]
+           ok(customer==other,'verified subject customer reused')
+           ok(saved=='09012121212','verified existing phone not overwritten')
+           ok(stats()==(6,7,7),'verified reuse stats')
+           ok(all(len(x)>0 for x in (i,i2,v1,v2)),'valid receipts')
+           print(f'R36L disposable PostgreSQL 17: {count}/{count} PASS; concurrent 12+10+10; prod network=0; prod writes=0')
+           print('WARNING: this is QA simulation, NOT production schema/function contract or release approval.')
+          finally:
+           with psycopg.connect(DSN,autocommit=True) as db:db.execute('DROP SCHEMA IF EXISTS qa_r36l CASCADE')
+          PYR36L
