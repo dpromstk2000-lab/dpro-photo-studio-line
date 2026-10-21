@@ -1,0 +1,1314 @@
+name: DPRO PHOTO R36X Disposable PG17 Studio Boundary QA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-qa:
+    name: Disposable PG17 and studio-bound LINE verification (NO production data)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: R36V_ONLY_DISPOSABLE_PORT_5432
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - name: Set up Python (no checkout, no repo secrets)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare disposable-only dependencies
+        run: python3 -m pip install 'psycopg[binary]==3.2.10'
+      - name: Execute sealed reviewed booking SQL against ephemeral PG17 ONLY
+        env:
+          R36V_DISPOSABLE_PG17: "TRUE"
+          PGHOST: "127.0.0.1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/r36x-disposable
+          cat > /tmp/r36x-disposable/R36W_PG17_FIXTURE_DISPOSABLE_ONLY.sql <<'R36X_END_SQL_FIXTURE'
+          -- Disposable PostgreSQL17 only. Shape-aligned synthetic fixture, NO production data.
+          CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN;
+          CREATE EXTENSION IF NOT EXISTS pgcrypto;
+          CREATE EXTENSION IF NOT EXISTS btree_gist;
+          CREATE TABLE public.photo_studios(id uuid PRIMARY KEY,studio_code text NOT NULL,timezone text DEFAULT 'Asia/Tokyo',is_active bool DEFAULT true,production_guard bool DEFAULT true);
+          CREATE TABLE public.photo_studio_settings(studio_id uuid PRIMARY KEY REFERENCES public.photo_studios(id),min_advance_hours int DEFAULT 1,reservation_open_days_ahead int DEFAULT 180,max_subjects_per_reservation int DEFAULT 10,feature_flags jsonb DEFAULT '{}');
+          CREATE TABLE public.photo_plans(id uuid PRIMARY KEY,studio_id uuid NOT NULL REFERENCES public.photo_studios(id),plan_code text NOT NULL,plan_name text NOT NULL,default_resource_id uuid,booking_open_days int DEFAULT 180,duration_minutes int DEFAULT 60,max_participants int DEFAULT 10,booking_start_mode text DEFAULT 'interval',booking_start_interval_minutes int DEFAULT 30,booking_start_anchor_time time DEFAULT '00:00',booking_start_times time[] DEFAULT '{}',belongings_guide text,is_active bool DEFAULT true);
+          CREATE TABLE public.photo_staff(id uuid PRIMARY KEY,studio_id uuid NOT NULL,staff_name text,is_active bool DEFAULT true,can_be_assigned bool DEFAULT true, UNIQUE(studio_id,id));
+          CREATE TABLE public.photo_resources(id uuid PRIMARY KEY,studio_id uuid NOT NULL,resource_name text,is_active bool DEFAULT true,capacity int DEFAULT 1, UNIQUE(studio_id,id));
+          CREATE TABLE public.photo_customers(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL REFERENCES public.photo_studios(id),
+           customer_no text,customer_name text NOT NULL,phone text,normalized_phone text,email text,line_user_id text,
+           preferred_contact text DEFAULT 'phone',first_source text NOT NULL DEFAULT 'line',last_source text NOT NULL DEFAULT 'line',
+           is_active bool DEFAULT true,deleted_at timestamptz,UNIQUE(studio_id,id),UNIQUE(studio_id,customer_no));
+          -- Matches the production unique active LINE identity constraint (metadata only, no customer rows copied).
+          CREATE UNIQUE INDEX photo_customers_studio_line_user_uq ON public.photo_customers(studio_id,line_user_id)
+           WHERE line_user_id IS NOT NULL AND btrim(line_user_id)<>'' AND deleted_at IS NULL;
+          CREATE SEQUENCE public.qa_customer_number_seq;
+          CREATE OR REPLACE FUNCTION public.photo_normalize_phone(p text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
+           SELECT CASE WHEN regexp_replace(coalesce(p,''),'[^0-9]','','g') ~ '^81[0-9]{9,10}$'
+           THEN '0'||substr(regexp_replace(coalesce(p,''),'[^0-9]','','g'),3)
+           ELSE regexp_replace(coalesce(p,''),'[^0-9]','','g') END
+          $$;
+          CREATE OR REPLACE FUNCTION public.qa_prepare_customer() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+           NEW.normalized_phone:=public.photo_normalize_phone(NEW.phone);
+           IF NEW.customer_no IS NULL THEN NEW.customer_no:='PHC-'||nextval('public.qa_customer_number_seq'); END IF;
+           RETURN NEW; END $$;
+          CREATE TRIGGER photo_customers_prepare_trg BEFORE INSERT ON public.photo_customers FOR EACH ROW EXECUTE FUNCTION public.qa_prepare_customer();
+          CREATE TABLE public.photo_subjects(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,customer_id uuid NOT NULL,subject_code text NOT NULL,
+           subject_name text NOT NULL,subject_type text NOT NULL DEFAULT 'person',birth_date date,age_note text,relationship_to_customer text,
+           gender text,pet_species text,pet_breed text,attention_note text,shooting_care_note text,is_active bool NOT NULL DEFAULT true,
+           UNIQUE(studio_id,id),UNIQUE(studio_id,subject_code),FOREIGN KEY(studio_id,customer_id) REFERENCES public.photo_customers(studio_id,id));
+          CREATE TABLE public.photo_reservations(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL REFERENCES public.photo_studios(id),
+           reservation_no text,public_token uuid DEFAULT gen_random_uuid(),customer_id uuid NOT NULL,plan_id uuid NOT NULL,
+           assigned_staff_id uuid,resource_id uuid,reservation_source text NOT NULL DEFAULT 'line',
+           start_at timestamptz NOT NULL,end_at timestamptz,duration_minutes int,participant_count int DEFAULT 1,
+           reservation_status text DEFAULT 'reserved',visit_status text DEFAULT 'scheduled',post_status text DEFAULT 'selection_pending',
+           plan_name_snapshot text,staff_name_snapshot text,customer_name_snapshot text,customer_phone_snapshot text,
+           shooting_purpose text,desired_mood text,desired_shots text,bring_costume bool DEFAULT false,
+           rental_costume_requested bool DEFAULT false,hair_makeup_requested bool DEFAULT false,family_additional_requested bool DEFAULT false,
+           social_media_consult_requested bool DEFAULT false,accommodation_note text,customer_note text,internal_note text,
+           created_by text,updated_by text,is_demo bool DEFAULT false,
+           UNIQUE(studio_id,id),FOREIGN KEY(studio_id,customer_id) REFERENCES public.photo_customers(studio_id,id),
+           FOREIGN KEY(studio_id,assigned_staff_id) REFERENCES public.photo_staff(studio_id,id),
+           FOREIGN KEY(studio_id,resource_id) REFERENCES public.photo_resources(studio_id,id),
+           EXCLUDE USING gist (studio_id WITH =,assigned_staff_id WITH =,tstzrange(start_at,end_at,'[)') WITH &&) WHERE (assigned_staff_id IS NOT NULL AND reservation_status NOT IN ('cancelled','no_show')));
+          CREATE SEQUENCE public.qa_reservation_number_seq;
+          CREATE OR REPLACE FUNCTION public.photo_plan_start_allowed(p_mode text,p_interval int,p_anchor time,p_times time[],p_start time)
+          RETURNS boolean LANGUAGE sql IMMUTABLE AS $$ SELECT extract(minute from p_start)::int IN (0,30) AND extract(second FROM p_start)=0 $$;
+          CREATE OR REPLACE FUNCTION public.qa_prepare_reservation() RETURNS trigger LANGUAGE plpgsql AS $$
+          DECLARE p public.photo_plans%rowtype;c public.photo_customers%rowtype;
+          BEGIN
+           SELECT * INTO STRICT p FROM public.photo_plans WHERE id=NEW.plan_id AND studio_id=NEW.studio_id;
+           SELECT * INTO STRICT c FROM public.photo_customers WHERE id=NEW.customer_id AND studio_id=NEW.studio_id;
+           IF NEW.duration_minutes IS NULL THEN NEW.duration_minutes:=p.duration_minutes; END IF;
+           NEW.end_at:=NEW.start_at+make_interval(mins=>NEW.duration_minutes);
+           NEW.reservation_no:=coalesce(NEW.reservation_no,'PH-'||nextval('public.qa_reservation_number_seq'));
+           NEW.plan_name_snapshot:=p.plan_name;NEW.customer_name_snapshot:=c.customer_name;
+           NEW.customer_phone_snapshot:=c.phone;
+           IF NEW.resource_id IS NULL THEN NEW.resource_id:=p.default_resource_id; END IF;
+           RETURN NEW;
+          END;$$;
+          CREATE TRIGGER photo_reservations_prepare_trg BEFORE INSERT OR UPDATE ON public.photo_reservations FOR EACH ROW EXECUTE FUNCTION public.qa_prepare_reservation();
+          CREATE OR REPLACE FUNCTION public.qa_capacity_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+           IF NEW.resource_id IS NULL OR NEW.reservation_status IN ('cancelled','no_show') THEN RETURN NEW; END IF;
+           PERFORM pg_advisory_xact_lock(hashtextextended(NEW.studio_id::text||NEW.resource_id::text,0));
+           IF EXISTS(SELECT 1 FROM public.photo_reservations x WHERE x.studio_id=NEW.studio_id
+             AND x.id<>NEW.id AND x.resource_id=NEW.resource_id AND x.reservation_status NOT IN ('cancelled','no_show')
+             AND tstzrange(x.start_at,x.end_at,'[)')&&tstzrange(NEW.start_at,NEW.end_at,'[)')) THEN
+             RAISE EXCEPTION 'RESOURCE_CAPACITY_EXCEEDED' USING ERRCODE='23P01';
+           END IF;
+           RETURN NEW;END;$$;
+          CREATE TRIGGER zz_photo_reservations_resource_capacity_trg BEFORE INSERT OR UPDATE ON public.photo_reservations FOR EACH ROW EXECUTE FUNCTION public.qa_capacity_guard();
+          CREATE TABLE public.photo_reservation_subjects(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,reservation_id uuid NOT NULL,subject_id uuid NOT NULL,
+           subject_name_snapshot text NOT NULL,subject_type_snapshot text NOT NULL,relationship_snapshot text,is_main_subject bool DEFAULT false,display_order int DEFAULT 100,
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id),
+           FOREIGN KEY(studio_id,subject_id) REFERENCES public.photo_subjects(studio_id,id),UNIQUE(reservation_id,subject_id));
+          CREATE TABLE public.photo_reservation_options(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,reservation_id uuid NOT NULL,option_code text NOT NULL,
+           option_name_snapshot text NOT NULL,quantity int DEFAULT 1,price_display numeric,customer_note text,display_order int DEFAULT 100,
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id),UNIQUE(reservation_id,option_code));
+          CREATE TABLE public.photo_intake_answers(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,reservation_id uuid NOT NULL,
+           common_answers jsonb DEFAULT '{}',plan_answers jsonb DEFAULT '{}',summary text,answer_version text DEFAULT '1',confirmed_at timestamptz,
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id),UNIQUE(reservation_id));
+          CREATE TABLE public.photo_follow_tasks(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,task_key text,reservation_id uuid,customer_id uuid,
+           assigned_staff_id uuid,task_type text NOT NULL,title text NOT NULL,detail text,due_at timestamptz,
+           priority text DEFAULT 'normal',task_status text DEFAULT 'open',auto_created bool DEFAULT false,
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id),
+           FOREIGN KEY(studio_id,customer_id) REFERENCES public.photo_customers(studio_id,id));
+          R36X_END_SQL_FIXTURE
+          cat > /tmp/r36x-disposable/R36W_ATOMIC_BOOKING_REVIEW_ONLY_DO_NOT_RUN.sql <<'R36X_END_SQL_ATOMIC'
+          -- DPRO PHOTO R36V -- REVIEW ONLY / DO NOT EXECUTE ON PRODUCTION.
+          -- Draft based on READ-ONLY catalog inspection of actual photo_* tables on 2026-10-21.
+          -- Supabase/PostgREST exposure: caller is service_role only, never publishable/anon.
+          -- No deployment claim. Must pass disposable PG17 and full old-trigger integration before applying.
+          BEGIN;
+          
+          CREATE TABLE IF NOT EXISTS public.photo_booking_receipts_r36v (
+           studio_id uuid NOT NULL REFERENCES public.photo_studios(id) ON DELETE CASCADE,
+           idempotency_key uuid NOT NULL,
+           payload_fingerprint text NOT NULL CHECK (payload_fingerprint ~ '^[0-9a-f]{64}$'),
+           reservation_id uuid NOT NULL,
+           created_at timestamptz NOT NULL DEFAULT now(),
+           PRIMARY KEY (studio_id,idempotency_key),
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id) ON DELETE CASCADE
+          );
+          ALTER TABLE public.photo_booking_receipts_r36v ENABLE ROW LEVEL SECURITY;
+          REVOKE ALL ON public.photo_booking_receipts_r36v FROM PUBLIC,anon,authenticated;
+          GRANT SELECT,INSERT ON public.photo_booking_receipts_r36v TO service_role;
+          
+          CREATE TABLE IF NOT EXISTS public.photo_booking_subject_claims_r36v (
+           studio_id uuid NOT NULL REFERENCES public.photo_studios(id) ON DELETE CASCADE,
+           reservation_id uuid NOT NULL,
+           local_day date NOT NULL,
+           subject_fingerprint text NOT NULL CHECK (subject_fingerprint ~ '^[0-9a-f]{64}$'),
+           active boolean NOT NULL DEFAULT true,
+           PRIMARY KEY(studio_id,reservation_id,subject_fingerprint),
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id) ON DELETE CASCADE
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS photo_booking_subject_claims_r36v_active_uq
+           ON public.photo_booking_subject_claims_r36v(studio_id,local_day,subject_fingerprint)
+           WHERE active;
+          ALTER TABLE public.photo_booking_subject_claims_r36v ENABLE ROW LEVEL SECURITY;
+          REVOKE ALL ON public.photo_booking_subject_claims_r36v FROM PUBLIC,anon,authenticated;
+          GRANT SELECT,INSERT,UPDATE ON public.photo_booking_subject_claims_r36v TO service_role;
+          
+          -- Existing status and time adjustment flows must move claims atomically, rather than leave stale dates.
+          CREATE OR REPLACE FUNCTION public.photo_booking_sync_claims_r36v()
+          RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $fn$
+          DECLARE v_timezone text;
+          BEGIN
+           SELECT s.timezone INTO v_timezone FROM public.photo_studios s WHERE s.id = NEW.studio_id;
+           UPDATE public.photo_booking_subject_claims_r36v c
+           SET local_day = (NEW.start_at AT TIME ZONE coalesce(v_timezone,'Asia/Tokyo'))::date,
+               active = NEW.reservation_status NOT IN ('cancelled','no_show')
+           WHERE c.studio_id=NEW.studio_id AND c.reservation_id=NEW.id;
+           RETURN NEW;
+          END;
+          $fn$;
+          REVOKE ALL ON FUNCTION public.photo_booking_sync_claims_r36v() FROM PUBLIC,anon,authenticated;
+          GRANT EXECUTE ON FUNCTION public.photo_booking_sync_claims_r36v() TO service_role;
+          DROP TRIGGER IF EXISTS zz_photo_booking_sync_claims_r36v ON public.photo_reservations;
+          CREATE TRIGGER zz_photo_booking_sync_claims_r36v
+           AFTER UPDATE OF start_at,reservation_status ON public.photo_reservations
+           FOR EACH ROW EXECUTE FUNCTION public.photo_booking_sync_claims_r36v();
+          
+          -- p_* fingerprints are HMAC-SHA256 made by the TRUSTED Worker with a dedicated secret.
+          -- p_verified_customer_id/p_verified_line_user_id are set ONLY following actual server-side proof.
+          -- NEVER forward customer IDs or LINE IDs from an anonymous booking body to these args.
+          CREATE OR REPLACE FUNCTION public.photo_booking_atomic_r36v(
+           p_studio_id uuid, p_source text, p_request jsonb,
+           p_idempotency_key uuid, p_payload_fingerprint text,
+           p_subject_day_fingerprints text[],
+           p_verified_customer_id uuid DEFAULT NULL,
+           p_verified_line_user_id text DEFAULT NULL
+          ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $fn$
+          DECLARE
+           v_plan public.photo_plans%rowtype;
+           v_customer public.photo_customers%rowtype;
+           v_reservation public.photo_reservations%rowtype;
+           v_prev public.photo_booking_receipts_r36v%rowtype;
+           v_subject public.photo_subjects%rowtype;
+           v_subject_item jsonb;
+           v_opt jsonb;
+           v_intake jsonb;
+           v_subs jsonb;
+           v_opts jsonb;
+           v_staff uuid;
+           v_resource uuid;
+           v_start timestamptz;
+           v_date date;
+           v_timezone text;
+           v_phone text;
+           v_customer_name text;
+           v_verified boolean;
+           v_subject_total integer;
+           v_idx integer:=0;
+           v_fp text;
+           v_subject_id uuid;
+           v_participants integer;
+           v_local_time time;
+           v_settings public.photo_studio_settings%rowtype;
+          BEGIN
+           IF p_studio_id IS NULL OR p_idempotency_key IS NULL OR
+              p_payload_fingerprint !~ '^[0-9a-f]{64}$' OR
+              p_request IS NULL OR jsonb_typeof(p_request) <> 'object' THEN
+             RAISE EXCEPTION 'BOOKING_INPUT_INVALID' USING ERRCODE='22023';
+           END IF;
+           IF p_source NOT IN ('line','admin','phone','store') THEN
+             RAISE EXCEPTION 'BOOKING_SOURCE_INVALID' USING ERRCODE='22023';
+           END IF;
+           IF p_request ?| ARRAY['customer_id','selected_customer_id','line_user_id','studio_id','public_token','reservation_id','is_demo'] THEN
+             RAISE EXCEPTION 'BOOKING_UNTRUSTED_IDENTITY' USING ERRCODE='42501';
+           END IF;
+           v_verified := p_verified_customer_id IS NOT NULL OR nullif(btrim(p_verified_line_user_id),'') IS NOT NULL;
+           -- Prevent two simultaneous identical retries for the same studio/nonces.
+           PERFORM pg_advisory_xact_lock(hashtextextended(p_studio_id::text||':R36V:IDEMPOTENCY:'||p_idempotency_key::text,17));
+           SELECT * INTO v_prev FROM public.photo_booking_receipts_r36v
+           WHERE studio_id=p_studio_id AND idempotency_key=p_idempotency_key;
+           IF FOUND THEN
+             IF v_prev.payload_fingerprint <> p_payload_fingerprint THEN
+               RAISE EXCEPTION 'BOOKING_IDEMPOTENCY_MISMATCH' USING ERRCODE='23505';
+             END IF;
+             SELECT * INTO STRICT v_reservation FROM public.photo_reservations
+             WHERE studio_id=p_studio_id AND id=v_prev.reservation_id;
+             RETURN jsonb_build_object('ok',true,'replayed',true,
+               'reservation',jsonb_build_object('id',v_reservation.id,'reservation_no',v_reservation.reservation_no,
+               'public_token',v_reservation.public_token,'start_at',v_reservation.start_at,
+               'end_at',v_reservation.end_at,'plan_name',v_reservation.plan_name_snapshot,
+               'staff_name',v_reservation.staff_name_snapshot));
+           END IF;
+          
+           SELECT timezone INTO STRICT v_timezone FROM public.photo_studios
+           WHERE id=p_studio_id AND is_active AND production_guard;
+           SELECT * INTO STRICT v_settings FROM public.photo_studio_settings WHERE studio_id=p_studio_id;
+           SELECT * INTO STRICT v_plan FROM public.photo_plans
+           WHERE studio_id=p_studio_id AND is_active AND
+           ( (p_request->>'plan_id' IS NOT NULL AND id=(p_request->>'plan_id')::uuid)
+             OR (p_request->>'plan_id' IS NULL AND plan_code=p_request->>'plan_code') );
+           v_start:=(p_request->>'start_at')::timestamptz;
+           IF v_start IS NULL OR v_start <= transaction_timestamp() OR
+              v_start < transaction_timestamp() + make_interval(hours=>v_settings.min_advance_hours) OR
+              (v_start AT TIME ZONE v_timezone)::date >
+                 (transaction_timestamp() AT TIME ZONE v_timezone)::date + LEAST(v_plan.booking_open_days,v_settings.reservation_open_days_ahead) THEN
+             RAISE EXCEPTION 'BOOKING_DATE_NOT_ALLOWED' USING ERRCODE='22023';
+           END IF;
+           v_date:=(v_start AT TIME ZONE v_timezone)::date;
+           v_local_time:=(v_start AT TIME ZONE v_timezone)::time;
+           IF EXTRACT(minute FROM v_local_time)::int NOT IN (0,30)
+              OR EXTRACT(second FROM v_local_time)<>0 OR
+              NOT public.photo_plan_start_allowed(v_plan.booking_start_mode,v_plan.booking_start_interval_minutes,
+                 v_plan.booking_start_anchor_time,v_plan.booking_start_times,v_local_time) THEN
+             RAISE EXCEPTION 'BOOKING_SLOT_INVALID' USING ERRCODE='22023';
+           END IF;
+           v_participants:=coalesce((p_request->>'participant_count')::int,1);
+           IF v_participants < 1 OR v_participants > LEAST(v_plan.max_participants,100) THEN
+             RAISE EXCEPTION 'BOOKING_PARTICIPANTS_INVALID' USING ERRCODE='22023';
+           END IF;
+           v_staff:=nullif(p_request->>'assigned_staff_id','')::uuid;
+           IF v_staff IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.photo_staff
+             WHERE studio_id=p_studio_id AND id=v_staff AND is_active AND can_be_assigned) THEN
+             RAISE EXCEPTION 'BOOKING_STAFF_INVALID' USING ERRCODE='22023';
+           END IF;
+           v_resource:=coalesce(nullif(p_request->>'resource_id','')::uuid,v_plan.default_resource_id);
+           IF v_resource IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.photo_resources
+             WHERE studio_id=p_studio_id AND id=v_resource AND is_active) THEN
+             RAISE EXCEPTION 'BOOKING_RESOURCE_INVALID' USING ERRCODE='22023';
+           END IF;
+           IF v_staff IS NULL AND v_resource IS NULL THEN
+             RAISE EXCEPTION 'BOOKING_CAPACITY_NOT_VERIFIABLE' USING ERRCODE='22023';
+           END IF;
+           v_customer_name:=nullif(btrim(p_request->>'customer_name'),'');
+           v_phone:=public.photo_normalize_phone(p_request->>'phone');
+           IF v_customer_name IS NULL OR v_phone IS NULL OR length(v_phone) NOT IN (10,11) OR v_phone !~ '^0[0-9]+$' THEN
+             RAISE EXCEPTION 'BOOKING_CUSTOMER_INVALID' USING ERRCODE='22023';
+           END IF;
+           v_subs:=coalesce(p_request->'subjects','[]'::jsonb);
+           v_opts:=coalesce(p_request->'options','[]'::jsonb);
+           v_intake:=p_request->'intake';
+           IF jsonb_typeof(v_subs)<>'array' OR jsonb_array_length(v_subs) NOT BETWEEN 1 AND LEAST(20,v_settings.max_subjects_per_reservation)
+           OR coalesce(array_length(p_subject_day_fingerprints,1),0) <> jsonb_array_length(v_subs)
+           OR jsonb_typeof(v_opts)<>'array' OR jsonb_array_length(v_opts)>50 THEN
+             RAISE EXCEPTION 'BOOKING_DETAILS_INVALID' USING ERRCODE='22023';
+           END IF;
+           IF EXISTS (SELECT 1 FROM unnest(p_subject_day_fingerprints) x WHERE x !~ '^[0-9a-f]{64}$') THEN
+             RAISE EXCEPTION 'BOOKING_FINGERPRINT_INVALID' USING ERRCODE='22023';
+           END IF;
+          
+           -- Acquire a single transaction-wide advisory lock before checking related guest claims.
+           PERFORM pg_advisory_xact_lock(hashtextextended(p_studio_id::text||':R36V:DAY:'||v_date::text,37));
+           IF EXISTS (SELECT 1 FROM public.photo_booking_subject_claims_r36v c
+             WHERE c.studio_id=p_studio_id AND c.local_day=v_date AND c.active
+             AND c.subject_fingerprint=ANY(p_subject_day_fingerprints)) THEN
+             RAISE EXCEPTION 'SAME_SUBJECT_SAME_DAY' USING ERRCODE='23505';
+           END IF;
+          
+           -- R36W: serialized lookups for one LINE identity across different days/nonces.
+           -- A unique index alone would reject one booking rather than reuse its customer.
+           IF nullif(btrim(p_verified_line_user_id),'') IS NOT NULL THEN
+             PERFORM pg_advisory_xact_lock(hashtextextended(
+               p_studio_id::text||':R36W:LINE:'||p_verified_line_user_id,43));
+           END IF;
+           -- Anonymous phone equality NEVER authorizes takeover of an existing customer.
+           IF p_verified_customer_id IS NOT NULL THEN
+             SELECT * INTO STRICT v_customer FROM public.photo_customers
+             WHERE studio_id=p_studio_id AND id=p_verified_customer_id AND deleted_at IS NULL AND is_active;
+           ELSIF p_verified_line_user_id IS NOT NULL AND btrim(p_verified_line_user_id)<>'' THEN
+             SELECT * INTO v_customer FROM public.photo_customers
+             WHERE studio_id=p_studio_id AND line_user_id=p_verified_line_user_id AND deleted_at IS NULL AND is_active;
+           END IF;
+           IF v_customer.id IS NULL THEN
+             INSERT INTO public.photo_customers(studio_id,customer_name,phone,email,line_user_id,preferred_contact,first_source,last_source)
+             VALUES(p_studio_id,v_customer_name,v_phone,nullif(p_request->>'email',''),
+               CASE WHEN v_verified THEN nullif(p_verified_line_user_id,'') ELSE NULL END,
+               CASE WHEN v_verified THEN 'line' ELSE 'phone' END,p_source,p_source)
+             RETURNING * INTO v_customer;
+           END IF;
+          
+           INSERT INTO public.photo_reservations(studio_id,customer_id,plan_id,assigned_staff_id,resource_id,
+            reservation_source,start_at,duration_minutes,participant_count,reservation_status,visit_status,post_status,
+            shooting_purpose,desired_mood,desired_shots,bring_costume,rental_costume_requested,
+            hair_makeup_requested,family_additional_requested,social_media_consult_requested,
+            accommodation_note,customer_note,internal_note,created_by,updated_by,is_demo)
+           VALUES(p_studio_id,v_customer.id,v_plan.id,v_staff,v_resource,
+             CASE WHEN p_source='line' THEN 'line' ELSE p_source END,v_start,v_plan.duration_minutes,v_participants,
+             CASE WHEN p_source='line' THEN 'reserved' ELSE 'confirmed' END,'scheduled','selection_pending',
+             left(p_request->>'shooting_purpose',1000),left(p_request->>'desired_mood',1000),left(p_request->>'desired_shots',3000),
+             coalesce((p_request->>'bring_costume')::boolean,false),
+             coalesce((p_request->>'rental_costume_requested')::boolean,false),
+             coalesce((p_request->>'hair_makeup_requested')::boolean,false),
+             coalesce((p_request->>'family_additional_requested')::boolean,false),
+             coalesce((p_request->>'social_media_consult_requested')::boolean,false),
+             left(p_request->>'accommodation_note',3000),left(p_request->>'customer_note',3000),
+             CASE WHEN p_source='line' THEN NULL ELSE left(p_request->>'internal_note',3000) END,
+             'r36v_atomic_booking','r36v_atomic_booking',false)
+           RETURNING * INTO v_reservation;
+          
+           FOR v_subject_item IN SELECT value FROM jsonb_array_elements(v_subs) LOOP
+             v_idx:=v_idx+1;
+             v_fp:=p_subject_day_fingerprints[v_idx];
+             IF nullif(btrim(coalesce(v_subject_item->>'subject_name',v_subject_item->>'name')),'') IS NULL THEN
+               RAISE EXCEPTION 'BOOKING_SUBJECT_NAME_REQUIRED' USING ERRCODE='22023';
+             END IF;
+             IF v_subject_item ? 'id' AND NOT v_verified THEN
+               RAISE EXCEPTION 'BOOKING_SUBJECT_ID_NOT_VERIFIED' USING ERRCODE='42501';
+             END IF;
+             v_subject_id:=nullif(v_subject_item->>'id','')::uuid;
+             IF v_subject_id IS NOT NULL THEN
+               SELECT * INTO STRICT v_subject FROM public.photo_subjects
+               WHERE id=v_subject_id AND studio_id=p_studio_id AND customer_id=v_customer.id AND is_active;
+             ELSE
+               INSERT INTO public.photo_subjects(studio_id,customer_id,subject_code,subject_name,subject_type,
+                 birth_date,age_note,relationship_to_customer,gender,pet_species,pet_breed,attention_note,shooting_care_note)
+               VALUES(p_studio_id,v_customer.id,'PHS-R36V-'||replace(gen_random_uuid()::text,'-',''),
+                 left(coalesce(v_subject_item->>'subject_name',v_subject_item->>'name'),200),
+                 coalesce(v_subject_item->>'subject_type','person'),
+                 nullif(v_subject_item->>'birth_date','')::date,
+                 left(v_subject_item->>'age_note',100),left(v_subject_item->>'relationship_to_customer',100),
+                 left(v_subject_item->>'gender',50),left(v_subject_item->>'pet_species',100),
+                 left(v_subject_item->>'pet_breed',100),left(v_subject_item->>'attention_note',2000),
+                 left(v_subject_item->>'shooting_care_note',2000))
+               RETURNING * INTO v_subject;
+             END IF;
+             -- Prevent verified customers from booking an existing subject twice on the same day,
+             -- even if someone supplies a different HMAC key/phone. The studio/day lock is held.
+             IF EXISTS (
+               SELECT 1 FROM public.photo_reservation_subjects l
+               JOIN public.photo_reservations r ON r.id=l.reservation_id AND r.studio_id=l.studio_id
+               WHERE l.studio_id=p_studio_id AND l.subject_id=v_subject.id
+                 AND r.reservation_status NOT IN ('cancelled','no_show')
+                 AND (r.start_at AT TIME ZONE v_timezone)::date=v_date
+             ) THEN
+               RAISE EXCEPTION 'SAME_SUBJECT_SAME_DAY' USING ERRCODE='23505';
+             END IF;
+             INSERT INTO public.photo_reservation_subjects(studio_id,reservation_id,subject_id,
+                subject_name_snapshot,subject_type_snapshot,relationship_snapshot,is_main_subject,display_order)
+             VALUES(p_studio_id,v_reservation.id,v_subject.id,v_subject.subject_name,v_subject.subject_type,
+                v_subject.relationship_to_customer,coalesce((v_subject_item->>'is_main_subject')::boolean,v_idx=1),v_idx*10);
+             INSERT INTO public.photo_booking_subject_claims_r36v(studio_id,reservation_id,local_day,subject_fingerprint)
+             VALUES(p_studio_id,v_reservation.id,v_date,v_fp);
+           END LOOP;
+          
+           FOR v_opt IN SELECT value FROM jsonb_array_elements(v_opts) LOOP
+             INSERT INTO public.photo_reservation_options(studio_id,reservation_id,option_code,option_name_snapshot,
+                quantity,price_display,customer_note,display_order)
+             VALUES(p_studio_id,v_reservation.id,left(coalesce(v_opt->>'option_code',v_opt->>'code'),100),
+                left(coalesce(v_opt->>'option_name',v_opt->>'name'),200),
+                coalesce((v_opt->>'quantity')::int,1),nullif(v_opt->>'price_display','')::numeric,
+                left(v_opt->>'customer_note',1000),coalesce((v_opt->>'display_order')::int,100));
+           END LOOP;
+          
+           IF v_intake IS NOT NULL AND jsonb_typeof(v_intake)='object' THEN
+            INSERT INTO public.photo_intake_answers(studio_id,reservation_id,common_answers,plan_answers,
+              summary,answer_version,confirmed_at)
+            VALUES(p_studio_id,v_reservation.id,coalesce(v_intake->'common_answers','{}'::jsonb),
+              coalesce(v_intake->'plan_answers','{}'::jsonb),
+              left(v_intake->>'summary',5000),coalesce(left(v_intake->>'answer_version',20),'1'),
+              CASE WHEN coalesce((v_intake->>'confirmed')::boolean,false) THEN now() ELSE NULL END);
+           END IF;
+          
+           INSERT INTO public.photo_follow_tasks(studio_id,task_key,reservation_id,customer_id,assigned_staff_id,
+             task_type,title,detail,due_at,priority,task_status,auto_created)
+           VALUES(p_studio_id,v_reservation.reservation_no||'-CONFIRM',v_reservation.id,v_customer.id,v_staff,
+            'reservation_confirm',v_customer.customer_name||'様の予約内容確認',v_plan.plan_name||'の予約内容を確認する。',
+            greatest(now(),v_start-interval '72 hours'),'high','open',true),
+           (p_studio_id,v_reservation.reservation_no||'-BELONGINGS',v_reservation.id,v_customer.id,v_staff,
+            'belongings_guide',v_customer.customer_name||'様へ持ち物案内',
+            coalesce(v_plan.belongings_guide,'撮影当日の持ち物を案内する。'),
+            greatest(now(),v_start-interval '48 hours'),'normal','open',true);
+          
+           INSERT INTO public.photo_booking_receipts_r36v(studio_id,idempotency_key,payload_fingerprint,reservation_id)
+           VALUES(p_studio_id,p_idempotency_key,p_payload_fingerprint,v_reservation.id);
+          
+           RETURN jsonb_build_object('ok',true,'replayed',false,
+            'reservation',jsonb_build_object('id',v_reservation.id,'reservation_no',v_reservation.reservation_no,
+              'public_token',v_reservation.public_token,'start_at',v_reservation.start_at,'end_at',v_reservation.end_at,
+              'plan_name',v_reservation.plan_name_snapshot,'staff_name',v_reservation.staff_name_snapshot),
+            'customer',jsonb_build_object('customer_no',v_customer.customer_no,'customer_name',v_customer.customer_name,
+              'phone',v_customer.phone), 'message','撮影予約を受け付けました。');
+          END;
+          $fn$;
+          REVOKE ALL ON FUNCTION public.photo_booking_atomic_r36v(uuid,text,jsonb,uuid,text,text[],uuid,text)
+           FROM PUBLIC,anon,authenticated;
+          GRANT EXECUTE ON FUNCTION public.photo_booking_atomic_r36v(uuid,text,jsonb,uuid,text,text[],uuid,text)
+           TO service_role;
+          COMMIT;
+          -- Review-only: transaction rolls back automatically if any INSERT/trigger fails.
+          -- Gate: no production run until disposable PG17 exact-trigger tests & coordinated Worker deployment.
+          R36X_END_SQL_ATOMIC
+          cat > /tmp/r36x-disposable/R36W_PG17_DISPOSABLE_QA.py <<'R36X_END_PY_QA'
+          #!/usr/bin/env python3
+          """R36W exact draft-SQL against disposable local PG17; NEVER connect to Supabase."""
+          import os, pathlib, uuid, hashlib, json, hmac, concurrent.futures
+          from datetime import datetime,timedelta,time
+          from zoneinfo import ZoneInfo
+          from psycopg import connect
+          from psycopg.types.json import Jsonb
+          assert os.getenv('R36V_DISPOSABLE_PG17')=='TRUE', 'DISPOSABLE_QA_FLAG_REQUIRED'
+          assert os.getenv('PGHOST')=='127.0.0.1', 'LOCAL_POSTGRES_ONLY'
+          DSN='host=127.0.0.1 port=5432 dbname=postgres user=postgres password=R36V_ONLY_DISPOSABLE_PORT_5432 connect_timeout=3'
+          root=pathlib.Path(__file__).parent
+          with connect(DSN,autocommit=True) as db:
+            db.execute((root/'R36W_PG17_FIXTURE_DISPOSABLE_ONLY.sql').read_text())
+            db.execute((root/'R36W_ATOMIC_BOOKING_REVIEW_ONLY_DO_NOT_RUN.sql').read_text())
+          STUDIO=uuid.uuid4();STUDIO_OTHER=uuid.uuid4(); PLAN=uuid.uuid4();PLAN_OTHER=uuid.uuid4(); STAFF=uuid.uuid4();ROOM=uuid.uuid4()
+          with connect(DSN,autocommit=True) as db:
+           for studio,plan in [(STUDIO,PLAN),(STUDIO_OTHER,PLAN_OTHER)]:
+            db.execute('INSERT INTO public.photo_studios(id,studio_code) VALUES(%s,%s)',(studio,'SYNTHETIC-'+str(studio)[:8]))
+            db.execute('INSERT INTO public.photo_studio_settings(studio_id) VALUES(%s)',(studio,))
+            db.execute('INSERT INTO public.photo_plans(id,studio_id,plan_code,plan_name,default_resource_id) VALUES(%s,%s,%s,%s,NULL)',(plan,studio,'TEST','完全架空テストプラン'))
+           db.execute('INSERT INTO public.photo_staff(id,studio_id,staff_name) VALUES(%s,%s,%s)',(STAFF,STUDIO,'架空スタッフ'))
+           db.execute('INSERT INTO public.photo_resources(id,studio_id,resource_name) VALUES(%s,%s,%s)',(ROOM,STUDIO,'架空撮影室'))
+          nextday=datetime.now(ZoneInfo('Asia/Tokyo')).date()+timedelta(days=10)
+          START=datetime.combine(nextday,time(10,0),ZoneInfo('Asia/Tokyo'))
+          COUNT=0
+          
+          def good(ok,why):
+           global COUNT
+           assert ok,why
+           COUNT+=1
+           print(f'PASS {COUNT:03d} {why}',flush=True)
+          
+          def sample(**kwargs):
+           b={'plan_id':str(PLAN),'start_at':START.isoformat(),'assigned_staff_id':str(STAFF),'resource_id':str(ROOM),
+           'customer_name':'架空保護者','phone':'09011112222','subjects':[{'subject_name':'架空の子','subject_type':'child'}],
+           'options':[{'option_code':'PHOTO','option_name':'架空写真オプション','quantity':1}],
+           'intake':{'common_answers':{'synthetic':True},'plan_answers':{},'summary':'合成入力','confirmed':True}}
+           b.update(kwargs);return b
+          
+          def synthetic_subject_fingerprints(body,studio):
+           """Disposable-only HMAC; UUIDs must be serialized as text (R36V.1 CI fix).
+          
+           Use each booking's actual Asia/Tokyo date, rather than the global initial
+           test date, so date-dependent duplicate checks remain meaningful.
+           """
+           local_day=datetime.fromisoformat(body['start_at']).astimezone(ZoneInfo('Asia/Tokyo')).date().isoformat()
+           return [hmac.new(b'R36V DISPOSABLE ONLY',
+             json.dumps([str(studio),local_day,body['phone'],s['subject_name']],ensure_ascii=False).encode(),
+             hashlib.sha256).hexdigest() for s in body.get('subjects',[])]
+          
+          def call(body,idem=None,fp=None,subject_fps=None,studio=STUDIO,verified=None,source='line',verified_line=None):
+           idem=idem or uuid.uuid4();fp=fp or hashlib.sha256(json.dumps(body,sort_keys=True).encode()).hexdigest()
+           if subject_fps is None:
+            subject_fps=synthetic_subject_fingerprints(body,studio)
+           with connect(DSN) as db:
+            v=db.execute('SELECT public.photo_booking_atomic_r36v(%s,%s,%s,%s,%s,%s,%s,%s)',
+              (studio,source,Jsonb(body),idem,fp,subject_fps,verified,verified_line)).fetchone()[0]
+            db.commit()
+           return v
+          
+          def rejected(fn,description):
+           try:fn()
+           except Exception:
+            good(True,description);return
+           raise AssertionError('expected database rejection: '+description)
+          
+          def counts():
+           with connect(DSN) as db:
+            return tuple(db.execute('SELECT COUNT(*) FROM public.'+name).fetchone()[0] for name in
+              ('photo_customers','photo_subjects','photo_reservations','photo_reservation_subjects','photo_reservation_options',
+               'photo_intake_answers','photo_follow_tasks','photo_booking_receipts_r36v','photo_booking_subject_claims_r36v'))
+          
+          p=sample();k=uuid.uuid4();result=call(p,idem=k)
+          assert result.get('ok'),result
+          good(result['replayed'] is False,'first booking success')
+          good(all(result['reservation'].get(x) for x in ('id','reservation_no','public_token')),'public booking receipt returned')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'all 9 related tables atomic')
+          repeat=call(p,idem=k)
+          good(repeat['replayed'] and repeat['reservation']['id']==result['reservation']['id'],'idempotent replay returns same reservation')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'replay creates no additional records')
+          rejected(lambda:call({**p,'customer_name':'changed'},idem=k),'same nonce different payload denied')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'mismatched replay no side effects')
+          rejected(lambda:call({**p,'selected_customer_id':str(uuid.uuid4())}),'public fake selected_customer_id denied')
+          rejected(lambda:call({**p,'line_user_id':'ATTACKER'}),'client LINE ID denied')
+          rejected(lambda:call({**p,'customer_id':str(uuid.uuid4())}),'public fake customer_id denied')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'spoofing attempt writes none')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(minutes=15)).isoformat(),
+           'subjects':[{'subject_name':'別の子','subject_type':'child'}]},subject_fps=['1'*64]),'non 30-minute slot denied')
+          rejected(lambda:call({**p,'subjects':[{'subject_name':'他の子','subject_type':'child'}]},subject_fps=['2'*64]),'staff or resource overlap blocked')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(hours=2)).isoformat()}),'same phone and subject same-day collision blocked')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(hours=2)).isoformat(),
+           'options':[{'option_code':'DUP','option_name':'架空A'},{'option_code':'DUP','option_name':'架空B'}],
+           'subjects':[{'subject_name':'別の子','subject_type':'child'}]},subject_fps=['3'*64]),'failure in child option insert rolls back entire transaction')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'option error left no orphan rows')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(hours=2)).isoformat(),
+           'subjects':[{'subject_name':'別の子','subject_type':'child','id':str(uuid.uuid4())}]},subject_fps=['4'*64]),'guest cannot attach arbitrary subject id')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(hours=2)).isoformat(),
+           'subjects':[{'subject_name':'別の子','subject_type':'child'}]},subject_fps=['ZZZ']), 'malformed fingerprint rejected')
+          with connect(DSN,autocommit=True) as db:
+           db.execute('UPDATE public.photo_reservations SET reservation_status=%s WHERE id=%s',('cancelled',result['reservation']['id']))
+           v=db.execute('SELECT active FROM public.photo_booking_subject_claims_r36v WHERE reservation_id=%s',(result['reservation']['id'],)).fetchone()[0]
+          good(v is False,'cancellation synchronously deactivates same-day subject claim')
+          rebook=call({**p,'start_at':(START+timedelta(hours=2)).isoformat(),
+           'subjects':[{'subject_name':'架空の子','subject_type':'child'}]})
+          good(rebook['ok'],'after cancellation, different time same day allowed')
+          # Verified customer source match is server proof; anonymous phone equality must not merge customers.
+          guest2=call({**p,'phone':'09033334444','start_at':(START+timedelta(days=1)).isoformat()},subject_fps=['f'*64])
+          good(guest2['ok'] and counts()[0]==3,'new guest booking never takes over by matching name')
+          # Same verified customer can book different day, and subject ID cannot cross tenants.
+          with connect(DSN) as db:
+           c=db.execute('SELECT customer_id FROM public.photo_reservations WHERE id=%s',(result['reservation']['id'],)).fetchone()[0]
+           subject=db.execute('SELECT subject_id FROM public.photo_reservation_subjects WHERE reservation_id=%s',(result['reservation']['id'],)).fetchone()[0]
+          item={**p,'start_at':(START+timedelta(days=2)).isoformat(),'subjects':[{'id':str(subject),'subject_name':'架空の子'}]}
+          verified=call(item,verified=c,subject_fps=['a'*64])
+          good(verified['ok'],'verified customer may reuse own linked subject on a new date')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(days=3)).isoformat(),'subjects':[{'id':str(subject),'subject_name':'架空の子'}]},
+            verified=uuid.uuid4(),subject_fps=['b'*64]),'unknown verified customer rejected')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(days=4)).isoformat(),'subjects':[{'id':str(subject),'subject_name':'架空の子'}]},
+            verified=c,studio=STUDIO_OTHER,subject_fps=['c'*64]),'cross-studio customer ownership rejected')
+          # Unique index and advisory lock: 8 simultaneous submissions can create only one reservation.
+          sharedStart=(START+timedelta(days=7)).isoformat()
+          parallel=sample(start_at=sharedStart,subjects=[{'subject_name':'架空 並列テスト','subject_type':'child'}],
+            phone='09055556666',options=[])
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+           fs=[pool.submit(call,parallel,subject_fps=['d'*64]) for _ in range(8)]
+           outputs=[];errors=0
+           for future in fs:
+            try: outputs.append(future.result())
+            except Exception:errors+=1
+          good(len(outputs)==1 and errors==7,'8-way identical slot race: exactly 1 commit')
+          with connect(DSN) as db:
+           n=db.execute('SELECT count(*) FROM public.photo_booking_subject_claims_r36v WHERE subject_fingerprint=%s',('d'*64,)).fetchone()[0]
+          good(n==1,'8-way race did not leave duplicate claims')
+          with connect(DSN) as db:
+           try:
+            db.execute('SET ROLE anon')
+            db.execute("SELECT public.photo_booking_atomic_r36v(%s,%s,%s,%s,%s,%s,%s,%s)",
+            (STUDIO,'line',Jsonb(p),uuid.uuid4(),'e'*64,['e'*64],None,None))
+            raise AssertionError('anon call unexpectedly accepted')
+           except Exception as exc:
+            good('permission denied' in str(exc).lower(),'anon has no direct RPC EXECUTE permission')
+          # R36W: two distinct future-day bookings by one verified LINE identity must safely
+          # converge onto ONE customer row, not reject due to the real-world unique index.
+          line_identity='U-R36W-SYNTHETIC-IDENTITY-NO-REAL-LINE-USER'
+          with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            f1=pool.submit(call,sample(start_at=(START+timedelta(days=12)).isoformat(),
+              phone='09088881111',subjects=[{'subject_name':'架空LINE対象1','subject_type':'child'}]),verified_line=line_identity)
+            f2=pool.submit(call,sample(start_at=(START+timedelta(days=13)).isoformat(),
+              phone='09088881111',subjects=[{'subject_name':'架空LINE対象2','subject_type':'child'}]),verified_line=line_identity)
+            r1,r2=f1.result(),f2.result()
+          good(r1['ok'] and r2['ok'] and r1['reservation']['id'] != r2['reservation']['id'],
+            'parallel verified LINE bookings on different days both commit')
+          with connect(DSN) as db:
+            owner=db.execute('SELECT id FROM public.photo_customers WHERE studio_id=%s AND line_user_id=%s',
+              (STUDIO,line_identity)).fetchall()
+            both=db.execute('SELECT count(DISTINCT customer_id) FROM public.photo_reservations WHERE id IN (%s,%s)',
+              (r1['reservation']['id'],r2['reservation']['id'])).fetchone()[0]
+          good(len(owner)==1 and both==1,
+            'parallel verified LINE bookings converge to one studio-bound customer')
+          
+          print(f'R36W_DISPOSABLE_PG17_QA: {COUNT}/{COUNT} PASS, isolated temp postgres:17, no Supabase, no production writes')
+          R36X_END_PY_QA
+          python3 /tmp/r36x-disposable/R36W_PG17_DISPOSABLE_QA.py
+      - name: Verify actual R36X source cross-studio LINE identity contract (offline mocks)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, io, zipfile, hashlib, pathlib
+          raw=base64.b64decode('''
+          UEsDBBQAAAAIANQ8VV2nKIdJeiwAAHOjAAAwAAAAUjM2WF9VUFNUUkVBTV9TVFVESU9fQk9VTkRfQ09NUElMRURfU1lOVEhFVElD
+          Lmpz7X1tcyPJedj3/RWzqs0CuAMGJPdudcIexQJJ7C50XIIByN278CjsADMkRgQw8MyAL6KY0u7JjiOfK29WJY5dFUeJLUUVyZWK
+          P9gqJ/4voe5OPyPPS3dP98wABHf3zqcq74clZqan++mnn/d++plq1Wrfu79rtRtPm41nVmt766OaFQfH3rgS9YOJZ03CIPb6sR+M
+          Iyv0fm/qh551GAbj2Bu7bx9Oh0OrFwTH/vjIaqw0rJ53GEAD15sMg3P7Vh/eiq2njXan2dq2Vq3C5k67Vdl53NptVTZaT560tivt
+          b1Y6jQ4+r3R29zabrcp6a297s97+qLKytHJ/eWl5qfBAdLS53s3va3O90l6h9kvvrbyj2j9st7Z3Z7xCz3Lf2mo8qm981H3Wan/Q
+          aOtvC/iWlyrtb1X4caWzt/6dxsZuZbP+UWVzb2eruVHfbVQe7dXbm9zzN5ffTfWMXQ3ieBLVqlUX0FuZDII4qETx1PWDytAfexVn
+          4tv4aBTFxytLS0v2aRAee2Fku95Jgo3Gw/re1m6XweputDYb2DW+16Uuu643CrTmT1rd+uaT5rZqurxyT0MWzVGHCH65035cCT3H
+          Pa8cObF36pyr9q1281FzuwMvjb1Tq+PFxX1jWhL2ytDp2Ud+PJj2bD8olFOTjwbBxO4Ho8JBCXoeOlFkPYbnjTAMQss7QzKLLL66
+          uGXBvyh24mn0gH73A9fjX64XO/5Q3gX4QoA8CIvcukwty9bIiyLnCH5wc4QdKLhkXVjRdOKFRfG89MCKB35k88vQSozJd7EruEdj
+          8x3Vm4DCurx1eetwOia2sfpDzxkXT8rWGFq8u7SEwzEKsesTa5WhsNasQsGqWZ04BG4qnpRs+DEqAiyhF0/DMbReswCmod/3ikvQ
+          WwkaFwo4WDJUEEZF4NJkiAEMcWEV6v0+TK2yAXwbBsNKfTgMTitPvHgQuFEBunnU2C3vtDrwX31343F5Z2+3vNnYauw2yq2dXSD/
+          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
+          F39W9fvcqar8fyv/+3N5Xz5JSuOLt9dsri1+O/dswKus68ZeZ7f1RBRIftpoNx+KlZWx3QTyU4dl8aH48HOaB5pHY6yk68hUm4qo
+          WOQiCg5BAKM7jJ9p4K/8+GNJKBXcgEbW6GPSGn0y1mQJmVhhRsZNAHr2vJwVPLsuUaYfokjOM9DZN/4YkTFKjiTZYVbzsF6jM2Rx
+          S8kOALz6CgXKc2R5Ti7CjCMOfWMyoTfxxrghMTzPIBFeO3VCEq1S/Fj0eQtRnQUUW+id+ME04o879byBA5dARG4YTFCokfSxc85l
+          fpkbDpeL2R+cLtDLsTX2zYN9VAiwIgRx5tgfVfSb+ZRrjqdvhx7l7Ku3tPOzk9INjIFF68blHWG9tn7cYltPaQtjt0af2uJtvEok
+          9vFkcpyPX/YCvgRLA7NzSe1RyWtx4DChODuTyTTjxJPJj5mTSeqxmWNl6umkHF32JJdScbM+fFG6iajTvx/wrN0Ee3OjvjPjGwLU
+          vW5VZq14vYJDjLXGblLrb44+UgiZX5//uvrxiXpKfarL+FDaot/tMjauMrpLIAAVmPg5V4thFwt9wwsaXv8Nrzfz0QjhX/AGkw+W
+          eHqpU9+mW0VEzDkI2Et/eIpfMG/Oe4V0Fb6SPuu3iGCVae50iDPHnb+89doG2M0/JXG9mcQ2Dn/XYW2OSTPnlDV+Gwr++8DwW5QN
+          QxrUiahSrfhWSNYuNcUZVbvBol/5Mu51V+NyZsInHY4HfZQ9G/+Gz8W//pl4eR6+VLoeL3O/Qo0f6tjbbjceNTu7jbY8JS+Ox3NS
+          O6xifafJUQGuiEUFpsgQK3JmLae4UpW+5IynAIiJXEu5zTs9KQv5rVoefUICxRR4bgpSkHNUAzvlPmPKNkUkVIGrRrvdaifhHG/N
+          lhW0Qf55eoUe8PBsOo1ZxKN++KnoM9kWf7peDEg3Pic0I9XBPG6tddKnoxayd+6wprrOy3DAgYXIpUOh8P//B1BLAwQUAAAACAC2
+          PFVdfqVJPwKDAAAQIwIANgAAAFIzNlhfV09SS0VSX1NUVURJT19CT1VORF9SRVZJRVdfT05MWV9ET19OT1RfREVQTE9ZLm1qc+y9
+          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
+          lyXMw8AoZVCKEN/TzErXV/IVAgReyClNA0w9uNzq3j29xIiWUlL118fb65vFwUf9lw/EEUdxtqGOoMp3xd2f7eDvHYjTzVWz+ELw
+          FxZMDAyYIiBfq9/3mIsTJnxxE5SfhPECi+63Rntl6IbliZeDGZBZbC/fhdee7vTw/VmjDdFPYNjsPOD6Q9Gj/x9QSwECFAMUAAAA
+          CADUPFVdpyiHSXosAABzowAAMAAAAAAAAAAAAAAApIEAAAAAUjM2WF9VUFNUUkVBTV9TVFVESU9fQk9VTkRfQ09NUElMRURfU1lO
+          VEhFVElDLmpzUEsBAhQDFAAAAAgAtjxVXX6lST8CgwAAECMCADYAAAAAAAAAAAAAAKSByCwAAFIzNlhfV09SS0VSX1NUVURJT19C
+          T1VORF9SRVZJRVdfT05MWV9ET19OT1RfREVQTE9ZLm1qc1BLAQIUAxQAAAAIANM8VV1r98uziBEAAJgyAAAkAAAAAAAAAAAAAACk
+          gR6wAABSMzZYX1NUVURJT19CSU5ESU5HX1NZTlRIRVRJQ19RQS5janNQSwUGAAAAAAMAAwAUAQAA6MEAAAAA
+          ''')
+          root=pathlib.Path('/tmp/r36x-identity-contract')
+          root.mkdir(parents=True,exist_ok=True)
+          expected={
+            'R36X_UPSTREAM_STUDIO_BOUND_COMPILED_SYNTHETIC.js':'2cd8364812ed8cdf2accea386d28dd5fe1f62fe8bbb058ffbed9e9dd8edc97cc',
+            'R36X_WORKER_STUDIO_BOUND_REVIEW_ONLY_DO_NOT_DEPLOY.mjs':'ac4c108cea3b97be5252ea90939742770d22630faceff395ec061a253e13393b',
+            'R36X_STUDIO_BINDING_SYNTHETIC_QA.cjs':'5a651192b7ef987aff8c1b610411d96a66ca6914fdefcbabf086ebcfe30daddb',
+          }
+          with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            assert set(z.namelist())==set(expected),"EMBEDDED_FILE_LIST_MISMATCH"
+            for name in expected:
+              data=z.read(name)
+              assert hashlib.sha256(data).hexdigest()==expected[name],"SOURCE_SHA256_MISMATCH:"+name
+              out=root/name;out.write_bytes(data)
+          print('PASS: sealed identity sources match SHA256; NO checkout / secrets / production')
+          PY
+          node --check /tmp/r36x-identity-contract/R36X_WORKER_STUDIO_BOUND_REVIEW_ONLY_DO_NOT_DEPLOY.mjs
+          node /tmp/r36x-identity-contract/R36X_STUDIO_BINDING_SYNTHETIC_QA.cjs
+          echo "R36X PASS: ephemeral PostgreSQL17 plus studio identity checks. No deployment."
