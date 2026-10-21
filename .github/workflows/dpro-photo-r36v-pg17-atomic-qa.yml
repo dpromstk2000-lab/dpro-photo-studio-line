@@ -1,0 +1,584 @@
+name: DPRO PHOTO R36V Disposable PG17 Atomic QA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  atomic-disposable:
+    name: Ephemeral PG17 SQL validation only
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: R36V_ONLY_DISPOSABLE_PORT_5432
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Provision test runner (no repository source, no secrets)
+        run: python3 -m pip install 'psycopg[binary]==3.2.10'
+      - name: Run reviewed SQL against disposable PostgreSQL 17 only
+        env:
+          R36V_DISPOSABLE_PG17: "TRUE"
+          PGHOST: "127.0.0.1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dpro-photo-r36v-disposable
+          cat > /tmp/dpro-photo-r36v-disposable/R36V_PG17_FIXTURE_DISPOSABLE_ONLY.sql <<'R36V_END_SQL_FIXTURE'
+          -- Disposable PostgreSQL17 only. Shape-aligned synthetic fixture, NO production data.
+          CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN;
+          CREATE EXTENSION IF NOT EXISTS pgcrypto;
+          CREATE EXTENSION IF NOT EXISTS btree_gist;
+          CREATE TABLE public.photo_studios(id uuid PRIMARY KEY,studio_code text NOT NULL,timezone text DEFAULT 'Asia/Tokyo',is_active bool DEFAULT true,production_guard bool DEFAULT true);
+          CREATE TABLE public.photo_studio_settings(studio_id uuid PRIMARY KEY REFERENCES public.photo_studios(id),min_advance_hours int DEFAULT 1,reservation_open_days_ahead int DEFAULT 180,max_subjects_per_reservation int DEFAULT 10,feature_flags jsonb DEFAULT '{}');
+          CREATE TABLE public.photo_plans(id uuid PRIMARY KEY,studio_id uuid NOT NULL REFERENCES public.photo_studios(id),plan_code text NOT NULL,plan_name text NOT NULL,default_resource_id uuid,booking_open_days int DEFAULT 180,duration_minutes int DEFAULT 60,max_participants int DEFAULT 10,booking_start_mode text DEFAULT 'interval',booking_start_interval_minutes int DEFAULT 30,booking_start_anchor_time time DEFAULT '00:00',booking_start_times time[] DEFAULT '{}',belongings_guide text,is_active bool DEFAULT true);
+          CREATE TABLE public.photo_staff(id uuid PRIMARY KEY,studio_id uuid NOT NULL,staff_name text,is_active bool DEFAULT true,can_be_assigned bool DEFAULT true, UNIQUE(studio_id,id));
+          CREATE TABLE public.photo_resources(id uuid PRIMARY KEY,studio_id uuid NOT NULL,resource_name text,is_active bool DEFAULT true,capacity int DEFAULT 1, UNIQUE(studio_id,id));
+          CREATE TABLE public.photo_customers(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL REFERENCES public.photo_studios(id),
+           customer_no text,customer_name text NOT NULL,phone text,normalized_phone text,email text,line_user_id text,
+           preferred_contact text DEFAULT 'phone',first_source text NOT NULL DEFAULT 'line',last_source text NOT NULL DEFAULT 'line',
+           is_active bool DEFAULT true,deleted_at timestamptz,UNIQUE(studio_id,id),UNIQUE(studio_id,customer_no));
+          CREATE SEQUENCE public.qa_customer_number_seq;
+          CREATE OR REPLACE FUNCTION public.photo_normalize_phone(p text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
+           SELECT CASE WHEN regexp_replace(coalesce(p,''),'[^0-9]','','g') ~ '^81[0-9]{9,10}$'
+           THEN '0'||substr(regexp_replace(coalesce(p,''),'[^0-9]','','g'),3)
+           ELSE regexp_replace(coalesce(p,''),'[^0-9]','','g') END
+          $$;
+          CREATE OR REPLACE FUNCTION public.qa_prepare_customer() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+           NEW.normalized_phone:=public.photo_normalize_phone(NEW.phone);
+           IF NEW.customer_no IS NULL THEN NEW.customer_no:='PHC-'||nextval('public.qa_customer_number_seq'); END IF;
+           RETURN NEW; END $$;
+          CREATE TRIGGER photo_customers_prepare_trg BEFORE INSERT ON public.photo_customers FOR EACH ROW EXECUTE FUNCTION public.qa_prepare_customer();
+          CREATE TABLE public.photo_subjects(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,customer_id uuid NOT NULL,subject_code text NOT NULL,
+           subject_name text NOT NULL,subject_type text NOT NULL DEFAULT 'person',birth_date date,age_note text,relationship_to_customer text,
+           gender text,pet_species text,pet_breed text,attention_note text,shooting_care_note text,is_active bool NOT NULL DEFAULT true,
+           UNIQUE(studio_id,id),UNIQUE(studio_id,subject_code),FOREIGN KEY(studio_id,customer_id) REFERENCES public.photo_customers(studio_id,id));
+          CREATE TABLE public.photo_reservations(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL REFERENCES public.photo_studios(id),
+           reservation_no text,public_token uuid DEFAULT gen_random_uuid(),customer_id uuid NOT NULL,plan_id uuid NOT NULL,
+           assigned_staff_id uuid,resource_id uuid,reservation_source text NOT NULL DEFAULT 'line',
+           start_at timestamptz NOT NULL,end_at timestamptz,duration_minutes int,participant_count int DEFAULT 1,
+           reservation_status text DEFAULT 'reserved',visit_status text DEFAULT 'scheduled',post_status text DEFAULT 'selection_pending',
+           plan_name_snapshot text,staff_name_snapshot text,customer_name_snapshot text,customer_phone_snapshot text,
+           shooting_purpose text,desired_mood text,desired_shots text,bring_costume bool DEFAULT false,
+           rental_costume_requested bool DEFAULT false,hair_makeup_requested bool DEFAULT false,family_additional_requested bool DEFAULT false,
+           social_media_consult_requested bool DEFAULT false,accommodation_note text,customer_note text,internal_note text,
+           created_by text,updated_by text,is_demo bool DEFAULT false,
+           UNIQUE(studio_id,id),FOREIGN KEY(studio_id,customer_id) REFERENCES public.photo_customers(studio_id,id),
+           FOREIGN KEY(studio_id,assigned_staff_id) REFERENCES public.photo_staff(studio_id,id),
+           FOREIGN KEY(studio_id,resource_id) REFERENCES public.photo_resources(studio_id,id),
+           EXCLUDE USING gist (studio_id WITH =,assigned_staff_id WITH =,tstzrange(start_at,end_at,'[)') WITH &&) WHERE (assigned_staff_id IS NOT NULL AND reservation_status NOT IN ('cancelled','no_show')));
+          CREATE SEQUENCE public.qa_reservation_number_seq;
+          CREATE OR REPLACE FUNCTION public.photo_plan_start_allowed(p_mode text,p_interval int,p_anchor time,p_times time[],p_start time)
+          RETURNS boolean LANGUAGE sql IMMUTABLE AS $$ SELECT extract(minute from p_start)::int IN (0,30) AND extract(second FROM p_start)=0 $$;
+          CREATE OR REPLACE FUNCTION public.qa_prepare_reservation() RETURNS trigger LANGUAGE plpgsql AS $$
+          DECLARE p public.photo_plans%rowtype;c public.photo_customers%rowtype;
+          BEGIN
+           SELECT * INTO STRICT p FROM public.photo_plans WHERE id=NEW.plan_id AND studio_id=NEW.studio_id;
+           SELECT * INTO STRICT c FROM public.photo_customers WHERE id=NEW.customer_id AND studio_id=NEW.studio_id;
+           IF NEW.duration_minutes IS NULL THEN NEW.duration_minutes:=p.duration_minutes; END IF;
+           NEW.end_at:=NEW.start_at+make_interval(mins=>NEW.duration_minutes);
+           NEW.reservation_no:=coalesce(NEW.reservation_no,'PH-'||nextval('public.qa_reservation_number_seq'));
+           NEW.plan_name_snapshot:=p.plan_name;NEW.customer_name_snapshot:=c.customer_name;
+           NEW.customer_phone_snapshot:=c.phone;
+           IF NEW.resource_id IS NULL THEN NEW.resource_id:=p.default_resource_id; END IF;
+           RETURN NEW;
+          END;$$;
+          CREATE TRIGGER photo_reservations_prepare_trg BEFORE INSERT OR UPDATE ON public.photo_reservations FOR EACH ROW EXECUTE FUNCTION public.qa_prepare_reservation();
+          CREATE OR REPLACE FUNCTION public.qa_capacity_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+           IF NEW.resource_id IS NULL OR NEW.reservation_status IN ('cancelled','no_show') THEN RETURN NEW; END IF;
+           PERFORM pg_advisory_xact_lock(hashtextextended(NEW.studio_id::text||NEW.resource_id::text,0));
+           IF EXISTS(SELECT 1 FROM public.photo_reservations x WHERE x.studio_id=NEW.studio_id
+             AND x.id<>NEW.id AND x.resource_id=NEW.resource_id AND x.reservation_status NOT IN ('cancelled','no_show')
+             AND tstzrange(x.start_at,x.end_at,'[)')&&tstzrange(NEW.start_at,NEW.end_at,'[)')) THEN
+             RAISE EXCEPTION 'RESOURCE_CAPACITY_EXCEEDED' USING ERRCODE='23P01';
+           END IF;
+           RETURN NEW;END;$$;
+          CREATE TRIGGER zz_photo_reservations_resource_capacity_trg BEFORE INSERT OR UPDATE ON public.photo_reservations FOR EACH ROW EXECUTE FUNCTION public.qa_capacity_guard();
+          CREATE TABLE public.photo_reservation_subjects(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,reservation_id uuid NOT NULL,subject_id uuid NOT NULL,
+           subject_name_snapshot text NOT NULL,subject_type_snapshot text NOT NULL,relationship_snapshot text,is_main_subject bool DEFAULT false,display_order int DEFAULT 100,
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id),
+           FOREIGN KEY(studio_id,subject_id) REFERENCES public.photo_subjects(studio_id,id),UNIQUE(reservation_id,subject_id));
+          CREATE TABLE public.photo_reservation_options(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,reservation_id uuid NOT NULL,option_code text NOT NULL,
+           option_name_snapshot text NOT NULL,quantity int DEFAULT 1,price_display numeric,customer_note text,display_order int DEFAULT 100,
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id),UNIQUE(reservation_id,option_code));
+          CREATE TABLE public.photo_intake_answers(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,reservation_id uuid NOT NULL,
+           common_answers jsonb DEFAULT '{}',plan_answers jsonb DEFAULT '{}',summary text,answer_version text DEFAULT '1',confirmed_at timestamptz,
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id),UNIQUE(reservation_id));
+          CREATE TABLE public.photo_follow_tasks(
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),studio_id uuid NOT NULL,task_key text,reservation_id uuid,customer_id uuid,
+           assigned_staff_id uuid,task_type text NOT NULL,title text NOT NULL,detail text,due_at timestamptz,
+           priority text DEFAULT 'normal',task_status text DEFAULT 'open',auto_created bool DEFAULT false,
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id),
+           FOREIGN KEY(studio_id,customer_id) REFERENCES public.photo_customers(studio_id,id));
+          R36V_END_SQL_FIXTURE
+          cat > /tmp/dpro-photo-r36v-disposable/R36V_ATOMIC_BOOKING_REVIEW_ONLY_DO_NOT_RUN.sql <<'R36V_END_SQL_ATOMIC'
+          -- DPRO PHOTO R36V -- REVIEW ONLY / DO NOT EXECUTE ON PRODUCTION.
+          -- Draft based on READ-ONLY catalog inspection of actual photo_* tables on 2026-10-21.
+          -- Supabase/PostgREST exposure: caller is service_role only, never publishable/anon.
+          -- No deployment claim. Must pass disposable PG17 and full old-trigger integration before applying.
+          BEGIN;
+          
+          CREATE TABLE IF NOT EXISTS public.photo_booking_receipts_r36v (
+           studio_id uuid NOT NULL REFERENCES public.photo_studios(id) ON DELETE CASCADE,
+           idempotency_key uuid NOT NULL,
+           payload_fingerprint text NOT NULL CHECK (payload_fingerprint ~ '^[0-9a-f]{64}$'),
+           reservation_id uuid NOT NULL,
+           created_at timestamptz NOT NULL DEFAULT now(),
+           PRIMARY KEY (studio_id,idempotency_key),
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id) ON DELETE CASCADE
+          );
+          ALTER TABLE public.photo_booking_receipts_r36v ENABLE ROW LEVEL SECURITY;
+          REVOKE ALL ON public.photo_booking_receipts_r36v FROM PUBLIC,anon,authenticated;
+          GRANT SELECT,INSERT ON public.photo_booking_receipts_r36v TO service_role;
+          
+          CREATE TABLE IF NOT EXISTS public.photo_booking_subject_claims_r36v (
+           studio_id uuid NOT NULL REFERENCES public.photo_studios(id) ON DELETE CASCADE,
+           reservation_id uuid NOT NULL,
+           local_day date NOT NULL,
+           subject_fingerprint text NOT NULL CHECK (subject_fingerprint ~ '^[0-9a-f]{64}$'),
+           active boolean NOT NULL DEFAULT true,
+           PRIMARY KEY(studio_id,reservation_id,subject_fingerprint),
+           FOREIGN KEY(studio_id,reservation_id) REFERENCES public.photo_reservations(studio_id,id) ON DELETE CASCADE
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS photo_booking_subject_claims_r36v_active_uq
+           ON public.photo_booking_subject_claims_r36v(studio_id,local_day,subject_fingerprint)
+           WHERE active;
+          ALTER TABLE public.photo_booking_subject_claims_r36v ENABLE ROW LEVEL SECURITY;
+          REVOKE ALL ON public.photo_booking_subject_claims_r36v FROM PUBLIC,anon,authenticated;
+          GRANT SELECT,INSERT,UPDATE ON public.photo_booking_subject_claims_r36v TO service_role;
+          
+          -- Existing status and time adjustment flows must move claims atomically, rather than leave stale dates.
+          CREATE OR REPLACE FUNCTION public.photo_booking_sync_claims_r36v()
+          RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $fn$
+          DECLARE v_timezone text;
+          BEGIN
+           SELECT s.timezone INTO v_timezone FROM public.photo_studios s WHERE s.id = NEW.studio_id;
+           UPDATE public.photo_booking_subject_claims_r36v c
+           SET local_day = (NEW.start_at AT TIME ZONE coalesce(v_timezone,'Asia/Tokyo'))::date,
+               active = NEW.reservation_status NOT IN ('cancelled','no_show')
+           WHERE c.studio_id=NEW.studio_id AND c.reservation_id=NEW.id;
+           RETURN NEW;
+          END;
+          $fn$;
+          REVOKE ALL ON FUNCTION public.photo_booking_sync_claims_r36v() FROM PUBLIC,anon,authenticated;
+          GRANT EXECUTE ON FUNCTION public.photo_booking_sync_claims_r36v() TO service_role;
+          DROP TRIGGER IF EXISTS zz_photo_booking_sync_claims_r36v ON public.photo_reservations;
+          CREATE TRIGGER zz_photo_booking_sync_claims_r36v
+           AFTER UPDATE OF start_at,reservation_status ON public.photo_reservations
+           FOR EACH ROW EXECUTE FUNCTION public.photo_booking_sync_claims_r36v();
+          
+          -- p_* fingerprints are HMAC-SHA256 made by the TRUSTED Worker with a dedicated secret.
+          -- p_verified_customer_id/p_verified_line_user_id are set ONLY following actual server-side proof.
+          -- NEVER forward customer IDs or LINE IDs from an anonymous booking body to these args.
+          CREATE OR REPLACE FUNCTION public.photo_booking_atomic_r36v(
+           p_studio_id uuid, p_source text, p_request jsonb,
+           p_idempotency_key uuid, p_payload_fingerprint text,
+           p_subject_day_fingerprints text[],
+           p_verified_customer_id uuid DEFAULT NULL,
+           p_verified_line_user_id text DEFAULT NULL
+          ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $fn$
+          DECLARE
+           v_plan public.photo_plans%rowtype;
+           v_customer public.photo_customers%rowtype;
+           v_reservation public.photo_reservations%rowtype;
+           v_prev public.photo_booking_receipts_r36v%rowtype;
+           v_subject public.photo_subjects%rowtype;
+           v_subject_item jsonb;
+           v_opt jsonb;
+           v_intake jsonb;
+           v_subs jsonb;
+           v_opts jsonb;
+           v_staff uuid;
+           v_resource uuid;
+           v_start timestamptz;
+           v_date date;
+           v_timezone text;
+           v_phone text;
+           v_customer_name text;
+           v_verified boolean;
+           v_subject_total integer;
+           v_idx integer:=0;
+           v_fp text;
+           v_subject_id uuid;
+           v_participants integer;
+           v_local_time time;
+           v_settings public.photo_studio_settings%rowtype;
+          BEGIN
+           IF p_studio_id IS NULL OR p_idempotency_key IS NULL OR
+              p_payload_fingerprint !~ '^[0-9a-f]{64}$' OR
+              p_request IS NULL OR jsonb_typeof(p_request) <> 'object' THEN
+             RAISE EXCEPTION 'BOOKING_INPUT_INVALID' USING ERRCODE='22023';
+           END IF;
+           IF p_source NOT IN ('line','admin','phone','store') THEN
+             RAISE EXCEPTION 'BOOKING_SOURCE_INVALID' USING ERRCODE='22023';
+           END IF;
+           IF p_request ?| ARRAY['customer_id','selected_customer_id','line_user_id','studio_id','public_token','reservation_id','is_demo'] THEN
+             RAISE EXCEPTION 'BOOKING_UNTRUSTED_IDENTITY' USING ERRCODE='42501';
+           END IF;
+           v_verified := p_verified_customer_id IS NOT NULL OR nullif(btrim(p_verified_line_user_id),'') IS NOT NULL;
+           -- Prevent two simultaneous identical retries for the same studio/nonces.
+           PERFORM pg_advisory_xact_lock(hashtextextended(p_studio_id::text||':R36V:IDEMPOTENCY:'||p_idempotency_key::text,17));
+           SELECT * INTO v_prev FROM public.photo_booking_receipts_r36v
+           WHERE studio_id=p_studio_id AND idempotency_key=p_idempotency_key;
+           IF FOUND THEN
+             IF v_prev.payload_fingerprint <> p_payload_fingerprint THEN
+               RAISE EXCEPTION 'BOOKING_IDEMPOTENCY_MISMATCH' USING ERRCODE='23505';
+             END IF;
+             SELECT * INTO STRICT v_reservation FROM public.photo_reservations
+             WHERE studio_id=p_studio_id AND id=v_prev.reservation_id;
+             RETURN jsonb_build_object('ok',true,'replayed',true,
+               'reservation',jsonb_build_object('id',v_reservation.id,'reservation_no',v_reservation.reservation_no,
+               'public_token',v_reservation.public_token,'start_at',v_reservation.start_at,
+               'end_at',v_reservation.end_at,'plan_name',v_reservation.plan_name_snapshot,
+               'staff_name',v_reservation.staff_name_snapshot));
+           END IF;
+          
+           SELECT timezone INTO STRICT v_timezone FROM public.photo_studios
+           WHERE id=p_studio_id AND is_active AND production_guard;
+           SELECT * INTO STRICT v_settings FROM public.photo_studio_settings WHERE studio_id=p_studio_id;
+           SELECT * INTO STRICT v_plan FROM public.photo_plans
+           WHERE studio_id=p_studio_id AND is_active AND
+           ( (p_request->>'plan_id' IS NOT NULL AND id=(p_request->>'plan_id')::uuid)
+             OR (p_request->>'plan_id' IS NULL AND plan_code=p_request->>'plan_code') );
+           v_start:=(p_request->>'start_at')::timestamptz;
+           IF v_start IS NULL OR v_start <= transaction_timestamp() OR
+              v_start < transaction_timestamp() + make_interval(hours=>v_settings.min_advance_hours) OR
+              (v_start AT TIME ZONE v_timezone)::date >
+                 (transaction_timestamp() AT TIME ZONE v_timezone)::date + LEAST(v_plan.booking_open_days,v_settings.reservation_open_days_ahead) THEN
+             RAISE EXCEPTION 'BOOKING_DATE_NOT_ALLOWED' USING ERRCODE='22023';
+           END IF;
+           v_date:=(v_start AT TIME ZONE v_timezone)::date;
+           v_local_time:=(v_start AT TIME ZONE v_timezone)::time;
+           IF EXTRACT(minute FROM v_local_time)::int NOT IN (0,30)
+              OR EXTRACT(second FROM v_local_time)<>0 OR
+              NOT public.photo_plan_start_allowed(v_plan.booking_start_mode,v_plan.booking_start_interval_minutes,
+                 v_plan.booking_start_anchor_time,v_plan.booking_start_times,v_local_time) THEN
+             RAISE EXCEPTION 'BOOKING_SLOT_INVALID' USING ERRCODE='22023';
+           END IF;
+           v_participants:=coalesce((p_request->>'participant_count')::int,1);
+           IF v_participants < 1 OR v_participants > LEAST(v_plan.max_participants,100) THEN
+             RAISE EXCEPTION 'BOOKING_PARTICIPANTS_INVALID' USING ERRCODE='22023';
+           END IF;
+           v_staff:=nullif(p_request->>'assigned_staff_id','')::uuid;
+           IF v_staff IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.photo_staff
+             WHERE studio_id=p_studio_id AND id=v_staff AND is_active AND can_be_assigned) THEN
+             RAISE EXCEPTION 'BOOKING_STAFF_INVALID' USING ERRCODE='22023';
+           END IF;
+           v_resource:=coalesce(nullif(p_request->>'resource_id','')::uuid,v_plan.default_resource_id);
+           IF v_resource IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.photo_resources
+             WHERE studio_id=p_studio_id AND id=v_resource AND is_active) THEN
+             RAISE EXCEPTION 'BOOKING_RESOURCE_INVALID' USING ERRCODE='22023';
+           END IF;
+           IF v_staff IS NULL AND v_resource IS NULL THEN
+             RAISE EXCEPTION 'BOOKING_CAPACITY_NOT_VERIFIABLE' USING ERRCODE='22023';
+           END IF;
+           v_customer_name:=nullif(btrim(p_request->>'customer_name'),'');
+           v_phone:=public.photo_normalize_phone(p_request->>'phone');
+           IF v_customer_name IS NULL OR v_phone IS NULL OR length(v_phone) NOT IN (10,11) OR v_phone !~ '^0[0-9]+$' THEN
+             RAISE EXCEPTION 'BOOKING_CUSTOMER_INVALID' USING ERRCODE='22023';
+           END IF;
+           v_subs:=coalesce(p_request->'subjects','[]'::jsonb);
+           v_opts:=coalesce(p_request->'options','[]'::jsonb);
+           v_intake:=p_request->'intake';
+           IF jsonb_typeof(v_subs)<>'array' OR jsonb_array_length(v_subs) NOT BETWEEN 1 AND LEAST(20,v_settings.max_subjects_per_reservation)
+           OR coalesce(array_length(p_subject_day_fingerprints,1),0) <> jsonb_array_length(v_subs)
+           OR jsonb_typeof(v_opts)<>'array' OR jsonb_array_length(v_opts)>50 THEN
+             RAISE EXCEPTION 'BOOKING_DETAILS_INVALID' USING ERRCODE='22023';
+           END IF;
+           IF EXISTS (SELECT 1 FROM unnest(p_subject_day_fingerprints) x WHERE x !~ '^[0-9a-f]{64}$') THEN
+             RAISE EXCEPTION 'BOOKING_FINGERPRINT_INVALID' USING ERRCODE='22023';
+           END IF;
+          
+           -- Acquire a single transaction-wide advisory lock before checking related guest claims.
+           PERFORM pg_advisory_xact_lock(hashtextextended(p_studio_id::text||':R36V:DAY:'||v_date::text,37));
+           IF EXISTS (SELECT 1 FROM public.photo_booking_subject_claims_r36v c
+             WHERE c.studio_id=p_studio_id AND c.local_day=v_date AND c.active
+             AND c.subject_fingerprint=ANY(p_subject_day_fingerprints)) THEN
+             RAISE EXCEPTION 'SAME_SUBJECT_SAME_DAY' USING ERRCODE='23505';
+           END IF;
+          
+           -- Anonymous phone equality NEVER authorizes takeover of an existing customer.
+           IF p_verified_customer_id IS NOT NULL THEN
+             SELECT * INTO STRICT v_customer FROM public.photo_customers
+             WHERE studio_id=p_studio_id AND id=p_verified_customer_id AND deleted_at IS NULL AND is_active;
+           ELSIF p_verified_line_user_id IS NOT NULL AND btrim(p_verified_line_user_id)<>'' THEN
+             SELECT * INTO v_customer FROM public.photo_customers
+             WHERE studio_id=p_studio_id AND line_user_id=p_verified_line_user_id AND deleted_at IS NULL AND is_active;
+           END IF;
+           IF v_customer.id IS NULL THEN
+             INSERT INTO public.photo_customers(studio_id,customer_name,phone,email,line_user_id,preferred_contact,first_source,last_source)
+             VALUES(p_studio_id,v_customer_name,v_phone,nullif(p_request->>'email',''),
+               CASE WHEN v_verified THEN nullif(p_verified_line_user_id,'') ELSE NULL END,
+               CASE WHEN v_verified THEN 'line' ELSE 'phone' END,p_source,p_source)
+             RETURNING * INTO v_customer;
+           END IF;
+          
+           INSERT INTO public.photo_reservations(studio_id,customer_id,plan_id,assigned_staff_id,resource_id,
+            reservation_source,start_at,duration_minutes,participant_count,reservation_status,visit_status,post_status,
+            shooting_purpose,desired_mood,desired_shots,bring_costume,rental_costume_requested,
+            hair_makeup_requested,family_additional_requested,social_media_consult_requested,
+            accommodation_note,customer_note,internal_note,created_by,updated_by,is_demo)
+           VALUES(p_studio_id,v_customer.id,v_plan.id,v_staff,v_resource,
+             CASE WHEN p_source='line' THEN 'line' ELSE p_source END,v_start,v_plan.duration_minutes,v_participants,
+             CASE WHEN p_source='line' THEN 'reserved' ELSE 'confirmed' END,'scheduled','selection_pending',
+             left(p_request->>'shooting_purpose',1000),left(p_request->>'desired_mood',1000),left(p_request->>'desired_shots',3000),
+             coalesce((p_request->>'bring_costume')::boolean,false),
+             coalesce((p_request->>'rental_costume_requested')::boolean,false),
+             coalesce((p_request->>'hair_makeup_requested')::boolean,false),
+             coalesce((p_request->>'family_additional_requested')::boolean,false),
+             coalesce((p_request->>'social_media_consult_requested')::boolean,false),
+             left(p_request->>'accommodation_note',3000),left(p_request->>'customer_note',3000),
+             CASE WHEN p_source='line' THEN NULL ELSE left(p_request->>'internal_note',3000) END,
+             'r36v_atomic_booking','r36v_atomic_booking',false)
+           RETURNING * INTO v_reservation;
+          
+           FOR v_subject_item IN SELECT value FROM jsonb_array_elements(v_subs) LOOP
+             v_idx:=v_idx+1;
+             v_fp:=p_subject_day_fingerprints[v_idx];
+             IF nullif(btrim(coalesce(v_subject_item->>'subject_name',v_subject_item->>'name')),'') IS NULL THEN
+               RAISE EXCEPTION 'BOOKING_SUBJECT_NAME_REQUIRED' USING ERRCODE='22023';
+             END IF;
+             IF v_subject_item ? 'id' AND NOT v_verified THEN
+               RAISE EXCEPTION 'BOOKING_SUBJECT_ID_NOT_VERIFIED' USING ERRCODE='42501';
+             END IF;
+             v_subject_id:=nullif(v_subject_item->>'id','')::uuid;
+             IF v_subject_id IS NOT NULL THEN
+               SELECT * INTO STRICT v_subject FROM public.photo_subjects
+               WHERE id=v_subject_id AND studio_id=p_studio_id AND customer_id=v_customer.id AND is_active;
+             ELSE
+               INSERT INTO public.photo_subjects(studio_id,customer_id,subject_code,subject_name,subject_type,
+                 birth_date,age_note,relationship_to_customer,gender,pet_species,pet_breed,attention_note,shooting_care_note)
+               VALUES(p_studio_id,v_customer.id,'PHS-R36V-'||replace(gen_random_uuid()::text,'-',''),
+                 left(coalesce(v_subject_item->>'subject_name',v_subject_item->>'name'),200),
+                 coalesce(v_subject_item->>'subject_type','person'),
+                 nullif(v_subject_item->>'birth_date','')::date,
+                 left(v_subject_item->>'age_note',100),left(v_subject_item->>'relationship_to_customer',100),
+                 left(v_subject_item->>'gender',50),left(v_subject_item->>'pet_species',100),
+                 left(v_subject_item->>'pet_breed',100),left(v_subject_item->>'attention_note',2000),
+                 left(v_subject_item->>'shooting_care_note',2000))
+               RETURNING * INTO v_subject;
+             END IF;
+             -- Prevent verified customers from booking an existing subject twice on the same day,
+             -- even if someone supplies a different HMAC key/phone. The studio/day lock is held.
+             IF EXISTS (
+               SELECT 1 FROM public.photo_reservation_subjects l
+               JOIN public.photo_reservations r ON r.id=l.reservation_id AND r.studio_id=l.studio_id
+               WHERE l.studio_id=p_studio_id AND l.subject_id=v_subject.id
+                 AND r.reservation_status NOT IN ('cancelled','no_show')
+                 AND (r.start_at AT TIME ZONE v_timezone)::date=v_date
+             ) THEN
+               RAISE EXCEPTION 'SAME_SUBJECT_SAME_DAY' USING ERRCODE='23505';
+             END IF;
+             INSERT INTO public.photo_reservation_subjects(studio_id,reservation_id,subject_id,
+                subject_name_snapshot,subject_type_snapshot,relationship_snapshot,is_main_subject,display_order)
+             VALUES(p_studio_id,v_reservation.id,v_subject.id,v_subject.subject_name,v_subject.subject_type,
+                v_subject.relationship_to_customer,coalesce((v_subject_item->>'is_main_subject')::boolean,v_idx=1),v_idx*10);
+             INSERT INTO public.photo_booking_subject_claims_r36v(studio_id,reservation_id,local_day,subject_fingerprint)
+             VALUES(p_studio_id,v_reservation.id,v_date,v_fp);
+           END LOOP;
+          
+           FOR v_opt IN SELECT value FROM jsonb_array_elements(v_opts) LOOP
+             INSERT INTO public.photo_reservation_options(studio_id,reservation_id,option_code,option_name_snapshot,
+                quantity,price_display,customer_note,display_order)
+             VALUES(p_studio_id,v_reservation.id,left(coalesce(v_opt->>'option_code',v_opt->>'code'),100),
+                left(coalesce(v_opt->>'option_name',v_opt->>'name'),200),
+                coalesce((v_opt->>'quantity')::int,1),nullif(v_opt->>'price_display','')::numeric,
+                left(v_opt->>'customer_note',1000),coalesce((v_opt->>'display_order')::int,100));
+           END LOOP;
+          
+           IF v_intake IS NOT NULL AND jsonb_typeof(v_intake)='object' THEN
+            INSERT INTO public.photo_intake_answers(studio_id,reservation_id,common_answers,plan_answers,
+              summary,answer_version,confirmed_at)
+            VALUES(p_studio_id,v_reservation.id,coalesce(v_intake->'common_answers','{}'::jsonb),
+              coalesce(v_intake->'plan_answers','{}'::jsonb),
+              left(v_intake->>'summary',5000),coalesce(left(v_intake->>'answer_version',20),'1'),
+              CASE WHEN coalesce((v_intake->>'confirmed')::boolean,false) THEN now() ELSE NULL END);
+           END IF;
+          
+           INSERT INTO public.photo_follow_tasks(studio_id,task_key,reservation_id,customer_id,assigned_staff_id,
+             task_type,title,detail,due_at,priority,task_status,auto_created)
+           VALUES(p_studio_id,v_reservation.reservation_no||'-CONFIRM',v_reservation.id,v_customer.id,v_staff,
+            'reservation_confirm',v_customer.customer_name||'様の予約内容確認',v_plan.plan_name||'の予約内容を確認する。',
+            greatest(now(),v_start-interval '72 hours'),'high','open',true),
+           (p_studio_id,v_reservation.reservation_no||'-BELONGINGS',v_reservation.id,v_customer.id,v_staff,
+            'belongings_guide',v_customer.customer_name||'様へ持ち物案内',
+            coalesce(v_plan.belongings_guide,'撮影当日の持ち物を案内する。'),
+            greatest(now(),v_start-interval '48 hours'),'normal','open',true);
+          
+           INSERT INTO public.photo_booking_receipts_r36v(studio_id,idempotency_key,payload_fingerprint,reservation_id)
+           VALUES(p_studio_id,p_idempotency_key,p_payload_fingerprint,v_reservation.id);
+          
+           RETURN jsonb_build_object('ok',true,'replayed',false,
+            'reservation',jsonb_build_object('id',v_reservation.id,'reservation_no',v_reservation.reservation_no,
+              'public_token',v_reservation.public_token,'start_at',v_reservation.start_at,'end_at',v_reservation.end_at,
+              'plan_name',v_reservation.plan_name_snapshot,'staff_name',v_reservation.staff_name_snapshot),
+            'customer',jsonb_build_object('customer_no',v_customer.customer_no,'customer_name',v_customer.customer_name,
+              'phone',v_customer.phone), 'message','撮影予約を受け付けました。');
+          END;
+          $fn$;
+          REVOKE ALL ON FUNCTION public.photo_booking_atomic_r36v(uuid,text,jsonb,uuid,text,text[],uuid,text)
+           FROM PUBLIC,anon,authenticated;
+          GRANT EXECUTE ON FUNCTION public.photo_booking_atomic_r36v(uuid,text,jsonb,uuid,text,text[],uuid,text)
+           TO service_role;
+          COMMIT;
+          -- Review-only: transaction rolls back automatically if any INSERT/trigger fails.
+          -- Gate: no production run until disposable PG17 exact-trigger tests & coordinated Worker deployment.
+          R36V_END_SQL_ATOMIC
+          cat > /tmp/dpro-photo-r36v-disposable/R36V_PG17_DISPOSABLE_QA.py <<'R36V_END_PY_QA'
+          #!/usr/bin/env python3
+          """R36V exact draft-SQL against disposable local PG17; NEVER connect to Supabase."""
+          import os, pathlib, uuid, hashlib, json, hmac, concurrent.futures
+          from datetime import datetime,timedelta,time
+          from zoneinfo import ZoneInfo
+          from psycopg import connect
+          from psycopg.types.json import Jsonb
+          assert os.getenv('R36V_DISPOSABLE_PG17')=='TRUE', 'DISPOSABLE_QA_FLAG_REQUIRED'
+          assert os.getenv('PGHOST')=='127.0.0.1', 'LOCAL_POSTGRES_ONLY'
+          DSN='host=127.0.0.1 port=5432 dbname=postgres user=postgres password=R36V_ONLY_DISPOSABLE_PORT_5432 connect_timeout=3'
+          root=pathlib.Path(__file__).parent
+          with connect(DSN,autocommit=True) as db:
+            db.execute((root/'R36V_PG17_FIXTURE_DISPOSABLE_ONLY.sql').read_text())
+            db.execute((root/'R36V_ATOMIC_BOOKING_REVIEW_ONLY_DO_NOT_RUN.sql').read_text())
+          STUDIO=uuid.uuid4();STUDIO_OTHER=uuid.uuid4(); PLAN=uuid.uuid4();PLAN_OTHER=uuid.uuid4(); STAFF=uuid.uuid4();ROOM=uuid.uuid4()
+          with connect(DSN,autocommit=True) as db:
+           for studio,plan in [(STUDIO,PLAN),(STUDIO_OTHER,PLAN_OTHER)]:
+            db.execute('INSERT INTO public.photo_studios(id,studio_code) VALUES(%s,%s)',(studio,'SYNTHETIC-'+str(studio)[:8]))
+            db.execute('INSERT INTO public.photo_studio_settings(studio_id) VALUES(%s)',(studio,))
+            db.execute('INSERT INTO public.photo_plans(id,studio_id,plan_code,plan_name,default_resource_id) VALUES(%s,%s,%s,%s,NULL)',(plan,studio,'TEST','完全架空テストプラン'))
+           db.execute('INSERT INTO public.photo_staff(id,studio_id,staff_name) VALUES(%s,%s,%s)',(STAFF,STUDIO,'架空スタッフ'))
+           db.execute('INSERT INTO public.photo_resources(id,studio_id,resource_name) VALUES(%s,%s,%s)',(ROOM,STUDIO,'架空撮影室'))
+          nextday=datetime.now(ZoneInfo('Asia/Tokyo')).date()+timedelta(days=10)
+          START=datetime.combine(nextday,time(10,0),ZoneInfo('Asia/Tokyo'))
+          COUNT=0
+          
+          def good(ok,why):
+           global COUNT
+           assert ok,why
+           COUNT+=1
+           print(f'PASS {COUNT:03d} {why}')
+          
+          def sample(**kwargs):
+           b={'plan_id':str(PLAN),'start_at':START.isoformat(),'assigned_staff_id':str(STAFF),'resource_id':str(ROOM),
+           'customer_name':'架空保護者','phone':'09011112222','subjects':[{'subject_name':'架空の子','subject_type':'child'}],
+           'options':[{'option_code':'PHOTO','option_name':'架空写真オプション','quantity':1}],
+           'intake':{'common_answers':{'synthetic':True},'plan_answers':{},'summary':'合成入力','confirmed':True}}
+           b.update(kwargs);return b
+          
+          def call(body,idem=None,fp=None,subject_fps=None,studio=STUDIO,verified=None,source='line'):
+           idem=idem or uuid.uuid4();fp=fp or hashlib.sha256(json.dumps(body,sort_keys=True).encode()).hexdigest()
+           subject_fps=subject_fps or [hmac.new(b'R36V DISPOSABLE ONLY',json.dumps([studio,str(START.date()),body['phone'],s['subject_name']],ensure_ascii=False).encode(),hashlib.sha256).hexdigest() for s in body.get('subjects',[])]
+           with connect(DSN) as db:
+            v=db.execute('SELECT public.photo_booking_atomic_r36v(%s,%s,%s,%s,%s,%s,%s,%s)',
+              (studio,source,Jsonb(body),idem,fp,subject_fps,verified,None)).fetchone()[0]
+            db.commit()
+           return v
+          
+          def rejected(fn,description):
+           try:fn()
+           except Exception:
+            good(True,description);return
+           raise AssertionError('expected database rejection: '+description)
+          
+          def counts():
+           with connect(DSN) as db:
+            return tuple(db.execute('SELECT COUNT(*) FROM public.'+name).fetchone()[0] for name in
+              ('photo_customers','photo_subjects','photo_reservations','photo_reservation_subjects','photo_reservation_options',
+               'photo_intake_answers','photo_follow_tasks','photo_booking_receipts_r36v','photo_booking_subject_claims_r36v'))
+          
+          p=sample();k=uuid.uuid4();result=call(p,idem=k)
+          assert result.get('ok'),result
+          good(result['replayed'] is False,'first booking success')
+          good(all(result['reservation'].get(x) for x in ('id','reservation_no','public_token')),'public booking receipt returned')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'all 9 related tables atomic')
+          repeat=call(p,idem=k)
+          good(repeat['replayed'] and repeat['reservation']['id']==result['reservation']['id'],'idempotent replay returns same reservation')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'replay creates no additional records')
+          rejected(lambda:call({**p,'customer_name':'changed'},idem=k),'same nonce different payload denied')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'mismatched replay no side effects')
+          rejected(lambda:call({**p,'selected_customer_id':str(uuid.uuid4())}),'public fake selected_customer_id denied')
+          rejected(lambda:call({**p,'line_user_id':'ATTACKER'}),'client LINE ID denied')
+          rejected(lambda:call({**p,'customer_id':str(uuid.uuid4())}),'public fake customer_id denied')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'spoofing attempt writes none')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(minutes=15)).isoformat(),
+           'subjects':[{'subject_name':'別の子','subject_type':'child'}]},subject_fps=['1'*64]),'non 30-minute slot denied')
+          rejected(lambda:call({**p,'subjects':[{'subject_name':'他の子','subject_type':'child'}]},subject_fps=['2'*64]),'staff or resource overlap blocked')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(hours=2)).isoformat()}),'same phone and subject same-day collision blocked')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(hours=2)).isoformat(),
+           'options':[{'option_code':'DUP','option_name':'架空A'},{'option_code':'DUP','option_name':'架空B'}],
+           'subjects':[{'subject_name':'別の子','subject_type':'child'}]},subject_fps=['3'*64]),'failure in child option insert rolls back entire transaction')
+          good(counts()==(1,1,1,1,1,1,2,1,1),'option error left no orphan rows')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(hours=2)).isoformat(),
+           'subjects':[{'subject_name':'別の子','subject_type':'child','id':str(uuid.uuid4())}]},subject_fps=['4'*64]),'guest cannot attach arbitrary subject id')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(hours=2)).isoformat(),
+           'subjects':[{'subject_name':'別の子','subject_type':'child'}]},subject_fps=['ZZZ']), 'malformed fingerprint rejected')
+          with connect(DSN,autocommit=True) as db:
+           db.execute('UPDATE public.photo_reservations SET reservation_status=%s WHERE id=%s',('cancelled',result['reservation']['id']))
+           v=db.execute('SELECT active FROM public.photo_booking_subject_claims_r36v WHERE reservation_id=%s',(result['reservation']['id'],)).fetchone()[0]
+          good(v is False,'cancellation synchronously deactivates same-day subject claim')
+          rebook=call({**p,'start_at':(START+timedelta(hours=2)).isoformat(),
+           'subjects':[{'subject_name':'架空の子','subject_type':'child'}]})
+          good(rebook['ok'],'after cancellation, different time same day allowed')
+          # Verified customer source match is server proof; anonymous phone equality must not merge customers.
+          guest2=call({**p,'phone':'09033334444','start_at':(START+timedelta(days=1)).isoformat()},subject_fps=['f'*64])
+          good(guest2['ok'] and counts()[0]==3,'new guest booking never takes over by matching name')
+          # Same verified customer can book different day, and subject ID cannot cross tenants.
+          customer=uuid.UUID(result['reservation']['id'])
+          with connect(DSN) as db:
+           c=db.execute('SELECT customer_id FROM public.photo_reservations WHERE id=%s',(result['reservation']['id'],)).fetchone()[0]
+           subject=db.execute('SELECT subject_id FROM public.photo_reservation_subjects WHERE reservation_id=%s',(result['reservation']['id'],)).fetchone()[0]
+          item={**p,'start_at':(START+timedelta(days=2)).isoformat(),'subjects':[{'id':str(subject),'subject_name':'架空の子'}]}
+          verified=call(item,verified=c,subject_fps=['a'*64])
+          good(verified['ok'],'verified customer may reuse own linked subject on a new date')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(days=3)).isoformat(),'subjects':[{'id':str(subject),'subject_name':'架空の子'}]},
+            verified=uuid.uuid4(),subject_fps=['b'*64]),'unknown verified customer rejected')
+          rejected(lambda:call({**p,'start_at':(START+timedelta(days=4)).isoformat(),'subjects':[{'id':str(subject),'subject_name':'架空の子'}]},
+            verified=c,studio=STUDIO_OTHER,subject_fps=['c'*64]),'cross-studio customer ownership rejected')
+          # Unique index and advisory lock: 8 simultaneous submissions can create only one reservation.
+          sharedStart=(START+timedelta(days=7)).isoformat()
+          parallel=sample(start_at=sharedStart,subjects=[{'subject_name':'架空 並列テスト','subject_type':'child'}],
+            phone='09055556666',options=[])
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+           fs=[pool.submit(call,parallel,subject_fps=['d'*64]) for _ in range(8)]
+           outputs=[];errors=0
+           for future in fs:
+            try: outputs.append(future.result())
+            except Exception:errors+=1
+          good(len(outputs)==1 and errors==7,'8-way identical slot race: exactly 1 commit')
+          with connect(DSN) as db:
+           n=db.execute('SELECT count(*) FROM public.photo_booking_subject_claims_r36v WHERE subject_fingerprint=%s',('d'*64,)).fetchone()[0]
+          good(n==1,'8-way race did not leave duplicate claims')
+          with connect(DSN) as db:
+           try:
+            db.execute('SET ROLE anon')
+            db.execute("SELECT public.photo_booking_atomic_r36v(%s,%s,%s,%s,%s,%s,%s,%s)",
+            (STUDIO,'line',Jsonb(p),uuid.uuid4(),'e'*64,['e'*64],None,None))
+            raise AssertionError('anon call unexpectedly accepted')
+           except Exception as exc:
+            good('permission denied' in str(exc).lower(),'anon has no direct RPC EXECUTE permission')
+          print(f'R36V_DISPOSABLE_PG17_QA: {COUNT}/{COUNT} PASS, isolated temp postgres:17, no Supabase, no production writes')
+          R36V_END_PY_QA
+          python3 /tmp/dpro-photo-r36v-disposable/R36V_PG17_DISPOSABLE_QA.py
+          echo "PASS: disposable PG17 scenario completed; no product secrets or external DB access"
