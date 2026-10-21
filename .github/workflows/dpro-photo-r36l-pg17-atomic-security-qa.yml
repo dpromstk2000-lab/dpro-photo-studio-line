@@ -148,7 +148,7 @@ jobs:
            i2,r2=reserve(specimen(4,minute=750,resource='R2',staff='S2',phone='09011112222',subject='Another Child'))
            ok(i2!=i,'same parent different subject allowed')
            ok(stats()==(2,2,2),'guest no customer merge')
-           jobs=[specimen(n,minute=840,staff='SHARED',resource='SHARED',phone=f'0901111{n:04}',subject=f'Unique Child {n}') for n in range(12)]
+           jobs=[specimen(200+n,minute=840,staff='SHARED',resource='SHARED',phone=f'0901111{n:04}',subject=f'Unique Child {n}') for n in range(12)]
            with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
             fs=[pool.submit(reserve,q) for q in jobs];good=0;bad=0
             for f in fs:
