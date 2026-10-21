@@ -1,0 +1,7 @@
+NEXT_ACTION
+1) 本ZIPを展開（アップロードするのはYAML1ファイルだけ）。
+2) https://github.com/dpromstk2000-lab/dpro-photo-studio-line/tree/main/.github/workflows でAdd file→Upload files。
+3) dpro-photo-r36s-pg17-nonce-security-qa.yml だけを追加しCommit。
+4) https://github.com/dpromstk2000-lab/dpro-photo-studio-line/actions/workflows/dpro-photo-r36s-pg17-nonce-security-qa.yml でRun workflow→main→Run workflow。
+5) 成功/失敗のスクリーンショットをChatGPTへ。
+注: Supabase SQL, Worker Deploy, Cloudflare Secret登録はまだ不要。

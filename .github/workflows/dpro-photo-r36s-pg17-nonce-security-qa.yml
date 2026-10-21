@@ -1,0 +1,133 @@
+name: DPRO PHOTO R36S - Disposable PG17 Signed Nonce QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  r36s-disposable-pg17-nonce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: R36S_DISPOSABLE_ONLY
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Prepare Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install synthetic DB client
+        run: python -m pip install 'psycopg[binary]==3.2.9'
+      - name: Run isolated nonce replay and privilege QA
+        env:
+          PGHOST: 127.0.0.1
+          R36S_DISPOSABLE_PG17: 'TRUE'
+        run: |
+          python - <<'PYR36S'
+          """R36S: disposable PostgreSQL 17 nonce and grants QA. No prod access.
+          Only use inside GitHub-hosted postgres:17 service (R36S_DISPOSABLE_PG17=true).
+          """
+          import os, datetime, concurrent.futures, uuid
+          import psycopg
+          from psycopg import errors
+          assert os.environ.get('R36S_DISPOSABLE_PG17')=='TRUE', 'REFUSE_NO_DISPOSABLE_FLAG'
+          assert os.environ.get('PGHOST')=='127.0.0.1', 'REFUSE_EXTERNAL_DATABASE'
+          assert 'SUPABASE' not in ' '.join(os.environ.keys()), 'REFUSE_SUPABASE_ENV'
+          DSN='host=127.0.0.1 port=5432 user=postgres dbname=postgres password=R36S_DISPOSABLE_ONLY connect_timeout=5'
+          count=0
+          
+          def check(condition, label):
+           global count
+           assert condition, label
+           count+=1
+          
+          def exe(sql,args=()):
+           with psycopg.connect(DSN,autocommit=True) as c:return c.execute(sql,args).fetchall() if sql.lstrip().upper().startswith('SELECT') else c.execute(sql,args).rowcount
+          
+          def insert_nonce(nonce,scope='staff',issued=None,expiry=None):
+           issued=issued or datetime.datetime.now(datetime.timezone.utc)
+           expiry=expiry or issued+datetime.timedelta(minutes=2)
+           with psycopg.connect(DSN) as c:
+            c.execute('INSERT INTO public.photo_gateway_hop_nonces(nonce,scope,issued_at,expires_at) VALUES(%s,%s,%s,%s)',(nonce,scope,issued,expiry))
+           return True
+          
+          def expect_error(fn, cls, label):
+           try:fn()
+           except cls:check(True,label)
+           else:raise AssertionError('EXPECTED_REJECTION: '+label)
+          
+          DDL='''
+          CREATE TABLE public.photo_gateway_hop_nonces (
+           nonce text PRIMARY KEY,
+           scope text NOT NULL CHECK(scope IN ('owner','staff','public_write')),
+           issued_at timestamptz NOT NULL,
+           expires_at timestamptz NOT NULL,
+           created_at timestamptz NOT NULL DEFAULT now(),
+           CONSTRAINT photo_gateway_hop_nonce_format CHECK (nonce ~ '^[A-Za-z0-9_-]{16,96}$'),
+           CONSTRAINT photo_gateway_hop_nonce_validity CHECK (expires_at>issued_at)
+          );
+          CREATE INDEX photo_gateway_hop_nonces_expiry_idx ON public.photo_gateway_hop_nonces(expires_at);
+          ALTER TABLE public.photo_gateway_hop_nonces ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.photo_gateway_hop_nonces FORCE ROW LEVEL SECURITY;
+          REVOKE ALL ON TABLE public.photo_gateway_hop_nonces FROM PUBLIC, anon, authenticated;
+          GRANT SELECT, INSERT, DELETE ON TABLE public.photo_gateway_hop_nonces TO service_role;
+          '''
+          try:
+           with psycopg.connect(DSN,autocommit=True) as c:
+            for role in ['anon','authenticated']:
+             c.execute('CREATE ROLE '+role+' NOLOGIN NOBYPASSRLS')
+            c.execute('CREATE ROLE service_role NOLOGIN BYPASSRLS')
+            c.execute(DDL)
+           check(exe("SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='public.photo_gateway_hop_nonces'::regclass")[0][0], 'forced rls')
+           check(exe("SELECT count(*) FROM pg_policy WHERE polrelid='public.photo_gateway_hop_nonces'::regclass")[0][0]==0, 'no client policies')
+           check(exe("SELECT rolbypassrls FROM pg_roles WHERE rolname='service_role'")[0][0], 'service bypass RLS')
+           check(not exe("SELECT rolbypassrls FROM pg_roles WHERE rolname='anon'")[0][0], 'anon cannot bypass')
+           n='nonce-'+uuid.uuid4().hex
+           with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+            futures=[pool.submit(insert_nonce,n) for _ in range(16)]
+            good=0;dup=0
+            for f in futures:
+             try:good+=bool(f.result())
+             except errors.UniqueViolation:dup+=1
+           check(good==1, 'concurrent single winner')
+           check(dup==15, '15 nonce replays rejected')
+           check(exe('SELECT count(*) FROM public.photo_gateway_hop_nonces')[0][0]==1, 'no duplicate rows')
+           expect_error(lambda:insert_nonce(n),errors.UniqueViolation,'sequential replay')
+           expect_error(lambda:insert_nonce('not!valid'),errors.CheckViolation,'nonce format')
+           expect_error(lambda:insert_nonce('b'*24,scope='evil'),errors.CheckViolation,'scope check')
+           expect_error(lambda:insert_nonce('c'*24,expiry=datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(seconds=5)),errors.CheckViolation,'expiry must exceed issued')
+           check(insert_nonce('d'*24,scope='owner'), 'owner scope allowed')
+           check(insert_nonce('e'*24,scope='public_write'), 'public write scope allowed')
+           check(insert_nonce('f'*24,scope='staff'), 'staff scope allowed')
+           now=datetime.datetime.now(datetime.timezone.utc)
+           insert_nonce('g'*24,issued=now-datetime.timedelta(hours=3),expiry=now-datetime.timedelta(hours=2))
+           check(exe("DELETE FROM public.photo_gateway_hop_nonces WHERE expires_at<now()-interval '1 hour'")==1,'expiry cleanup one')
+           check(exe('SELECT count(*) FROM public.photo_gateway_hop_nonces')[0][0]==4,'live nonces retained after cleanup')
+           def denied_as_anon():
+            with psycopg.connect(DSN) as c:
+             c.execute('SET ROLE anon');c.execute('SELECT nonce FROM public.photo_gateway_hop_nonces')
+           expect_error(denied_as_anon,errors.InsufficientPrivilege,'anon permission denied')
+           def allowed_service():
+            with psycopg.connect(DSN) as c:
+             c.execute('SET ROLE service_role')
+             return c.execute('SELECT count(*) FROM public.photo_gateway_hop_nonces').fetchone()[0]
+           check(allowed_service()==4,'service role read authorized')
+           check(exe("SELECT COUNT(*) FROM pg_indexes WHERE schemaname='public' AND tablename='photo_gateway_hop_nonces' AND indexname='photo_gateway_hop_nonces_expiry_idx'")[0][0]==1,'expiry index installed')
+           check(exe("SELECT pg_total_relation_size('public.photo_gateway_hop_nonces')>0")[0][0], 'table allocated')
+           print(f'R36S disposable PG17 nonce schema: {count}/{count} PASS; 16-way replay; RLS and roles; network=localhost-only; prod writes=0')
+          finally:
+           with psycopg.connect(DSN,autocommit=True) as c:
+            c.execute('DROP TABLE IF EXISTS public.photo_gateway_hop_nonces CASCADE')
+            for role in ['anon','authenticated','service_role']:
+             c.execute('DROP ROLE IF EXISTS '+role)
+          PYR36S

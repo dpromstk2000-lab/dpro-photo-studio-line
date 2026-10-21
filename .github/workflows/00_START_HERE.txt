@@ -1,0 +1,6 @@
+DPRO PHOTO R36S (REVIEW QA ONLY) | 2026-10-21
+GitHub Workflows upload専用ZIP: .github/workflows/ へYAMLを1個だけ配置。
+Google GitHub Actionsのpostgres:17一時DB内にのみnonce認証テーブルを作成して破棄。
+Supabase,Cloudflare,顧客データ、実本番Secretsと接続しない。
+Run workflowをmainで手動実行。成功ならログをChatGPTへ送る。
+このテストで本番セキュリティ合格とはならず、Cloudflare/EdgeのDeployは不可。
