@@ -1177,7 +1177,8 @@
         reservation_status: $("filterReservationStatus").value,
         visit_status: $("filterVisitStatus").value,
         post_status: $("filterPostStatus").value,
-        limit: 300,
+        // The current booking API accepts up to 200; limit 300 returns HTTP 400.
+        limit: 200,
       };
       const result = await runBusy("予約一覧を検索しています...", () => C.adminGet(C.ENDPOINTS.ADMIN_RESERVATIONS, query));
       state.reservationRows = result.reservations || [];
@@ -2018,12 +2019,51 @@
       window.open(C.buildPageUrl(C.PAGES.MEMBER, query), "_blank", "noopener");
     }
 
+    // R64.2: revoke the server Owner session before clearing the local credential.
+    let ownerLogoutPending = false;
+    async function logoutOwner({ reload = false } = {}) {
+      if (ownerLogoutPending) return;
+      ownerLogoutPending = true;
+      const hadSession = Boolean(C.getSessionToken("owner"));
+      let serverRevoked = !hadSession;
+      try {
+        if (hadSession) {
+          await C.apiPost(C.ENDPOINTS.OWNER_SESSION_REVOKE, {}, {
+            authType: "owner",
+            timeoutMs: 8000,
+          });
+          serverRevoked = true;
+        }
+      } catch (_) {
+        // Network errors must not leave the credential on this device.
+      } finally {
+        window.DPRO_PHOTO_R33H?.logout();
+        C.clearAdminCode();
+        $("adminCodeInput").value = "";
+        state.verified = false;
+        $("ownerApp").hidden = true;
+        $("authGate").hidden = false;
+        if (!serverRevoked) {
+          window.alert("端末の管理者ログイン情報は削除しましたが、サーバー側での失効は確認できませんでした。管理者にご連絡ください。");
+        }
+        if (reload) {
+          const url = new URL(location.href);
+          // demo=1 would auto-log in again after the browser reload.
+          url.searchParams.delete("demo");
+          location.replace(url.toString());
+        } else if (serverRevoked) {
+          toast("管理コードを削除し、ログアウトしました。");
+        }
+        ownerLogoutPending = false;
+      }
+    }
+
     function initEvents() {
       $("adminVerifyBtn").addEventListener("click", verifyAndStart);
       $("adminCodeInput").addEventListener("keydown", (e) => { if (e.key === "Enter") verifyAndStart(); });
       $("showAdminCode").addEventListener("change", (e) => { $("adminCodeInput").type = e.target.checked ? "text" : "password"; });
-      $("adminClearBtn").addEventListener("click", () => { window.DPRO_PHOTO_R33H?.logout(); C.clearAdminCode(); $("adminCodeInput").value = ""; toast("保存された管理コードを削除しました。"); });
-      $("logoutBtn").addEventListener("click", () => { window.DPRO_PHOTO_R33H?.logout(); C.clearAdminCode(); location.reload(); });
+      $("adminClearBtn").addEventListener("click", () => { logoutOwner().catch(() => {}); });
+      $("logoutBtn").addEventListener("click", () => { logoutOwner({ reload: true }).catch(() => {}); });
       $("refreshAllBtn").addEventListener("click", () => refreshDashboard().catch(() => {}));
       $("todayLoadBtn").addEventListener("click", () => loadToday().catch(() => {}));
       $("todayRefreshBtn").addEventListener("click", () => loadToday().catch(() => {}));
