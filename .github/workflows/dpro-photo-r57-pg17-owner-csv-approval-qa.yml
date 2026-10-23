@@ -1,4 +1,4 @@
-name: DPRO PHOTO R57.1 PG17 Owner CSV Approval Dependency Order Fix (DISPOSABLE ONLY)
+name: DPRO PHOTO R57.2 PG17 Owner CSV Offline Write Isolation Fix (DISPOSABLE ONLY)
 on:
   workflow_dispatch:
 permissions:
@@ -28,7 +28,6 @@ jobs:
       PGDATABASE: photo_r56_disposable
       R56_ISOLATED_ONLY: "YES"
       R57_FIXTURE_ONLY: "YES"
-      R57_ENABLE_DISPOSABLE_COMMIT: "YES"
     steps:
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
@@ -82,6 +81,8 @@ jobs:
           python -m py_compile *.py
           python -u R57_APPROVAL_GATE_OFFLINE_QA.py
       - name: Create R56-compatible schema and run R57 preview-approved PG17 migration
+        env:
+          R57_ENABLE_DISPOSABLE_COMMIT: "YES"
         shell: bash
         run: |
           set -euo pipefail
