@@ -1,4 +1,4 @@
-name: DPRO PHOTO R57 PG17 Owner CSV Preview Explicit Approval QA (DISPOSABLE ONLY)
+name: DPRO PHOTO R57.1 PG17 Owner CSV Approval Dependency Order Fix (DISPOSABLE ONLY)
 on:
   workflow_dispatch:
 permissions:
@@ -61,6 +61,19 @@ jobs:
               (root/name).write_bytes(data)
               print("PASS SHA256",name)
           PY
+      - name: Install pinned psycopg for disposable PostgreSQL 17
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check "psycopg[binary]==3.2.9"
+      - name: Verify pinned PostgreSQL client before any R57 imports
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PYVALIDATE'
+          import psycopg
+          assert psycopg.__version__ == '3.2.9', psycopg.__version__
+          print('PASS R57.1 psycopg dependency ready before offline QA')
+          PYVALIDATE
       - name: R57 owner preview and approval offline QA (NO DB writes)
         shell: bash
         run: |
@@ -68,10 +81,6 @@ jobs:
           cd /tmp/dpro-photo-r57-disposable
           python -m py_compile *.py
           python -u R57_APPROVAL_GATE_OFFLINE_QA.py
-      - name: Install pinned psycopg for disposable PostgreSQL 17
-        shell: bash
-        run: |
-          python -m pip install --disable-pip-version-check "psycopg[binary]==3.2.9"
       - name: Create R56-compatible schema and run R57 preview-approved PG17 migration
         shell: bash
         run: |
